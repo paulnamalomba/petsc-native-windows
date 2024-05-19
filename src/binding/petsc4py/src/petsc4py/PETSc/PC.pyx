@@ -2897,6 +2897,21 @@ cdef class PC(Object):
         if scaling is not None: scaling_vec = scaling.vec
         CHKERR(PCHPDDMSetScaling(self.pc, ciset, scaling_vec))
 
+    def createHPDDMDeflationMat(self, Mat result=None) -> Mat:
+        """Create the Mat spanning the deflation space used to assemble a coarse operator.
+
+        Collective.
+
+        See Also
+        --------
+        petsc.PCHPDDMCreateDeflationMat
+
+        """
+        if result is None:
+            result = Mat()
+        CHKERR(PCHPDDMCreateDeflationMat(self.pc, &result.mat))
+        return result
+
     # --- SPAI ---
 
     def setSPAIEpsilon(self, val: float) -> None:

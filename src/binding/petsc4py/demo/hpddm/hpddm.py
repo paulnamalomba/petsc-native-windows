@@ -78,3 +78,8 @@ ksp.solve(b, x)
 # Output grid and operator complexities on rank 0
 gc, oc = pc.getHPDDMComplexities()
 PETSc.Sys.Print('grid complexity = ', gc, ', operator complexity = ', oc, sep='')
+
+P0 = pc.createHPDDMDeflationMat()
+P0.viewFromOptions("-P0")
+A0 = A.ptap(P0)
+A0.viewFromOptions("-A0")

@@ -549,6 +549,7 @@ PETSC_EXTERN PetscErrorCode PCHPDDMGetCoarseCorrectionType(PC, PCHPDDMCoarseCorr
 PETSC_EXTERN PetscErrorCode PCHPDDMSetSTShareSubKSP(PC, PetscBool);
 PETSC_EXTERN PetscErrorCode PCHPDDMGetSTShareSubKSP(PC, PetscBool *);
 PETSC_EXTERN PetscErrorCode PCHPDDMSetDeflationMat(PC, IS, Mat);
+PETSC_EXTERN PetscErrorCode PCHPDDMCreateDeflationMat(PC, Mat *);
 PETSC_EXTERN PetscErrorCode PCHPDDMSetScaling(PC, IS, Vec);
 PETSC_EXTERN PetscErrorCode PCHPDDMFinalizePackage(void);
 PETSC_EXTERN PetscErrorCode PCHPDDMInitializePackage(void);

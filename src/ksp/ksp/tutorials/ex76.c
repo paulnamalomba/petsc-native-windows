@@ -252,6 +252,12 @@ int main(int argc, char **args)
     }
   }
 #if PetscDefined(HAVE_HPDDM) && PetscDefined(HAVE_DYNAMIC_LIBRARIES) && PetscDefined(USE_SHARED_LIBRARIES)
+  flg = PETSC_FALSE;
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-PtAP", &flg, NULL));
+  if (flg) {
+    PetscCall(PCHPDDMCreateDeflationMat(pc, &B));
+    PetscCall(MatDestroy(&B));
+  }
   if (N == 1) {
     flg = PETSC_FALSE;
     PetscCall(PetscOptionsGetBool(NULL, NULL, "-successive_solves", &flg, NULL));
@@ -402,7 +408,7 @@ int main(int argc, char **args)
         suffix: harmonic_overlap_1_define_false
         output_file: output/ex76_geneo_share.out
         filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 1[0-3]/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
-        args: -pc_hpddm_harmonic_overlap 1 -pc_hpddm_levels_1_eps_nev 30 -pc_hpddm_levels_1_eps_threshold_relative 1e+1 -pc_hpddm_levels_1_st_pc_type cholesky -pc_hpddm_levels_1_eps_pc_type cholesky -pc_hpddm_define_subdomains false -pc_hpddm_levels_1_pc_type asm -pc_hpddm_levels_1_pc_asm_overlap 2 -mat_type {{baij sbaij}shared output}
+        args: -pc_hpddm_harmonic_overlap 1 -pc_hpddm_levels_1_eps_nev 30 -pc_hpddm_levels_1_eps_threshold_relative 1e+1 -pc_hpddm_levels_1_st_pc_type cholesky -pc_hpddm_levels_1_eps_pc_type cholesky -pc_hpddm_define_subdomains false -pc_hpddm_levels_1_pc_type asm -pc_hpddm_levels_1_pc_asm_overlap 2 -mat_type {{baij sbaij}shared output} -PtAP
       test:
         suffix: harmonic_overlap_1
         output_file: output/ex76_geneo_share.out
