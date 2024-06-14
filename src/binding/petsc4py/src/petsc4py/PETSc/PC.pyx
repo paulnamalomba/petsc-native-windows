@@ -2912,6 +2912,37 @@ cdef class PC(Object):
         CHKERR(PCHPDDMCreateDeflationMat(self.pc, &result.mat))
         return result
 
+    def getHPDDMSubPC(self, l: int) -> PC:
+        """Get the local preconditioner context to be used on this MPI process.
+
+        Not collective.
+
+        See Also
+        --------
+        petsc.PCHPDDMGetSubPC
+
+        """
+        cdef PetscInt level = asInt(l)
+        cdef PC result = PC()
+        CHKERR(PCHPDDMGetSubPC(self.pc, level, &result.pc))
+        CHKERR(PetscINCREF(result.obj))
+        return result
+
+    def getHPDDMCoarseSolve(self) -> KSP:
+        """Get the solver context to be used on the coarse operator.
+
+        Not collective.
+
+        See Also
+        --------
+        petsc.PCHPDDMGetCoarseSolve
+
+        """
+        cdef KSP result = KSP()
+        CHKERR(PCHPDDMGetCoarseSolve(self.pc, &result.ksp))
+        CHKERR(PetscINCREF(result.obj))
+        return result
+
     # --- SPAI ---
 
     def setSPAIEpsilon(self, val: float) -> None:

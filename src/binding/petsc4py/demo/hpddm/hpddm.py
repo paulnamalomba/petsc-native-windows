@@ -73,13 +73,21 @@ ksp.setOperators(A)
 # Create RHS (b) and solution (x) vectors, set random values to b, and solve the system
 b, x = A.createVecs()
 b.setRandom()
-ksp.solve(b, x)
-
-# Output grid and operator complexities on rank 0
-gc, oc = pc.getHPDDMComplexities()
-PETSc.Sys.Print('grid complexity = ', gc, ', operator complexity = ', oc, sep='')
+pc.setUp()
+if rank == 0:
+  kspCoarse = pc.getHPDDMCoarseSolve()
+  kspCoarse.view()
+  # kspCoarse.getOperators()[0]
+pc.getHPDDMSubPC(1).setUp()
+kspFine = pc.getHPDDMSubPC(1).getASMSubKSP()
+if rank == 0:
+  kspFine[0].view()
+  # kspFine[0].getOperators()[0]
 
 P0 = pc.createHPDDMDeflationMat()
 P0.viewFromOptions("-P0")
 A0 = A.ptap(P0)
 A0.viewFromOptions("-A0")
+ksp.solve(b, x)
+gc, oc = pc.getHPDDMComplexities()
+PETSc.Sys.Print('grid complexity = ', gc, ', operator complexity = ', oc, sep='')

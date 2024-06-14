@@ -1,7 +1,7 @@
 #include <petscsf.h>
 #include <petsc/private/vecimpl.h>
 #include <petsc/private/matimpl.h>
-#include <petsc/private/petschpddm.h> /*I "petscpc.h" I*/
+#include <petsc/private/petschpddm.h> /*I "petscksp.h" I*/
 #include <petsc/private/pcasmimpl.h>
 #include <petsc/private/dmimpl.h> /* this must be included after petschpddm.h so that DM_MAX_WORK_VECTORS is not defined  */
                                   /* otherwise, it is assumed that one is compiling libhpddm_petsc => circular dependency */
@@ -79,6 +79,8 @@ static PetscErrorCode PCDestroy_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMCreateDeflationMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetScaling_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSubPC_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseSolve_C", nullptr));
   PetscCall(PetscObjectCompose((PetscObject)pc, "_PCHPDDM_Schur", nullptr));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3598,6 +3600,72 @@ static PetscErrorCode PCHPDDMCreateDeflationMat_HPDDM(PC pc, Mat *P)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@
+  PCHPDDMGetSubPC - Gets the local preconditioner context to be used on this MPI process.
+
+  Not Collective
+
+  Input Parameters:
++ pc - preconditioner context
+- l - level to supply (1 is finest)
+
+  Output Parameter:
+. ksp - local solver context
+
+  Level: intermediate
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMGetCoarseSolve()`, `PCASMGetSubKSP()`, `PCMGGetSmoother()`
+@*/
+PetscErrorCode PCHPDDMGetSubPC(PC pc, PetscInt l, PC *sub)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscTryMethod(pc, "PCHPDDMGetSubPC_C", (PC, PetscInt, PC *), (pc, l, sub));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMGetSubPC_HPDDM(PC pc, PetscInt l, PC *sub)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  PetscCheck(1 <= l && l <= data->N, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Cannot get PC for level %" PetscInt_FMT, l);
+  *sub = data->levels ? data->levels[l - 1]->pc : nullptr;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMGetCoarseSolve - Gets the solver context to be used on the coarse operator.
+
+  Not Collective
+
+  Input Parameter:
+. pc - preconditioner context
+
+  Output Parameter:
+. ksp - coarse operator solver context
+
+  Level: intermediate
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCMGGetCoarseSolve()`, `PCASMGetSubKSP()`, `PCHPDDMGetSubPC()`
+@*/
+PetscErrorCode PCHPDDMGetCoarseSolve(PC pc, KSP *ksp)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscTryMethod(pc, "PCHPDDMGetCoarseSolve_C", (PC, KSP *), (pc, ksp));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMGetCoarseSolve_HPDDM(PC pc, KSP *ksp)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  *ksp = data->levels ? data->levels[data->N - 1]->ksp : nullptr;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode HPDDMLoadDL_Private(PetscBool *found)
 {
   PetscBool flg;
@@ -3736,6 +3804,8 @@ PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMat_C", PCHPDDMSetDeflationMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMCreateDeflationMat_C", PCHPDDMCreateDeflationMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetScaling_C", PCHPDDMSetScaling_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSubPC_C", PCHPDDMGetSubPC_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseSolve_C", PCHPDDMGetCoarseSolve_HPDDM));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

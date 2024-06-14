@@ -446,6 +446,7 @@ PETSC_EXTERN PetscErrorCode KSPFETIDPSetPressureOperator(KSP, Mat);
 
 PETSC_EXTERN PetscErrorCode KSPHPDDMSetDeflationMat(KSP, Mat);
 PETSC_EXTERN PetscErrorCode KSPHPDDMGetDeflationMat(KSP, Mat *);
+PETSC_EXTERN PetscErrorCode PCHPDDMGetCoarseSolve(PC, KSP *);
 #if PetscDefined(HAVE_HPDDM)
 PETSC_DEPRECATED_FUNCTION(3, 18, 0, "KSPHPDDMSetDeflationMat()", ) static inline PetscErrorCode KSPHPDDMSetDeflationSpace(KSP ksp, Mat U)
 {
