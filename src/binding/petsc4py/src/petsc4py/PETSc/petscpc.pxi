@@ -339,6 +339,7 @@ cdef extern from * nogil:
     PetscErrorCode PCHPDDMSetRHSMat(PetscPC, PetscMat)
     PetscErrorCode PCHPDDMGetComplexities(PetscPC, PetscReal*, PetscReal*)
     PetscErrorCode PCHPDDMHasNeumannMat(PetscPC, PetscBool)
+    PetscErrorCode PCHPDDMIsLocalSPSDSplitting(PetscPC, PetscInt, PetscBool*)
     PetscErrorCode PCHPDDMSetCoarseCorrectionType(PetscPC, PetscPCHPDDMCoarseCorrectionType)
     PetscErrorCode PCHPDDMGetCoarseCorrectionType(PetscPC, PetscPCHPDDMCoarseCorrectionType*)
     PetscErrorCode PCHPDDMGetSTShareSubKSP(PetscPC, PetscBool*)

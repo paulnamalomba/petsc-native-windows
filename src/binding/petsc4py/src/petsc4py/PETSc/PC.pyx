@@ -2778,6 +2778,25 @@ cdef class PC(Object):
         cdef PetscBool phas = has
         CHKERR(PCHPDDMHasNeumannMat(self.pc, phas))
 
+    def isLocalSPSDSplitting(self, n: int = 1) -> bool:
+        """Return whether the `IS` and `Mat` passed to `PCHPDDM` define a proper local semi-positive symmetric definite splitting.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        n
+            Number of random vectors to be tested.
+
+        See Also
+        --------
+        petsc.PCHPDDMSetAuxiliaryMat
+
+        """
+        cdef PetscBool flg
+        CHKERR(PCHPDDMIsLocalSPSDSplitting(self.pc, n, &flg))
+        return toBool(flg)
+
     def setHPDDMCoarseCorrectionType(self, correction_type: HPDDMCoarseCorrectionType) -> None:
         """Set the coarse correction type.
 

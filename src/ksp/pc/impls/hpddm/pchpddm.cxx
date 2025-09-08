@@ -2,7 +2,7 @@
 #include <petsc/private/vecimpl.h>
 #include <petsc/private/matimpl.h>
 #include <petsc/private/petschpddm.h> /*I "petscpc.h" I*/
-#include <petsc/private/pcimpl.h>
+#include <petsc/private/pcasmimpl.h>
 #include <petsc/private/dmimpl.h> /* this must be included after petschpddm.h so that DM_MAX_WORK_VECTORS is not defined  */
                                   /* otherwise, it is assumed that one is compiling libhpddm_petsc => circular dependency */
 
@@ -70,6 +70,7 @@ static PetscErrorCode PCDestroy_HPDDM(PC pc)
   PetscCall(PetscObjectChangeTypeName((PetscObject)pc, nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetAuxiliaryMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMHasNeumannMat_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMIsLocalSPSDSplitting_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetRHSMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetCoarseCorrectionType_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseCorrectionType_C", nullptr));
@@ -595,6 +596,8 @@ static PetscErrorCode PCView_HPDDM(PC pc, PetscViewer viewer)
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &flg));
   if (flg) {
+    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)pc), &size));
+    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)pc), &rank));
     PetscCall(PetscViewerASCIIPrintf(viewer, "level%s: %" PetscInt_FMT "\n", data->N > 1 ? "s" : "", data->N));
     PetscCall(PCHPDDMGetComplexities(pc, &gc, &oc));
     if (data->N > 1) {
@@ -614,7 +617,57 @@ static PetscErrorCode PCView_HPDDM(PC pc, PetscViewer viewer)
       PetscCall(PetscViewerASCIISetTab(viewer, tabs));
     }
     PetscCall(PetscViewerASCIIPrintf(viewer, "grid and operator complexities: %g %g\n", (double)gc, (double)oc));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)pc), &size));
+    if (data->levels && data->levels[0]->pc) {
+      PetscCall(PetscObjectTypeCompare((PetscObject)data->levels[0]->pc, PCASM, &flg));
+      if (flg) {
+        PetscInt           k[3];
+        const PetscInt    *degree;
+        const PetscMPIInt *ranks;
+        PetscMPIInt       *recvcounts, *displs, *columns = NULL;
+
+        PetscCall(PetscSFGetGraph(((PC_ASM *)data->levels[0]->pc->data)->restriction, k, nullptr, nullptr, nullptr));
+        PetscCall(PetscSFComputeDegreeBegin(((PC_ASM *)data->levels[0]->pc->data)->restriction, &degree));
+        PetscCall(PetscSFComputeDegreeEnd(((PC_ASM *)data->levels[0]->pc->data)->restriction, &degree));
+        if (degree) k[1] = *std::max_element(degree, degree + k[0]);
+        else k[1] = 0;
+        PetscCall(PetscSFGetRootRanks(((PC_ASM *)data->levels[0]->pc->data)->restriction, &color, &ranks, nullptr, nullptr, nullptr));
+        k[0] = color;
+        PetscCall(PetscMalloc2(rank == 0 ? size : 0, &recvcounts, rank == 0 ? size + 1 : 1, &displs));
+        PetscCallMPI(MPI_Gather(&color, 1, MPI_INT, recvcounts, 1, MPI_INT, 0, PetscObjectComm((PetscObject)pc)));
+        if (rank == 0) {
+          displs[0] = 0;
+          for (PetscMPIInt p = 0; p < size; ++p) displs[p + 1] = displs[p] + recvcounts[p];
+          PetscCall(PetscMalloc1(displs[size], &columns));
+        }
+        PetscCallMPI(MPI_Gatherv(ranks, color, MPI_INT, columns, recvcounts, displs, MPI_INT, 0, PetscObjectComm((PetscObject)pc)));
+        if (rank == 0) {
+          Mat         C;
+          MatColoring coloring;
+          ISColoring  is;
+
+          PetscCall(MatCreate(PETSC_COMM_SELF, &C));
+          PetscCall(MatSetSizes(C, size, size, size, size));
+          PetscCall(MatSetType(C, MATSEQAIJ));
+          for (PetscMPIInt p = 0; p < size; ++p) {
+            for (PetscMPIInt j = 0; j < recvcounts[p]; ++j) PetscCall(MatSetValue(C, p, columns[displs[p] + j], 1.0, INSERT_VALUES));
+          }
+          PetscCall(PetscFree(columns));
+          PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY));
+          PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));
+          PetscCall(MatColoringCreate(C, &coloring));
+          PetscCall(MatDestroy(&C));
+          PetscCall(MatColoringSetDistance(coloring, 1));
+          PetscCall(MatColoringSetFromOptions(coloring));
+          PetscCall(MatColoringApply(coloring, &is));
+          PetscCall(MatColoringDestroy(&coloring));
+          PetscCall(ISColoringGetColors(is, nullptr, k + 2, nullptr));
+          PetscCall(ISColoringDestroy(&is));
+        }
+        PetscCall(PetscFree2(recvcounts, displs));
+        PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, k, 2, MPIU_INT, MPI_MAX, PetscObjectComm((PetscObject)pc)));
+        PetscCall(PetscViewerASCIIPrintf(viewer, "maximum subdomain connectivity + 1 (k_0), subdomain coloring (k_c, always lower than or equal to k_0), and maximum unknown multiplicity (k_1 or k_m): (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n", k[0], k[2], k[1]));
+      }
+    }
     if (data->levels && data->levels[0]->ksp) {
       PetscCall(KSPView(data->levels[0]->ksp, viewer));
       if (data->levels[0]->pc) PetscCall(PCView(data->levels[0]->pc, viewer));
@@ -1379,6 +1432,75 @@ static PetscErrorCode PCHPDDMPermute_Private(IS is, IS in_is, IS *out_is, Mat in
       }
     }
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMIsLocalSPSDSplitting_HPDDM(PC pc, PetscInt n, PetscBool *flg)
+{
+  PC_HPDDM       *data = (PC_HPDDM *)pc->data;
+  Vec             u[2], v[2];
+  PetscScalar     dot[2];
+  VecScatter      restriction;
+  PetscInt        k;
+  const PetscInt *degree;
+
+  PetscFunctionBegin;
+  *flg = PETSC_FALSE;
+  if (data->is && data->aux && data->levels && data->levels[0]->pc) {
+    PetscCall(PetscObjectTypeCompare((PetscObject)data->levels[0]->pc, PCASM, flg));
+    if (*flg) {
+      PetscRandom random;
+
+      PetscCall(PetscSFGetGraph(((PC_ASM *)data->levels[0]->pc->data)->restriction, &k, nullptr, nullptr, nullptr));
+      PetscCall(PetscSFComputeDegreeBegin(((PC_ASM *)data->levels[0]->pc->data)->restriction, &degree));
+      PetscCall(PetscSFComputeDegreeEnd(((PC_ASM *)data->levels[0]->pc->data)->restriction, &degree));
+      k = *std::max_element(degree, degree + k);
+      PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &k, 1, MPI_INT, MPI_MAX, PetscObjectComm((PetscObject)pc)));
+      PetscCall(MatCreateVecs(pc->pmat, u, u + 1));
+      PetscCall(MatCreateVecs(data->aux, v, v + 1));
+      PetscCall(VecScatterCreate(u[0], data->is, v[0], nullptr, &restriction));
+      PetscCall(PetscRandomCreate(PetscObjectComm((PetscObject)pc), &random));
+      for (PetscInt i = 0; i < n && *flg; ++i) {
+        PetscCall(VecSetRandom(u[0], random));
+        PetscCall(MatMult(pc->pmat, u[0], u[1]));
+        PetscCall(VecDot(u[0], u[1], dot));
+        PetscCall(VecScatterBegin(restriction, u[0], v[0], INSERT_VALUES, SCATTER_FORWARD));
+        PetscCall(VecScatterEnd(restriction, u[0], v[0], INSERT_VALUES, SCATTER_FORWARD));
+        PetscCall(MatMult(data->aux, v[0], v[1]));
+        PetscCall(VecDot(v[0], v[1], dot + 1));
+        PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, dot + 1, 1, MPIU_SCALAR, MPI_SUM, PetscObjectComm((PetscObject)pc)));
+        *flg = PetscAbsScalar(dot[1]) <= k * PetscAbsScalar(dot[0]);
+      }
+      PetscCall(PetscRandomDestroy(&random));
+      PetscCall(VecScatterDestroy(&restriction));
+      PetscCall(VecDestroy(u));
+      PetscCall(VecDestroy(u + 1));
+      PetscCall(VecDestroy(v));
+      PetscCall(VecDestroy(v + 1));
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMIsLocalSPSDSplitting - Tests whether the `IS` and `Mat` passed to `PCHPDDM` define a proper local semi-positive symmetric definite splitting.
+
+  Input Parameters:
++ pc - preconditioner context
+- n  - number of random vectors to be tested
+
+  Output Parameter:
++ flg - the Boolean result
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetAuxiliaryMat()`
+@*/
+PetscErrorCode PCHPDDMIsLocalSPSDSplitting(PC pc, PetscInt n, PetscBool *flg)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidLogicalCollectiveInt(pc, n, 2);
+  PetscAssertPointer(flg, 3);
+  PetscTryMethod(pc, "PCHPDDMIsLocalSPSDSplitting_C", (PC, PetscInt, PetscBool *), (pc, n, flg));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -3543,6 +3665,7 @@ PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
 
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetAuxiliaryMat_C", PCHPDDMSetAuxiliaryMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMHasNeumannMat_C", PCHPDDMHasNeumannMat_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMIsLocalSPSDSplitting_C", PCHPDDMIsLocalSPSDSplitting_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetRHSMat_C", PCHPDDMSetRHSMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetCoarseCorrectionType_C", PCHPDDMSetCoarseCorrectionType_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseCorrectionType_C", PCHPDDMGetCoarseCorrectionType_HPDDM));

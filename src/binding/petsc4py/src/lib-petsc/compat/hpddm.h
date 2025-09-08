@@ -15,6 +15,7 @@ PetscErrorCode PCHPDDMSetAuxiliaryMat(PETSC_UNUSED PC pc,PETSC_UNUSED IS is,PETS
 PetscErrorCode PCHPDDMSetRHSMat(PETSC_UNUSED PC pc,PETSC_UNUSED Mat B){PetscHPDDMError;}
 PetscErrorCode PCHPDDMGetComplexities(PETSC_UNUSED PC pc,PETSC_UNUSED PetscReal *gc, PETSC_UNUSED PetscReal *oc){PetscHPDDMError;}
 PetscErrorCode PCHPDDMHasNeumannMat(PETSC_UNUSED PC pc,PETSC_UNUSED PetscBool has){PetscHPDDMError;}
+PetscErrorCode PCHPDDMIsLocalSPSDSplitting(PETSC_UNUSED PC pc,PETSC_UNUSED n,PETSC_UNUSED PetscBool *is){PetscHPDDMError;}
 PetscErrorCode PCHPDDMSetCoarseCorrectionType(PETSC_UNUSED PC pc,PETSC_UNUSED PCHPDDMCoarseCorrectionType type){PetscHPDDMError;}
 PetscErrorCode PCHPDDMGetCoarseCorrectionType(PETSC_UNUSED PC pc,PETSC_UNUSED PCHPDDMCoarseCorrectionType *type){PetscHPDDMError;}
 PetscErrorCode PCHPDDMGetSTShareSubKSP(PETSC_UNUSED PC pc,PETSC_UNUSED PetscBool *share){PetscHPDDMError;}
