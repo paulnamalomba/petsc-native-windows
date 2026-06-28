@@ -73,6 +73,8 @@
 ```{rubric} KSP:
 ```
 
+- Add `KSPGMRESSetVectorAllocationSize()` to indicate how many additional vectors are allocated each time more restart vectors are allocated for GMRES implementations
+
 ```{rubric} SNES:
 ```
 
