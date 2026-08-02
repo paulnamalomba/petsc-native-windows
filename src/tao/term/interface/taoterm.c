@@ -7,6 +7,7 @@ PetscLogEvent TAOTERM_ObjectiveEval;
 PetscLogEvent TAOTERM_GradientEval;
 PetscLogEvent TAOTERM_ObjGradEval;
 PetscLogEvent TAOTERM_HessianEval;
+PetscLogEvent TAOTERM_HessianMultEval;
 
 const char *const TaoTermParametersModes[] = {"optional", "none", "required", "TaoTermParametersMode", "TAOTERM_PARAMETERS_", NULL};
 
@@ -148,6 +149,7 @@ PetscErrorCode TaoTermView(TaoTerm term, PetscViewer viewer)
     if (term->ngrad > 0) PetscCall(PetscViewerASCIIPrintf(viewer, "total number of gradient evaluations=%" PetscInt_FMT "\n", term->ngrad));
     if (term->nobjgrad > 0) PetscCall(PetscViewerASCIIPrintf(viewer, "total number of function/gradient evaluations=%" PetscInt_FMT "\n", term->nobjgrad));
     if (term->nhess > 0) PetscCall(PetscViewerASCIIPrintf(viewer, "total number of Hessian evaluations=%" PetscInt_FMT "\n", term->nhess));
+    if (term->nhessmult > 0) PetscCall(PetscViewerASCIIPrintf(viewer, "total number of HessianMult evaluations=%" PetscInt_FMT "\n", term->nhessmult));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -162,6 +164,12 @@ PetscErrorCode TaoTermView(TaoTerm term, PetscViewer viewer)
 . term - a `TaoTerm`
 
   Level: intermediate
+
+  Notes:
+  Structural configuration of `term`, including its type, vector spaces, derivative strategy,
+  and Hessian creation mode, cannot be changed after this function returns successfully.
+  Numerical data explicitly documented as mutable, such as `TaoTermSetFDDelta()` and
+  `TaoTermL1SetEpsilon()`, may still be changed.
 
 .seealso: [](sec_tao_term),
           `TaoTerm`,
@@ -178,7 +186,6 @@ PetscErrorCode TaoTermSetUp(TaoTerm term)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
   if (term->setup_called) PetscFunctionReturn(PETSC_SUCCESS);
-  term->setup_called = PETSC_TRUE;
   PetscTryTypeMethod(term, setup);
   PetscCall(MatGetSize(term->solution_factory, &N, NULL));
   if (N < 0) {
@@ -216,6 +223,7 @@ PetscErrorCode TaoTermSetUp(TaoTerm term)
     }
     PetscCall(MatSetUp(term->parameters_factory));
   }
+  term->setup_called = PETSC_TRUE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -261,6 +269,7 @@ PetscErrorCode TaoTermSetFromOptions(TaoTerm term)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetFromOptions() must be called before TaoTermSetUp() or TaoSetUp()");
   if (((PetscObject)term)->type_name) deft = ((PetscObject)term)->type_name;
   PetscObjectOptionsBegin((PetscObject)term);
   PetscCall(PetscOptionsFList("-tao_term_type", "TaoTerm type", "TaoTermType", TaoTermList, deft, typeName, sizeof(typeName), &flg));
@@ -367,6 +376,7 @@ PetscErrorCode TaoTermSetType(TaoTerm term, TaoTermType type)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetType() must be called before TaoTermSetUp() or TaoSetUp()");
 
   PetscCall(PetscObjectTypeCompare((PetscObject)term, type, &issame));
   if (issame) PetscFunctionReturn(PETSC_SUCCESS);
@@ -464,6 +474,7 @@ PetscErrorCode TaoTermCreate(MPI_Comm comm, TaoTerm *term)
   _term->ngrad        = 0;
   _term->nobjgrad     = 0;
   _term->nhess        = 0;
+  _term->nhessmult    = 0;
   _term->Hpre_is_H    = PETSC_TRUE;
   _term->fd_delta     = 0.5 * PETSC_SQRT_MACHINE_EPSILON;
   _term->H_mattype    = NULL;
@@ -728,10 +739,14 @@ PetscErrorCode TaoTermComputeHessian(TaoTerm term, Vec x, Vec params, Mat H, Mat
     PetscValidHeaderSpecific(Hpre, MAT_CLASSID, 5);
     PetscCheckSameComm(term, 1, Hpre, 5);
   }
+  if (H && !Hpre) Hpre = H;
+  PetscCall(TaoTermPreprocessHessianShells(term, x, params, &H, &Hpre));
   if (H) PetscCall(PetscObjectTypeCompare((PetscObject)H, MATMFFD, &is_mffd));
   PetscCall(TaoTermIsComputeHessianFDPossible(term, &is_fdpossible));
   PetscCall(PetscLogEventBegin(TAOTERM_HessianEval, term, NULL, NULL, NULL));
-  if (is_fdpossible == PETSC_BOOL3_FALSE) {
+  if (!H && !Hpre) {
+    /* All requested matrices were shells and have been updated; nothing left to assemble. */
+  } else if (is_fdpossible == PETSC_BOOL3_FALSE) {
     PetscUseTypeMethod(term, hessian, x, params, H, Hpre);
   } else if (term->fd_hessian) {
     if (is_fdpossible == PETSC_BOOL3_UNKNOWN) PetscCall(PetscInfo(term, "%s: Whether TaoTermComputeHessianFD is possible is unknown. Trying anyway.\n", ((PetscObject)term)->prefix));
@@ -746,6 +761,62 @@ PetscErrorCode TaoTermComputeHessian(TaoTerm term, Vec x, Vec params, Mat H, Mat
   }
   PetscCall(PetscLogEventEnd(TAOTERM_HessianEval, term, NULL, NULL, NULL));
   term->nhess++;
+  if (params) PetscCall(VecLockReadPop(params));
+  PetscCall(VecLockReadPop(x));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  TaoTermComputeHessianMult - Compute the Hessian-vector product of a `TaoTerm`
+
+  Collective
+
+  Input Parameters:
++ term   - a `TaoTerm`
+. x      - a solution vector
+. params - a parameters vector (may be `NULL`, see `TaoTermGetParametersMode()`)
+- v      - a vector in the solution space
+
+  Output Parameter:
+. Hv - the Hessian-vector product $\nabla_x^2 f(x;p) v$
+
+  Level: developer
+
+  Note:
+  This is the matrix-free analog of `TaoTermComputeHessian()`. Instead of assembling the full
+  Hessian matrix, it computes only the product of the Hessian with a given vector `v`.
+
+.seealso: [](sec_tao_term),
+          `TaoTerm`,
+          `TaoTermComputeHessian()`,
+          `TaoTermShellSetHessianMult()`,
+          `TaoTermCreateHessianShell()`
+@*/
+PetscErrorCode TaoTermComputeHessianMult(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
+  PetscCheckSameComm(term, 1, x, 2);
+  PetscCheck(term->parameters_mode != TAOTERM_PARAMETERS_NONE || params == NULL, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONG, "Parameters passed to a TaoTerm with TAOTERM_PARAMETERS_NONE");
+  PetscCheck(term->parameters_mode != TAOTERM_PARAMETERS_REQUIRED || params, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONG, "Parameters required but not provided for a TaoTerm with TAOTERM_PARAMETERS_REQUIRED");
+  if (params) {
+    PetscValidHeaderSpecific(params, VEC_CLASSID, 3);
+    PetscCheckSameComm(term, 1, params, 3);
+    PetscCall(VecLockReadPush(params));
+  }
+  PetscValidHeaderSpecific(v, VEC_CLASSID, 4);
+  PetscCheckSameComm(term, 1, v, 4);
+  PetscValidHeaderSpecific(Hv, VEC_CLASSID, 5);
+  PetscCheckSameComm(term, 1, Hv, 5);
+  PetscCall(VecLockReadPush(x));
+  PetscCall(VecLockReadPush(v));
+  PetscCall(PetscLogEventBegin(TAOTERM_HessianMultEval, term, NULL, NULL, NULL));
+  PetscCheck(term->ops->hessianmult, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTerm does not have TaoTermComputeHessianMult routine");
+  PetscUseTypeMethod(term, hessianmult, x, params, v, Hv);
+  PetscCall(PetscLogEventEnd(TAOTERM_HessianMultEval, term, NULL, NULL, NULL));
+  term->nhessmult++;
+  PetscCall(VecLockReadPop(v));
   if (params) PetscCall(VecLockReadPop(params));
   PetscCall(VecLockReadPop(x));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -930,6 +1001,40 @@ PetscErrorCode TaoTermIsHessianDefined(TaoTerm term, PetscBool *is_defined)
 }
 
 /*@
+  TaoTermIsHessianMultDefined - Whether a Hessian-vector product operation is defined for this `TaoTerm`
+
+  Not collective
+
+  Input Parameter:
+. term - a `TaoTerm`
+
+  Output Parameter:
+. is_defined - whether the Hessian-vector product is defined
+
+  Note:
+  This checks whether a dedicated Hessian-vector product operation (see `TaoTermComputeHessianMult()`) is defined.
+  For a `TAOTERMSHELL` this reflects whether `TaoTermShellSetHessianMult()` has been called; for a `TAOTERMCALLBACKS`
+  it reflects whether `TaoSetHessianMult()` has been called.
+
+  Level: developer
+
+.seealso: [](sec_tao_term),
+          `TaoTerm`,
+          `TaoTermComputeHessianMult()`,
+          `TaoTermShellSetHessianMult()`,
+          `TaoTermIsHessianDefined()`
+@*/
+PetscErrorCode TaoTermIsHessianMultDefined(TaoTerm term, PetscBool *is_defined)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscAssertPointer(is_defined, 2);
+  if (term->ops->ishessianmultdefined) PetscUseTypeMethod(term, ishessianmultdefined, is_defined);
+  else *is_defined = (term->ops->hessianmult != NULL) ? PETSC_TRUE : PETSC_FALSE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
   TaoTermIsCreateHessianMatricesDefined - Whether this term can call `TaoTermCreateHessianMatrices()`.
 
   Not collective
@@ -1004,6 +1109,7 @@ PetscErrorCode TaoTermSetSolutionSizes(TaoTerm term, PetscInt n, PetscInt N, Pet
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetSolutionSizes() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscCall(MatGetLayouts(term->solution_factory, &layout, NULL));
   PetscCall(PetscLayoutSetLocalSize(layout, n));
   PetscCall(PetscLayoutSetSize(layout, N));
@@ -1084,6 +1190,7 @@ PetscErrorCode TaoTermSetParametersSizes(TaoTerm term, PetscInt k, PetscInt K, P
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetParametersSizes() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscCall(MatGetLayouts(term->parameters_factory, &layout, NULL));
   PetscCall(PetscLayoutSetLocalSize(layout, k));
   PetscCall(PetscLayoutSetSize(layout, K));
@@ -1161,6 +1268,7 @@ PetscErrorCode TaoTermSetParametersLayout(TaoTerm term, PetscLayout parameters_l
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetParametersLayout() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscCall(MatGetLayouts(term->parameters_factory, &rlayout, &clayout));
   PetscCall(MatSetLayouts(term->parameters_factory, parameters_layout, clayout));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -1237,6 +1345,7 @@ PetscErrorCode TaoTermSetSolutionLayout(TaoTerm term, PetscLayout solution_layou
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetSolutionLayout() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscCall(MatGetLayouts(term->solution_factory, &rlayout, &clayout));
   PetscCall(MatSetLayouts(term->solution_factory, solution_layout, clayout));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -1314,6 +1423,7 @@ PetscErrorCode TaoTermSetSolutionTemplate(TaoTerm term, Vec sol_template)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetSolutionTemplate() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidHeaderSpecific(sol_template, VEC_CLASSID, 2);
   PetscCheckSameComm(term, 1, sol_template, 2);
   PetscCall(VecGetType(sol_template, &vec_type));
@@ -1360,6 +1470,7 @@ PetscErrorCode TaoTermSetParametersTemplate(TaoTerm term, Vec params_template)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetParametersTemplate() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidHeaderSpecific(params_template, VEC_CLASSID, 2);
   PetscCheckSameComm(term, 1, params_template, 2);
   PetscCall(VecGetType(params_template, &vec_type));
@@ -1397,6 +1508,7 @@ PetscErrorCode TaoTermSetSolutionVecType(TaoTerm term, VecType solution_type)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetSolutionVecType() must be called before TaoTermSetUp() or TaoSetUp()");
   if (solution_type) PetscCall(MatSetVecType(term->solution_factory, solution_type));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -1427,6 +1539,7 @@ PetscErrorCode TaoTermSetParametersVecType(TaoTerm term, VecType parameters_type
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetParametersVecType() must be called before TaoTermSetUp() or TaoSetUp()");
   if (parameters_type) PetscCall(MatSetVecType(term->parameters_factory, parameters_type));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -1706,6 +1819,7 @@ PetscErrorCode TaoTermSetCreateHessianMode(TaoTerm term, PetscBool Hpre_is_H, Ma
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetCreateHessianMode() must be called before TaoTermSetUp() or TaoSetUp()");
   term->Hpre_is_H = Hpre_is_H;
   PetscCall(PetscStrcmp(term->H_mattype, H_mattype, &is_hsame));
   PetscCall(PetscStrcmp(term->Hpre_mattype, Hpre_mattype, &is_hpresame));
@@ -1835,6 +1949,7 @@ PetscErrorCode TaoTermSetParametersMode(TaoTerm term, TaoTermParametersMode para
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermSetParametersMode() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidLogicalCollectiveEnum(term, parameters_mode, 2);
   term->parameters_mode = parameters_mode;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -1961,6 +2076,7 @@ PetscErrorCode TaoTermComputeGradientSetUseFD(TaoTerm term, PetscBool use_fd)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermComputeGradientSetUseFD() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidLogicalCollectiveBool(term, use_fd, 2);
   term->fd_gradient = use_fd;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -2026,6 +2142,7 @@ PetscErrorCode TaoTermComputeHessianSetUseFD(TaoTerm term, PetscBool use_fd)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermComputeHessianSetUseFD() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidLogicalCollectiveBool(term, use_fd, 2);
   term->fd_hessian = use_fd;
   PetscFunctionReturn(PETSC_SUCCESS);

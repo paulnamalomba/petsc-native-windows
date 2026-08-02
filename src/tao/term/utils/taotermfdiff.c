@@ -53,13 +53,8 @@ static PetscErrorCode SNESFunction_TaoTerm(SNES snes, Vec X, Vec G, void *ctx)
   user-provided gradient.  Call `TaoTermComputeGradientSetUseFD()` to start using
   this routine in `TaoTermComputeGradient()`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeGradientGetUseFD()`,
-          `TaoTermComputeHessianFD()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientSetUseFD()`,
+          `TaoTermComputeGradientGetUseFD()`, `TaoTermComputeHessianFD()`
 @*/
 PetscErrorCode TaoTermComputeGradientFD(TaoTerm term, Vec x, Vec params, Vec g)
 {
@@ -128,13 +123,8 @@ PetscErrorCode TaoTermComputeGradientFD(TaoTerm term, Vec x, Vec params, Vec g)
   user-provided Hessian.  Call `TaoTermComputeHessianSetUseFD()` to start using
   this routine in `TaoTermComputeHessian()`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeHessianSetUseFD()`,
-          `TaoTermComputeHessianGetUseFD()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`,
+          `TaoTermComputeHessianSetUseFD()`, `TaoTermComputeHessianGetUseFD()`
 @*/
 PetscErrorCode TaoTermComputeHessianFD(TaoTerm term, Vec x, Vec params, Mat H, Mat Hpre)
 {
@@ -177,6 +167,7 @@ PetscErrorCode TaoTermComputeHessianFD(TaoTerm term, Vec x, Vec params, Mat H, M
     PetscCall(MatSetUp(Hpre));
   }
   PetscCall(SNESComputeJacobianDefault(snes, x, H ? H : Hpre, Hpre ? Hpre : H, NULL));
+  if (H && Hpre && H != Hpre) PetscCall(MatCopy(Hpre, H, DIFFERENT_NONZERO_PATTERN));
   PetscCall(SNESDestroy(&snes));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

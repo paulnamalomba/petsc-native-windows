@@ -327,6 +327,8 @@ PETSC_EXTERN PetscErrorCode TaoSetObjectiveAndGradient(Tao, Vec, PetscErrorCode 
 PETSC_EXTERN PetscErrorCode TaoGetObjectiveAndGradient(Tao, Vec *, PetscErrorCode (**)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtxRt);
 PETSC_EXTERN PetscErrorCode TaoSetHessian(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoGetHessian(Tao, Mat *, Mat *, PetscErrorCode (**)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetHessianMult(Tao, PetscErrorCode (*)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetHessianMult(Tao, PetscErrorCode (**)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtxRt);
 PETSC_EXTERN PetscErrorCode TaoGetHessianMatrices(Tao, Mat *, Mat *);
 PETSC_EXTERN PetscErrorCode TaoGetDM(Tao, DM *);
 PETSC_EXTERN PetscErrorCode TaoSetDM(Tao, DM);
@@ -381,6 +383,7 @@ PETSC_EXTERN PetscErrorCode TaoIsObjectiveAndGradientDefined(Tao, PetscBool *);
 
 PETSC_EXTERN PetscErrorCode TaoTestHessian(Tao);
 PETSC_EXTERN PetscErrorCode TaoComputeHessian(Tao, Vec, Mat, Mat);
+PETSC_EXTERN PetscErrorCode TaoComputeHessianMult(Tao, Vec, Vec, Vec);
 PETSC_EXTERN PetscErrorCode TaoComputeResidualJacobian(Tao, Vec, Mat, Mat);
 PETSC_EXTERN PetscErrorCode TaoComputeJacobian(Tao, Vec, Mat, Mat);
 PETSC_EXTERN PetscErrorCode TaoComputeJacobianState(Tao, Vec, Mat, Mat, Mat);

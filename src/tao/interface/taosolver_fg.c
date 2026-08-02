@@ -21,7 +21,7 @@ PetscErrorCode TaoSetSolution(Tao tao, Vec x0)
   PetscCall(PetscObjectReference((PetscObject)x0));
   PetscCall(VecDestroy(&tao->solution));
   tao->solution = x0;
-  if (x0) PetscCall(TaoTermSetSolutionTemplate(tao->callbacks, x0));
+  if (x0 && !tao->setupcalled) PetscCall(TaoTermSetSolutionTemplate(tao->callbacks, x0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

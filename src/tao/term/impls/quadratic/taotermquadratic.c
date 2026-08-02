@@ -2,10 +2,19 @@
 
 typedef struct _n_TaoTerm_Quadratic TaoTerm_Quadratic;
 
+typedef struct {
+  PetscObjectId    destination_id;
+  PetscObjectState source_state;
+  PetscObjectState destination_state;
+  PetscBool        valid;
+} TaoTermQuadraticHessianState;
+
 struct _n_TaoTerm_Quadratic {
-  Mat A;
-  Vec _diff;
-  Vec Adiff;
+  Mat                          A;
+  Vec                          _diff;
+  Vec                          Adiff;
+  TaoTermQuadraticHessianState H_state;
+  TaoTermQuadraticHessianState Hpre_state;
 };
 
 static PetscErrorCode TaoTermDestroy_Quadratic(TaoTerm term)
@@ -107,15 +116,44 @@ static PetscErrorCode TaoTermComputeObjectiveAndGradient_Quadratic(TaoTerm term,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode TaoTermQuadraticCopyHessian(Mat source, Mat destination, TaoTermQuadraticHessianState *cached)
+{
+  PetscObjectId    destination_id;
+  PetscObjectState source_state, destination_state;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectGetId((PetscObject)destination, &destination_id));
+  PetscCall(PetscObjectStateGet((PetscObject)source, &source_state));
+  PetscCall(PetscObjectStateGet((PetscObject)destination, &destination_state));
+  if (cached->valid && cached->destination_id == destination_id) {
+    if (cached->source_state == source_state && cached->destination_state == destination_state) PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(MatCopy(source, destination, UNKNOWN_NONZERO_PATTERN));
+  PetscCall(PetscObjectStateGet((PetscObject)source, &cached->source_state));
+  PetscCall(PetscObjectStateGet((PetscObject)destination, &cached->destination_state));
+  cached->destination_id = destination_id;
+  cached->valid          = PETSC_TRUE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode TaoTermComputeHessian_Quadratic(TaoTerm term, Vec x, Vec params, Mat H, Mat Hpre)
 {
   TaoTerm_Quadratic *quad = (TaoTerm_Quadratic *)term->data;
 
   PetscFunctionBegin;
   PetscCheck(quad->A, PetscObjectComm((PetscObject)term), PETSC_ERR_ORDER, "Quadratic matrix not set, call TaoTermQuadraticSetMat() first");
-  // TODO caching to avoid unnecessary computation
-  if (H) PetscCall(MatCopy(quad->A, H, UNKNOWN_NONZERO_PATTERN));
-  if (Hpre && Hpre != H) PetscCall(MatCopy(quad->A, Hpre, UNKNOWN_NONZERO_PATTERN));
+  if (H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, H, &quad->H_state));
+  if (Hpre && Hpre != H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, Hpre, &quad->Hpre_state));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode TaoTermComputeHessianMult_Quadratic(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
+{
+  TaoTerm_Quadratic *quad = (TaoTerm_Quadratic *)term->data;
+
+  PetscFunctionBegin;
+  PetscCheck(quad->A, PetscObjectComm((PetscObject)term), PETSC_ERR_ORDER, "Quadratic matrix not set, call TaoTermQuadraticSetMat() first");
+  PetscCall(MatMult(quad->A, v, Hv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -152,10 +190,7 @@ static PetscErrorCode TaoTermCreateHessianMatrices_Quadratic(TaoTerm term, Mat *
   Note:
   This function will return `NULL` if the term is not a `TAOTERMQUADRATIC`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERMQUADRATIC`,
-          `TaoTermQuadraticSetMat()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERMQUADRATIC`, `TaoTermQuadraticSetMat()`
 @*/
 PetscErrorCode TaoTermQuadraticGetMat(TaoTerm term, Mat *A)
 {
@@ -187,15 +222,13 @@ static PetscErrorCode TaoTermQuadraticGetMat_Quadratic(TaoTerm term, Mat *A)
 
   Level: intermediate
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERMQUADRATIC`,
-          `TaoTermQuadraticGetMat()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERMQUADRATIC`, `TaoTermQuadraticGetMat()`
 @*/
 PetscErrorCode TaoTermQuadraticSetMat(TaoTerm term, Mat A)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(term, TAOTERM_CLASSID, 1);
+  PetscCheck(!term->setup_called, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONGSTATE, "TaoTermQuadraticSetMat() must be called before TaoTermSetUp() or TaoSetUp()");
   PetscValidHeaderSpecific(A, MAT_CLASSID, 2);
   PetscCheckSameComm(term, 1, A, 2);
   PetscTryMethod(term, "TaoTermQuadraticSetMat_C", (TaoTerm, Mat), (term, A));
@@ -219,7 +252,9 @@ static PetscErrorCode TaoTermQuadraticSetMat_Quadratic(TaoTerm term, Mat A)
     PetscCall(MatDestroy(&quad->A));
     PetscCall(VecDestroy(&quad->_diff));
     PetscCall(VecDestroy(&quad->Adiff));
-    quad->A = A;
+    quad->A                = A;
+    quad->H_state.valid    = PETSC_FALSE;
+    quad->Hpre_state.valid = PETSC_FALSE;
     PetscCall(MatGetVecType(A, &vec_type));
     PetscCall(TaoTermSetSolutionVecType(term, vec_type));
     PetscCall(TaoTermSetParametersVecType(term, vec_type));
@@ -255,12 +290,8 @@ static PetscErrorCode TaoTermIsComputeHessianFDPossible_Quadratic(TaoTerm term, 
   The default Hessian creation mode (see `TaoTermGetCreateHessianMode()`) is `H == Hpre` and `TaoTermCreateHessianMatrices()`
   will create a matrix with the same type as $A$.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermType`,
-          `TaoTermCreateQuadratic()`,
-          `TAOTERMHALFL2SQUARED`,
-          `TAOTERML1`, `TaoTermQuadraticSetMat()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermType`, `TaoTermCreateQuadratic()`, `TAOTERMHALFL2SQUARED`, `TAOTERML1`,
+          `TaoTermQuadraticSetMat()`
 M*/
 PETSC_INTERN PetscErrorCode TaoTermCreate_Quadratic(TaoTerm term)
 {
@@ -280,6 +311,7 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Quadratic(TaoTerm term)
   term->ops->gradient                   = TaoTermComputeGradient_Quadratic;
   term->ops->objectiveandgradient       = TaoTermComputeObjectiveAndGradient_Quadratic;
   term->ops->hessian                    = TaoTermComputeHessian_Quadratic;
+  term->ops->hessianmult                = TaoTermComputeHessianMult_Quadratic;
   term->ops->createhessianmatrices      = TaoTermCreateHessianMatrices_Quadratic;
   term->ops->iscomputehessianfdpossible = TaoTermIsComputeHessianFDPossible_Quadratic;
 
@@ -303,11 +335,7 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Quadratic(TaoTerm term)
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreate()`,
-          `TAOTERMQUADRATIC`,
-          `TaoTermCreateHalfL2Squared()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreate()`, `TAOTERMQUADRATIC`, `TaoTermCreateHalfL2Squared()`,
           `TaoTermCreateL1()`, `TaoTermQuadraticSetMat()`
 @*/
 PetscErrorCode TaoTermCreateQuadratic(Mat A, TaoTerm *term)
