@@ -12,13 +12,11 @@ PETSC_INTERN PetscErrorCode TaoTermMappingSetData(TaoTermMapping *mt, const char
     PetscCall(PetscStrallocpy(prefix, &mt->prefix));
   }
   if (term != mt->term) {
-    PetscCall(VecDestroy(&mt->_unmapped_gradient));
+    PetscCall(VecDestroy(&mt->_unmapped_vec_work));
     PetscCall(MatDestroy(&mt->_unmapped_H));
     PetscCall(MatDestroy(&mt->_unmapped_Hpre));
     PetscCall(MatDestroy(&mt->_mapped_H));
     PetscCall(MatDestroy(&mt->_mapped_Hpre));
-    PetscCall(MatDestroy(&mt->_mapped_H_work));
-    PetscCall(MatDestroy(&mt->_mapped_Hpre_work));
   }
   PetscCall(PetscObjectReference((PetscObject)term));
   PetscCall(TaoTermDestroy(&mt->term));
@@ -35,13 +33,11 @@ PETSC_INTERN PetscErrorCode TaoTermMappingReset(TaoTermMapping *mt)
 {
   PetscFunctionBegin;
   PetscCall(TaoTermMappingSetData(mt, NULL, 0.0, NULL, NULL));
-  PetscCall(VecDestroy(&mt->_mapped_gradient));
+  PetscCall(VecDestroy(&mt->_mapped_vec_work));
   PetscCall(MatDestroy(&mt->_unmapped_H));
   PetscCall(MatDestroy(&mt->_unmapped_Hpre));
   PetscCall(MatDestroy(&mt->_mapped_H));
   PetscCall(MatDestroy(&mt->_mapped_Hpre));
-  PetscCall(MatDestroy(&mt->_mapped_H_work));
-  PetscCall(MatDestroy(&mt->_mapped_Hpre_work));
   mt->mask = TAOTERM_MASK_NONE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -92,38 +88,91 @@ PETSC_INTERN PetscErrorCode TaoTermMappingComputeObjective(TaoTermMapping *mt, V
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermMappingGetGradients(TaoTermMapping *mt, InsertMode mode, Vec g, Vec *mapped_g, Vec *unmapped_g)
+/*
+  TaoTermMappingGetWorkVec - Get the column-space work vector for a `TaoTerm`
+
+  Collective
+
+  Input Parameters:
++ mt   - the `TaoTermMapping`
+. mode - `INSERT_VALUES` or `ADD_VALUES`
+- g    - the destination vector, in the row space of `mt->map`
+
+  Output Parameter:
+. unmapped_g - column-space buffer the `TaoTerm` writes its raw result into
+
+  Level: developer
+
+  Notes:
+  For `INSERT_VALUES`, `unmapped_g` is `g` itself.
+  For `ADD_VALUES`, `unmapped_g` is a separate internal vector.
+
+  If `mt->map` is set, `unmapped_g` is instead a separate vector in the column space of `mt->map`.
+
+  The internal vectors are allocated on first use.  Pair every call with
+  `TaoTermMappingAccumulateWorkVec()`.
+
+.seealso: `TaoTermMapping`, `TaoTermMappingAccumulateWorkVec()`
+*/
+static PetscErrorCode TaoTermMappingGetWorkVec(TaoTermMapping *mt, InsertMode mode, Vec g, Vec *unmapped_g)
 {
   PetscFunctionBegin;
-  *mapped_g = g;
+  *unmapped_g = g;
   if (mode == ADD_VALUES) {
-    if (!mt->_mapped_gradient) PetscCall(VecDuplicate(g, &mt->_mapped_gradient));
-    *mapped_g = mt->_mapped_gradient;
+    if (!mt->_mapped_vec_work) PetscCall(VecDuplicate(g, &mt->_mapped_vec_work));
+    *unmapped_g = mt->_mapped_vec_work;
   }
-  *unmapped_g = *mapped_g;
   if (mt->map) {
-    if (!mt->_unmapped_gradient) PetscCall(TaoTermCreateSolutionVec(mt->term, &mt->_unmapped_gradient));
-    *unmapped_g = mt->_unmapped_gradient;
+    if (!mt->_unmapped_vec_work) PetscCall(TaoTermCreateSolutionVec(mt->term, &mt->_unmapped_vec_work));
+    *unmapped_g = mt->_unmapped_vec_work;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermMappingSetGradients(TaoTermMapping *mt, InsertMode mode, Vec g, Vec mapped_g, Vec unmapped_g)
+/*
+  TaoTermMappingAccumulateWorkVec - Combine the staged work vector into `g`,
+  applying `mt->map`, `mt->scale`, and the requested `InsertMode`
+
+  Collective
+
+  Input Parameters:
++ mt         - the `TaoTermMapping`
+. mode       - `INSERT_VALUES` or `ADD_VALUES`
+- unmapped_g - column-space work vector from `TaoTermMappingGetWorkVec()`
+
+  Output Parameter:
+. g - the destination vector, in the row space of `mt->map`
+
+  Level: developer
+
+  Notes:
+  When `mt->map` is set, `mapped_g <- map^H * unmapped_g`; otherwise the two are the same vector.
+
+  For `INSERT_VALUES`, `mapped_g` is `g` itself, and is scaled in place by `mt->scale`.
+  For `ADD_VALUES`, `g <- g + mt->scale * mapped_g`.
+
+  This is the counterpart to `TaoTermMappingGetWorkVec()` and must be called with the vector
+  it returned.
+
+.seealso: `TaoTermMapping`, `TaoTermMappingGetWorkVec()`
+*/
+static PetscErrorCode TaoTermMappingAccumulateWorkVec(TaoTermMapping *mt, InsertMode mode, Vec unmapped_g, Vec g)
 {
+  Vec mapped_g = unmapped_g;
+
   PetscFunctionBegin;
-  if (mt->map) PetscCall(MatMultHermitianTranspose(mt->map, unmapped_g, mapped_g));
-  else PetscAssert(mapped_g == unmapped_g, PETSC_COMM_SELF, PETSC_ERR_PLIB, "gradient not written to the right place");
-  if (mode == ADD_VALUES) PetscCall(VecAXPY(g, mt->scale, mapped_g));
-  else {
-    PetscAssert(mapped_g == g, PETSC_COMM_SELF, PETSC_ERR_PLIB, "gradient not written to the right place");
-    if (mt->scale != 1.0) PetscCall(VecScale(g, mt->scale));
+  if (mt->map) {
+    mapped_g = mode == ADD_VALUES ? mt->_mapped_vec_work : g;
+    PetscCall(MatMultHermitianTranspose(mt->map, unmapped_g, mapped_g));
   }
+  if (mode == ADD_VALUES) PetscCall(VecAXPY(g, mt->scale, mapped_g));
+  else if (mt->scale != 1.0) PetscCall(VecScale(g, mt->scale));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeGradient(TaoTermMapping *mt, Vec x, Vec params, InsertMode mode, Vec g)
 {
-  Vec Ax, mapped_g, unmapped_g = NULL;
+  Vec Ax, unmapped_g = NULL;
 
   PetscFunctionBegin;
   TaoTermMappingCheckInsertMode(mt, mode);
@@ -131,16 +180,16 @@ PETSC_INTERN PetscErrorCode TaoTermMappingComputeGradient(TaoTermMapping *mt, Ve
     if (mode == INSERT_VALUES) PetscCall(VecZeroEntries(g));
     PetscFunctionReturn(PETSC_SUCCESS);
   }
-  PetscCall(TaoTermMappingGetGradients(mt, mode, g, &mapped_g, &unmapped_g));
+  PetscCall(TaoTermMappingGetWorkVec(mt, mode, g, &unmapped_g));
   PetscCall(TaoTermMappingMap(mt, x, &Ax));
   PetscCall(TaoTermComputeGradient(mt->term, Ax, params, unmapped_g));
-  PetscCall(TaoTermMappingSetGradients(mt, mode, g, mapped_g, unmapped_g));
+  PetscCall(TaoTermMappingAccumulateWorkVec(mt, mode, unmapped_g, g));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeObjectiveAndGradient(TaoTermMapping *mt, Vec x, Vec params, InsertMode mode, PetscReal *value, Vec g)
 {
-  Vec       Ax, mapped_g, unmapped_g = NULL;
+  Vec       Ax, unmapped_g = NULL;
   PetscReal v;
 
   PetscFunctionBegin;
@@ -162,76 +211,19 @@ PETSC_INTERN PetscErrorCode TaoTermMappingComputeObjectiveAndGradient(TaoTermMap
     PetscCall(TaoTermMappingComputeObjective(mt, x, params, mode, value));
     PetscFunctionReturn(PETSC_SUCCESS);
   }
-  PetscCall(TaoTermMappingGetGradients(mt, mode, g, &mapped_g, &unmapped_g));
+  PetscCall(TaoTermMappingGetWorkVec(mt, mode, g, &unmapped_g));
   PetscCall(TaoTermMappingMap(mt, x, &Ax));
   PetscCall(TaoTermComputeObjectiveAndGradient(mt->term, Ax, params, &v, unmapped_g));
-  PetscCall(TaoTermMappingSetGradients(mt, mode, g, mapped_g, unmapped_g));
+  PetscCall(TaoTermMappingAccumulateWorkVec(mt, mode, unmapped_g, g));
   if (mode == ADD_VALUES) *value += mt->scale * v;
   else *value = mt->scale * v;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermMappingMatPtAP(Mat unmapped_H, Mat map, Mat mapped_H, Mat work)
+static PetscErrorCode TaoTermMappingMatPtAP(Mat unmapped_H, Mat map, Mat mapped_H)
 {
-  PetscBool is_uH_diag, is_map_diag, is_uH_cdiag, is_map_cdiag;
-
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)unmapped_H, MATDIAGONAL, &is_uH_diag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)unmapped_H, MATCONSTANTDIAGONAL, &is_uH_cdiag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)map, MATDIAGONAL, &is_map_diag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)map, MATCONSTANTDIAGONAL, &is_map_cdiag));
-
-  if (is_map_diag) {
-    Vec m_diag;
-
-    PetscCall(MatDiagonalGetDiagonal(map, &m_diag));
-    if (is_uH_cdiag) {
-      Vec         mapped_diag;
-      PetscScalar cc;
-
-      // mapped_H \gets cc map * map
-      PetscCall(MatConstantDiagonalGetConstant(unmapped_H, &cc));
-      PetscCall(MatDiagonalGetDiagonal(mapped_H, &mapped_diag));
-      PetscCall(VecPointwiseMult(mapped_diag, m_diag, m_diag));
-      PetscCall(VecScale(mapped_diag, cc));
-      PetscCall(MatDiagonalRestoreDiagonal(mapped_H, &mapped_diag));
-    } else if (is_uH_diag) {
-      Vec mapped_diag, unmapped_diag;
-
-      PetscCall(MatDiagonalGetDiagonal(mapped_H, &mapped_diag));
-      PetscCall(MatDiagonalGetDiagonal(unmapped_H, &unmapped_diag));
-      PetscCall(VecPointwiseMult(mapped_diag, m_diag, m_diag));
-      PetscCall(VecPointwiseMult(mapped_diag, unmapped_diag, mapped_diag));
-      PetscCall(MatDiagonalRestoreDiagonal(mapped_H, &mapped_diag));
-      PetscCall(MatDiagonalRestoreDiagonal(unmapped_H, &unmapped_diag));
-    } else {
-      PetscCall(MatCopy(unmapped_H, mapped_H, SAME_NONZERO_PATTERN));
-      PetscCall(MatDiagonalScale(mapped_H, m_diag, m_diag));
-    }
-    PetscCall(MatDiagonalRestoreDiagonal(map, &m_diag));
-  } else if (is_map_cdiag) {
-    PetscScalar cc;
-
-    PetscCall(MatConstantDiagonalGetConstant(map, &cc));
-    PetscCall(MatCopy(unmapped_H, mapped_H, SAME_NONZERO_PATTERN));
-    PetscCall(MatScale(mapped_H, cc * cc));
-  } else if (is_uH_diag) {
-    Vec unmapped_diag;
-
-    // TODO inefficient. Remove when diag PtAP gets implemented
-    PetscCall(MatDiagonalGetDiagonal(unmapped_H, &unmapped_diag));
-    PetscCall(MatCopy(map, work, SAME_NONZERO_PATTERN));
-    PetscCall(MatDiagonalScale(work, unmapped_diag, NULL));
-    PetscCall(MatTransposeMatMult(map, work, MAT_REUSE_MATRIX, PETSC_DETERMINE, &mapped_H));
-    PetscCall(MatDiagonalRestoreDiagonal(unmapped_H, &unmapped_diag));
-  } else if (is_uH_cdiag) {
-    // cc * A^T A
-    PetscScalar cc;
-
-    PetscCall(MatConstantDiagonalGetConstant(unmapped_H, &cc));
-    PetscCall(MatTransposeMatMult(map, map, MAT_REUSE_MATRIX, PETSC_DETERMINE, &mapped_H));
-    PetscCall(MatScale(mapped_H, cc));
-  } else PetscCall(MatPtAP(unmapped_H, map, MAT_REUSE_MATRIX, PETSC_DETERMINE, &mapped_H));
+  PetscCall(MatPtAP(unmapped_H, map, MAT_REUSE_MATRIX, PETSC_DETERMINE, &mapped_H));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -292,8 +284,8 @@ static PetscErrorCode TaoTermMappingSetHessians(TaoTermMapping *mt, InsertMode m
   PetscFunctionBegin;
   if (mt->map) {
     // currently only implements Gauss-Newton Hessian approximation
-    if (mapped_H) PetscCall(TaoTermMappingMatPtAP(unmapped_H, mt->map, mapped_H, mt->_mapped_H_work));
-    if (mapped_Hpre && (mapped_Hpre != mapped_H)) PetscCall(TaoTermMappingMatPtAP(unmapped_Hpre, mt->map, mapped_Hpre, mt->_mapped_Hpre_work));
+    if (mapped_H) PetscCall(TaoTermMappingMatPtAP(unmapped_H, mt->map, mapped_H));
+    if (mapped_Hpre && (mapped_Hpre != mapped_H)) PetscCall(TaoTermMappingMatPtAP(unmapped_Hpre, mt->map, mapped_Hpre));
   }
   if (mode == ADD_VALUES) {
     if (H) PetscCall(MatAXPY(H, mt->scale, mapped_H, UNKNOWN_NONZERO_PATTERN));
@@ -377,81 +369,13 @@ PETSC_INTERN PetscErrorCode TaoTermMappingCreateParametersVec(TaoTermMapping *mt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermMappingCreateAPWorkMatrix(Mat map, Mat unmapped, Mat *mapped_work)
-{
-  PetscBool is_uH_diag, is_map_diag;
-
-  PetscFunctionBegin;
-  PetscCall(PetscObjectBaseTypeCompareAny((PetscObject)map, &is_map_diag, MATDIAGONAL, MATCONSTANTDIAGONAL, ""));
-  PetscCall(PetscObjectTypeCompare((PetscObject)unmapped, MATDIAGONAL, &is_uH_diag));
-  if (is_uH_diag && !is_map_diag) PetscCall(MatDuplicate(map, MAT_DO_NOT_COPY_VALUES, mapped_work));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 // This function takes in unmapped_H, map, and returns matrix for mapped_H, which is PtAP
 static PetscErrorCode TaoTermMappingCreatePtAP(Mat unmapped_H, Mat map, Mat *H)
 {
-  PetscBool is_uH_diag, is_uH_cdiag, is_map_diag, is_map_cdiag;
-
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)unmapped_H, MATDIAGONAL, &is_uH_diag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)unmapped_H, MATCONSTANTDIAGONAL, &is_uH_cdiag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)map, MATDIAGONAL, &is_map_diag));
-  PetscCall(PetscObjectTypeCompare((PetscObject)map, MATCONSTANTDIAGONAL, &is_map_cdiag));
-
-  // TODO support for PtAP with diagonal would be ideal
-  if (is_map_diag && is_uH_diag) {
-    PetscCall(MatDuplicate(unmapped_H, MAT_DO_NOT_COPY_VALUES, H));
-  } else if (is_map_cdiag && is_uH_cdiag) {
-    // MatDiagonal does not support setvalues, thus AIJ
-    PetscLayout rlayout;
-    PetscInt    m, M;
-
-    PetscCall(MatGetLayouts(map, &rlayout, NULL));
-    PetscCall(MatGetSize(map, &M, NULL));
-    PetscCall(MatGetLocalSize(map, &m, NULL));
-    PetscCall(MatCreate(PetscObjectComm((PetscObject)map), H));
-    PetscCall(MatSetSizes(*H, m, m, M, M));
-    PetscCall(MatSetLayouts(*H, rlayout, rlayout));
-    PetscCall(MatSetType(*H, MATAIJ));
-    PetscCall(MatSetUp(*H));
-  } else if (is_map_diag && !is_uH_diag && !is_uH_cdiag) {
-    PetscCall(MatDuplicate(unmapped_H, MAT_DO_NOT_COPY_VALUES, H));
-  } else if (is_map_cdiag && is_uH_diag) {
-    // MatDiagonal does not support setvalues, thus AIJ
-    PetscLayout rlayout;
-    PetscInt    m, M;
-
-    PetscCall(MatGetLayouts(map, &rlayout, NULL));
-    PetscCall(MatGetSize(map, &M, NULL));
-    PetscCall(MatGetLocalSize(map, &m, NULL));
-    PetscCall(MatCreate(PetscObjectComm((PetscObject)map), H));
-    PetscCall(MatSetSizes(*H, m, m, M, M));
-    PetscCall(MatSetLayouts(*H, rlayout, rlayout));
-    PetscCall(MatSetType(*H, MATAIJ));
-    PetscCall(MatSetUp(*H));
-  } else if (is_map_diag && is_uH_cdiag) {
-    PetscCall(MatDuplicate(map, MAT_DO_NOT_COPY_VALUES, H));
-  } else if ((is_uH_diag && !is_map_diag && !is_map_cdiag) || (is_uH_cdiag && !is_map_diag && !is_map_cdiag)) {
-    PetscCall(MatTransposeMatMult(map, map, MAT_INITIAL_MATRIX, PETSC_DETERMINE, H));
-  } else if (!is_uH_diag && !is_uH_cdiag && is_map_cdiag) {
-    PetscScalar cc;
-
-    PetscCall(MatConstantDiagonalGetConstant(map, &cc));
-    PetscCall(MatDuplicate(unmapped_H, MAT_COPY_VALUES, H));
-    PetscCall(MatScale(*H, cc * cc));
-  } else {
-    PetscCall(MatProductCreate(unmapped_H, map, NULL, H));
-    PetscCall(MatProductSetType(*H, MATPRODUCT_PtAP));
-    PetscCall(MatProductSetFromOptions(*H));
-    // TODO Some other default fallback?
-    if ((*H)->ops->productsymbolic) PetscCall(MatProductSymbolic(*H));
-    else SETERRQ(PetscObjectComm((PetscObject)map), PETSC_ERR_SUP, "Currently does not support PtAP routines for given pair of matrices");
-    PetscCall(MatProductNumeric(*H));
-    PetscCall(MatZeroEntries(*H));
-    PetscCall(MatAssemblyBegin(*H, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(*H, MAT_FINAL_ASSEMBLY));
-  }
+  PetscCall(MatPtAP(unmapped_H, map, MAT_INITIAL_MATRIX, PETSC_DETERMINE, H));
+  PetscCall(MatAssemblyBegin(*H, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(*H, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -464,7 +388,6 @@ static PetscErrorCode TaoTermMappingCreatePtAP(Mat unmapped_H, Mat map, Mat *H)
  * and return H \gets mt->_mapped_H, and Hpre \gets mt->_mapped_Hpre.
  *
  * if (mt->map)
- *   It also creates internal work matrices to support PtAP with diagonal matrix, which is currently unsupported natively.
  *   mapped:   n x n
  *   unmapped: m x m
  *
@@ -527,8 +450,6 @@ PETSC_INTERN PetscErrorCode TaoTermMappingCreateHessianMatrices(TaoTermMapping *
     PetscCall(MatShift(mt->_unmapped_H, 1.));
     // Create PtAP only if mt->_mapped_H is empty
     if (mt->_unmapped_H && !mt->_mapped_H) PetscCall(TaoTermMappingCreatePtAP(mt->_unmapped_H, mt->map, &mt->_mapped_H));
-    // Creating expensive work matrix to store AP TODO remove when diag PtAP gets implemented
-    if (!mt->_mapped_H_work) PetscCall(TaoTermMappingCreateAPWorkMatrix(mt->map, mt->_unmapped_H, &mt->_mapped_H_work));
     if (*H != mt->_mapped_H) PetscCall(PetscObjectReference((PetscObject)mt->_mapped_H));
     *H = mt->_mapped_H;
     if (mt->_unmapped_Hpre == mt->_unmapped_H) {
@@ -540,8 +461,10 @@ PETSC_INTERN PetscErrorCode TaoTermMappingCreateHessianMatrices(TaoTermMapping *
       if (*Hpre != mt->_mapped_Hpre) PetscCall(PetscObjectReference((PetscObject)*H));
       *Hpre = *H;
     } else {
+      PetscCall(MatAssemblyBegin(mt->_unmapped_Hpre, MAT_FINAL_ASSEMBLY));
+      PetscCall(MatAssemblyEnd(mt->_unmapped_Hpre, MAT_FINAL_ASSEMBLY));
+      PetscCall(MatShift(mt->_unmapped_Hpre, 1.));
       if (!mt->_mapped_Hpre) PetscCall(TaoTermMappingCreatePtAP(mt->_unmapped_Hpre, mt->map, &mt->_mapped_Hpre));
-      if (!mt->_mapped_Hpre_work) PetscCall(TaoTermMappingCreateAPWorkMatrix(mt->map, mt->_unmapped_Hpre, &mt->_mapped_Hpre_work));
       if (*Hpre != mt->_mapped_Hpre) PetscCall(PetscObjectReference((PetscObject)mt->_mapped_Hpre));
       *Hpre = mt->_mapped_Hpre;
     }

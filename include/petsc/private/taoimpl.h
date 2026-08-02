@@ -66,14 +66,12 @@ struct _n_TaoTermMapping {
   PetscReal   scale;
   Mat         map;
   Vec         _map_output;
-  Vec         _unmapped_gradient;
-  Vec         _mapped_gradient;
+  Vec         _unmapped_vec_work;
+  Vec         _mapped_vec_work;
   Mat         _unmapped_H;
   Mat         _unmapped_Hpre;
   Mat         _mapped_H;
   Mat         _mapped_Hpre;
-  Mat         _mapped_H_work; /* Temporary work matrices for PtAP for diagonal A */
-  Mat         _mapped_Hpre_work;
   TaoTermMask mask;
 };
 
