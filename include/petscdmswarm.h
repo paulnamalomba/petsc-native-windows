@@ -125,6 +125,30 @@ typedef enum {
 PETSC_EXTERN const char *DMSwarmRemapTypeNames[];
 
 /*E
+   DMSwarmBackendType - Determines the memory space in which the particle data of a `DMSWARM` is stored and manipulated
+
+   Values:
++  `DMSWARM_BACKEND_HOST`   - particle data lives in host memory and is processed by host code
+.  `DMSWARM_BACKEND_HIP`    - particle data lives in HIP device memory
+.  `DMSWARM_BACKEND_CUDA`   - particle data lives in CUDA device memory
+-  `DMSWARM_BACKEND_KOKKOS` - particle data lives in the memory space of the default Kokkos execution space
+
+   Level: intermediate
+
+   Note:
+   Host-based accessors such as `DMSwarmGetField()` remain functional for every backend; particle data is synchronized on access.
+
+.seealso: [](ch_dmbase), `DM`, `DMSWARM`, `DMSwarmSetBackend()`, `DMSwarmGetBackend()`
+E*/
+typedef enum {
+  DMSWARM_BACKEND_HOST = 0,
+  DMSWARM_BACKEND_HIP,
+  DMSWARM_BACKEND_CUDA,
+  DMSWARM_BACKEND_KOKKOS
+} DMSwarmBackendType;
+PETSC_EXTERN const char *DMSwarmBackendTypeNames[];
+
+/*E
    DMSwarmPICLayoutType - Defines the method used to define particle coordinates within each cell. The layouts are constructured using the reference cell geometry
 
    Values:
@@ -176,7 +200,15 @@ PETSC_EXTERN PetscErrorCode DMSwarmRegisterUserStructField(DM, const char[], siz
 PETSC_EXTERN PetscErrorCode DMSwarmRegisterUserDatatypeField(DM, const char[], size_t, PetscInt);
 PETSC_EXTERN PetscErrorCode DMSwarmGetField(DM, const char[], PetscInt *, PetscDataType *, void **);
 PETSC_EXTERN PetscErrorCode DMSwarmRestoreField(DM, const char[], PetscInt *, PetscDataType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmGetFieldAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmRestoreFieldAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmGetFieldReadAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmRestoreFieldReadAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmGetFieldWriteAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
+PETSC_EXTERN PetscErrorCode DMSwarmRestoreFieldWriteAndMemType(DM, const char[], PetscInt *, PetscDataType *, PetscMemType *, void **);
 PETSC_EXTERN PetscErrorCode DMSwarmGetFieldInfo(DM, const char[], PetscInt *, PetscDataType *);
+PETSC_EXTERN PetscErrorCode DMSwarmSetBackend(DM, DMSwarmBackendType);
+PETSC_EXTERN PetscErrorCode DMSwarmGetBackend(DM, DMSwarmBackendType *);
 
 PETSC_EXTERN PetscErrorCode DMSwarmVectorDefineField(DM, const char[]);
 PETSC_EXTERN PetscErrorCode DMSwarmVectorDefineFields(DM, PetscInt, const char *[]);

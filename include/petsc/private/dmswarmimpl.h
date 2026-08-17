@@ -62,11 +62,15 @@ typedef struct {
   PetscObjectList cellDMs;
   const char     *activeCellDM;
 
+  struct _p_DMSwarmDataEx *de;           /* cached point exchanger, reused across migration/collection calls */
+  PetscObjectId            de_layout_id; /* id of the cell DM whose neighbor topology is cached in de, 0 if none */
+
   PetscBool          issetup;
   DMSwarmType        swarm_type;
   DMSwarmMigrateType migrate_type;
   DMSwarmCollectType collect_type;
   DMSwarmRemapType   remap_type;
+  DMSwarmBackendType backend;
 
   PetscBool migrate_error_on_missing_point;
 

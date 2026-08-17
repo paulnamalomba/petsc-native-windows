@@ -7,6 +7,7 @@
 #include <petscdmplex.h>
 #include <petscblaslapack.h>
 #include "../src/dm/impls/swarm/data_bucket.h"
+#include "../src/dm/impls/swarm/data_ex.h"
 #include <petscdmlabel.h>
 #include <petscsection.h>
 
@@ -18,6 +19,7 @@ const char *DMSwarmTypeNames[]          = {"basic", "pic", NULL};
 const char *DMSwarmMigrateTypeNames[]   = {"basic", "dmcellnscatter", "dmcellexact", "user", NULL};
 const char *DMSwarmCollectTypeNames[]   = {"basic", "boundingbox", "general", "user", NULL};
 const char *DMSwarmRemapTypeNames[]     = {"none", "pfak", "colella", "DMSwarmRemapType", "DMSWARM_REMAP_", NULL};
+const char *DMSwarmBackendTypeNames[]   = {"host", "hip", "cuda", "kokkos", "DMSwarmBackendType", "DMSWARM_BACKEND_", NULL};
 const char *DMSwarmPICLayoutTypeNames[] = {"regular", "gauss", "subdivision", NULL};
 
 const char DMSwarmField_pid[]     = "DMSwarm_pid";
@@ -321,9 +323,10 @@ static PetscErrorCode DMSwarmCreateVectorFromField_Private(DM dm, const char fie
   PetscCheck(type == PETSC_REAL, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Only valid for PETSC_REAL");
 
   PetscCallMPI(MPI_Comm_size(comm, &size));
-  PetscCall(PetscStrcmp(dm->vectype, VECKOKKOS, &iskokkos));
-  PetscCall(PetscStrcmp(dm->vectype, VECCUDA, &iscuda));
-  PetscCall(PetscStrcmp(dm->vectype, VECHIP, &iship));
+  /* suffix comparison so that the seq/mpi variants of each device vectype are also matched */
+  PetscCall(PetscStrendswith(dm->vectype, VECKOKKOS, &iskokkos));
+  PetscCall(PetscStrendswith(dm->vectype, VECCUDA, &iscuda));
+  PetscCall(PetscStrendswith(dm->vectype, VECHIP, &iship));
   PetscCall(VecCreate(comm, vec));
   PetscCall(VecSetSizes(*vec, n * bs, PETSC_DETERMINE));
   PetscCall(VecSetBlockSize(*vec, bs));
@@ -1616,6 +1619,7 @@ PetscErrorCode DMSwarmSetCellDMActive(DM sw, const char name[])
   PetscCall(PetscFree(swarm->activeCellDM));
   PetscCall(PetscStrallocpy(name, (char **)&swarm->activeCellDM));
   PetscCall(DMSwarmGetCellDMActive(sw, &celldm));
+  swarm->de_layout_id = 0;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1968,6 +1972,176 @@ PetscErrorCode DMSwarmRestoreField(DM dm, const char fieldname[], PetscInt *bloc
   PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, fieldname, &gfield));
   PetscCall(DMSwarmDataFieldRestoreAccess(gfield));
   if (data) *data = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmGetFieldAndMemType - Get access to the array storing all entries of a registered field in the memory space native to the storage backend
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+- fieldname - the textual name to identify this field
+
+  Output Parameters:
++ blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the returned array, or `NULL`
+- data      - pointer to the raw array in the backend's native memory space
+
+  Level: intermediate
+
+  Notes:
+  The array must be returned using a matching call to `DMSwarmRestoreFieldAndMemType()`. Access is read-write; on restore the entries in the backend's native memory space are considered authoritative.
+
+  On the host backend this returns the same array as `DMSwarmGetField()` and `mtype` is `PETSC_MEMTYPE_HOST`. On a device backend the returned pointer addresses device memory and no host-device copy is performed, making this the primitive for user-written device kernels; use `DMSwarmGetField()` when a host pointer is required.
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmRestoreFieldAndMemType()`, `DMSwarmGetFieldReadAndMemType()`, `DMSwarmGetFieldWriteAndMemType()`, `DMSwarmGetField()`
+@*/
+PetscErrorCode DMSwarmGetFieldAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
+  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmRestoreFieldAndMemType - Restore access to a raw array obtained with `DMSwarmGetFieldAndMemType()`
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+. fieldname - the textual name to identify this field
+. blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the array, or `NULL`
+- data      - pointer to the raw array
+
+  Level: intermediate
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmGetFieldAndMemType()`
+@*/
+PetscErrorCode DMSwarmRestoreFieldAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmGetFieldReadAndMemType - Get read-only access to the array storing all entries of a registered field in the memory space native to the storage backend
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+- fieldname - the textual name to identify this field
+
+  Output Parameters:
++ blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the returned array, or `NULL`
+- data      - pointer to the raw array in the backend's native memory space
+
+  Level: intermediate
+
+  Note:
+  The array must be returned using a matching call to `DMSwarmRestoreFieldReadAndMemType()`. The entries must not be modified; on a device backend stale device entries are refreshed but restore never marks them as changed.
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmRestoreFieldReadAndMemType()`, `DMSwarmGetFieldAndMemType()`, `DMSwarmGetFieldWriteAndMemType()`
+@*/
+PetscErrorCode DMSwarmGetFieldReadAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
+  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmRestoreFieldReadAndMemType - Restore access to a raw array obtained with `DMSwarmGetFieldReadAndMemType()`
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+. fieldname - the textual name to identify this field
+. blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the array, or `NULL`
+- data      - pointer to the raw array
+
+  Level: intermediate
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmGetFieldReadAndMemType()`
+@*/
+PetscErrorCode DMSwarmRestoreFieldReadAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmGetFieldWriteAndMemType - Get write-only access to the array storing all entries of a registered field in the memory space native to the storage backend
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+- fieldname - the textual name to identify this field
+
+  Output Parameters:
++ blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the returned array, or `NULL`
+- data      - pointer to the raw array in the backend's native memory space
+
+  Level: intermediate
+
+  Note:
+  The array must be returned using a matching call to `DMSwarmRestoreFieldWriteAndMemType()`. Every entry is assumed to be overwritten before restore; on a device backend no refresh of stale entries is performed, making this the fast path for initialization kernels.
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmRestoreFieldWriteAndMemType()`, `DMSwarmGetFieldAndMemType()`, `DMSwarmGetFieldReadAndMemType()`
+@*/
+PetscErrorCode DMSwarmGetFieldWriteAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
+  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmRestoreFieldWriteAndMemType - Restore access to a raw array obtained with `DMSwarmGetFieldWriteAndMemType()`
+
+  Not Collective, No Fortran Support
+
+  Input Parameters:
++ dm        - a `DMSWARM`
+. fieldname - the textual name to identify this field
+. blocksize - the number of each data type, or `NULL`
+. type      - the data type, or `NULL`
+. mtype     - the `PetscMemType` of the array, or `NULL`
+- data      - pointer to the raw array
+
+  Level: intermediate
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmGetFieldWriteAndMemType()`
+@*/
+PetscErrorCode DMSwarmRestoreFieldWriteAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2486,6 +2660,7 @@ static PetscErrorCode DMDestroy_Swarm(DM dm)
 
   PetscFunctionBegin;
   if (--swarm->refct > 0) PetscFunctionReturn(PETSC_SUCCESS);
+  if (swarm->de) PetscCall(DMSwarmDataExDestroy(swarm->de));
   PetscCall(PetscObjectListDestroy(&swarm->cellDMs));
   PetscCall(PetscFree(swarm->activeCellDM));
   PetscCall(DMSwarmDataBucketDestroy(&swarm->db));
@@ -2802,12 +2977,95 @@ PetscErrorCode DMSwarmComputeMoments(DM sw, const char coordinate[], const char 
 
 static PetscErrorCode DMSetFromOptions_Swarm(DM dm, PetscOptionItems PetscOptionsObject)
 {
-  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+  DM_Swarm          *swarm   = (DM_Swarm *)dm->data;
+  DMSwarmBackendType backend = swarm->backend;
+  PetscBool          flg;
 
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "DMSwarm Options");
   PetscCall(PetscOptionsEnum("-dm_swarm_remap_type", "Remap algorithm", "DMSwarmSetRemapType", DMSwarmRemapTypeNames, (PetscEnum)swarm->remap_type, (PetscEnum *)&swarm->remap_type, NULL));
+  PetscCall(PetscOptionsEnum("-dm_swarm_backend", "Storage backend for particle data", "DMSwarmSetBackend", DMSwarmBackendTypeNames, (PetscEnum)backend, (PetscEnum *)&backend, &flg));
+  if (flg) PetscCall(DMSwarmSetBackend(dm, backend));
   PetscOptionsHeadEnd();
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmSetBackend - Set the memory space in which the particle data of a `DMSWARM` is stored
+
+  Logically Collective
+
+  Input Parameters:
++ dm      - the `DMSWARM`
+- backend - the `DMSwarmBackendType`
+
+  Options Database Key:
+. -dm_swarm_backend (host|hip|cuda|kokkos) - select the storage backend
+
+  Level: intermediate
+
+  Notes:
+  This routine must be called before `DMSetUp()`. The default is `DMSWARM_BACKEND_HOST`, which stores particle data in host memory and reproduces the historical behavior of `DMSWARM` exactly. Requesting a device backend that PETSc was not configured with raises an error.
+
+  Selecting a device backend also sets the vector type of `dm` with `DMSetVecType()` so that vectors created from fields live in the same memory space. Setting `-dm_vec_type` alone does not change where particle data is stored.
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmGetBackend()`, `DMSwarmBackendType`, `DMSetVecType()`
+@*/
+PetscErrorCode DMSwarmSetBackend(DM dm, DMSwarmBackendType backend)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscValidLogicalCollectiveEnum(dm, backend, 2);
+  PetscCheck(!swarm->issetup, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONGSTATE, "Must call DMSwarmSetBackend() before DMSetUp()");
+  switch (backend) {
+  case DMSWARM_BACKEND_HOST:
+    swarm->db->memtype = PETSC_MEMTYPE_HOST;
+    break;
+  case DMSWARM_BACKEND_HIP:
+    PetscCheck(PetscDefined(HAVE_HIP), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with HIP support");
+    PetscCall(DMSetVecType(dm, VECHIP));
+    swarm->db->memtype = PETSC_MEMTYPE_HIP;
+    break;
+  case DMSWARM_BACKEND_CUDA:
+    PetscCheck(PetscDefined(HAVE_CUDA), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with CUDA support");
+    PetscCall(DMSetVecType(dm, VECCUDA));
+    swarm->db->memtype = PETSC_MEMTYPE_CUDA;
+    break;
+  case DMSWARM_BACKEND_KOKKOS:
+    PetscCheck(PetscDefined(HAVE_KOKKOS), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with Kokkos support");
+    PetscCall(DMSetVecType(dm, VECKOKKOS));
+    swarm->db->memtype = PETSC_MEMTYPE_KOKKOS;
+    break;
+  }
+  swarm->backend = backend;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmGetBackend - Get the memory space in which the particle data of a `DMSWARM` is stored
+
+  Not Collective
+
+  Input Parameter:
+. dm - the `DMSWARM`
+
+  Output Parameter:
+. backend - the `DMSwarmBackendType`
+
+  Level: intermediate
+
+.seealso: `DM`, `DMSWARM`, `DMSwarmSetBackend()`, `DMSwarmBackendType`
+@*/
+PetscErrorCode DMSwarmGetBackend(DM dm, DMSwarmBackendType *backend)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
+  PetscAssertPointer(backend, 2);
+  *backend = swarm->backend;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2931,6 +3189,7 @@ PETSC_EXTERN PetscErrorCode DMCreate_Swarm(DM dm)
   swarm->swarm_type                     = DMSWARM_BASIC;
   swarm->migrate_type                   = DMSWARM_MIGRATE_BASIC;
   swarm->collect_type                   = DMSWARM_COLLECT_BASIC;
+  swarm->backend                        = DMSWARM_BACKEND_HOST;
   swarm->migrate_error_on_missing_point = PETSC_FALSE;
   swarm->collect_view_active            = PETSC_FALSE;
   swarm->collect_view_reset_nlocal      = -1;

@@ -45,7 +45,10 @@ PetscErrorCode DMSwarmDataFieldCreate(const char registration_function[], const 
   /* allocate something so we don't have to reallocate */
   PetscCall(PetscMalloc(size * L, &df->data));
   PetscCall(PetscMemzero(df->data, size * L));
-  *DF = df;
+  df->data_d           = NULL;
+  df->data_allocated_d = NULL;
+  df->offloadmask      = PETSC_OFFLOAD_CPU;
+  *DF                  = df;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -62,6 +65,21 @@ PetscErrorCode DMSwarmDataFieldDestroy(DMSwarmDataField *DF)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Host storage backend: device transfers are no-ops since the host array is the single residence */
+static PetscErrorCode DMSwarmDataFieldToDevice_Host(DMSwarmDataField df)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmDataFieldToHost_Host(DMSwarmDataField df)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket, PetscInt, PetscInt);
+
 /* data bucket */
 PetscErrorCode DMSwarmDataBucketCreate(DMSwarmDataBucket *DB)
 {
@@ -77,7 +95,13 @@ PetscErrorCode DMSwarmDataBucketCreate(DMSwarmDataBucket *DB)
   db->allocated = 1;
   db->nfields   = 0;
   PetscCall(PetscMalloc1(1, &db->field));
-  *DB = db;
+  db->memtype            = PETSC_MEMTYPE_HOST;
+  db->ops.fieldalloc     = DMSwarmDataFieldSetSize;
+  db->ops.fieldtodevice  = DMSwarmDataFieldToDevice_Host;
+  db->ops.fieldtohost    = DMSwarmDataFieldToHost_Host;
+  db->ops.fieldzerorange = DMSwarmDataFieldZeroBlock;
+  db->ops.setsizes       = DMSwarmDataBucketSetSizes_Host;
+  *DB                    = db;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -281,19 +305,11 @@ PetscErrorCode DMSwarmDataFieldZeroBlock(DMSwarmDataField df, const PetscInt sta
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
- A negative buffer value will simply be ignored and the old buffer value will be used.
- */
-PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L, const PetscInt buffer)
+static PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket db, PetscInt L, PetscInt buffer)
 {
-  PetscInt  current_allocated, current_used, new_used, new_unused, new_buffer, new_allocated, f, end;
-  PetscBool any_active_fields;
+  PetscInt current_allocated, current_used, new_used, new_unused, new_buffer, new_allocated, f, end;
 
   PetscFunctionBegin;
-  PetscCheck(db->finalised != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "You must call DMSwarmDataBucketFinalize() before DMSwarmDataBucketSetSizes()");
-  PetscCall(DMSwarmDataBucketQueryForActiveFields(db, &any_active_fields));
-  PetscCheck(!any_active_fields, PETSC_COMM_SELF, PETSC_ERR_USER, "Cannot safely re-size as at least one DMSwarmDataField is currently being accessed");
-
   current_allocated = db->allocated;
   current_used      = PetscMax(db->L, 0);
   new_used          = L;
@@ -307,8 +323,8 @@ PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L,
   if (new_allocated > current_allocated) {
     /* increase size to new_used + new_buffer and zero new space */
     for (f = 0; f < db->nfields; f++) {
-      PetscCall(DMSwarmDataFieldSetSize(db->field[f], new_allocated));
-      PetscCall(DMSwarmDataFieldZeroBlock(db->field[f], current_allocated, new_allocated));
+      PetscCall((*db->ops.fieldalloc)(db->field[f], new_allocated));
+      PetscCall((*db->ops.fieldzerorange)(db->field[f], current_allocated, new_allocated));
     }
     db->L         = new_used;
     db->buffer    = new_buffer;
@@ -316,7 +332,7 @@ PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L,
   } else {
     if (new_unused > 2 * new_buffer) {
       /* shrink array to new_used + new_buffer */
-      for (f = 0; f < db->nfields; ++f) PetscCall(DMSwarmDataFieldSetSize(db->field[f], new_allocated));
+      for (f = 0; f < db->nfields; ++f) PetscCall((*db->ops.fieldalloc)(db->field[f], new_allocated));
       db->L         = new_used;
       db->buffer    = new_buffer;
       db->allocated = new_used + new_buffer;
@@ -328,11 +344,23 @@ PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L,
   /* if we shrunk, zero old entries from new_used to current_used or end of array */
   end = PetscMin(current_used, new_allocated);
   if (end > new_used) {
-    for (f = 0; f < db->nfields; ++f) {
-      DMSwarmDataField field = db->field[f];
-      PetscCall(DMSwarmDataFieldZeroBlock(field, new_used, end));
-    }
+    for (f = 0; f < db->nfields; ++f) PetscCall((*db->ops.fieldzerorange)(db->field[f], new_used, end));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+ A negative buffer value will simply be ignored and the old buffer value will be used.
+ */
+PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L, const PetscInt buffer)
+{
+  PetscBool any_active_fields;
+
+  PetscFunctionBegin;
+  PetscCheck(db->finalised != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "You must call DMSwarmDataBucketFinalize() before DMSwarmDataBucketSetSizes()");
+  PetscCall(DMSwarmDataBucketQueryForActiveFields(db, &any_active_fields));
+  PetscCheck(!any_active_fields, PETSC_COMM_SELF, PETSC_ERR_USER, "Cannot safely re-size as at least one DMSwarmDataField is currently being accessed");
+  PetscCall((*db->ops.setsizes)(db, L, buffer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

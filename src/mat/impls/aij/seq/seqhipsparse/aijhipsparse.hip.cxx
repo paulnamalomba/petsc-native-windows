@@ -17,7 +17,11 @@
 #include <thrust/iterator/transform_iterator.h>
 #if PETSC_CPP_VERSION >= 14
   #define PETSC_HAVE_THRUST_ASYNC 1
-  #include <thrust/async/for_each.h>
+  // rocThrust became CCCL-based in ROCm 10 and no longer ships thrust/async/. The header is only
+  // needed by the disabled thrust::async::for_each() block in MatMultAddKernel_SeqAIJHIPSPARSE().
+  #if __has_include(<thrust/async/for_each.h>)
+    #include <thrust/async/for_each.h>
+  #endif
 #endif
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/iterator/discard_iterator.h>
@@ -3217,8 +3221,8 @@ PetscErrorCode MatSeqAIJHIPSPARSERestoreArrayWrite(Mat A, PetscScalar *a[])
 struct IJCompare4 {
   __host__ __device__ inline bool operator()(const thrust::tuple<int, int, PetscScalar, int> &t1, const thrust::tuple<int, int, PetscScalar, int> &t2)
   {
-    if (t1.get<0>() < t2.get<0>()) return true;
-    if (t1.get<0>() == t2.get<0>()) return t1.get<1>() < t2.get<1>();
+    if (thrust::get<0>(t1) < thrust::get<0>(t2)) return true;
+    if (thrust::get<0>(t1) == thrust::get<0>(t2)) return thrust::get<1>(t1) < thrust::get<1>(t2);
     return false;
   }
 };

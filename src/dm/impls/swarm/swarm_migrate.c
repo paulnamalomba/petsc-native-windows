@@ -6,6 +6,23 @@
 #include "../src/dm/impls/swarm/data_ex.h"
 
 /*
+ Returns the data exchanger cached on the swarm, creating it on first use. Reusing the exchanger
+ (and thus its duplicated communicator) across calls avoids an MPI_Comm_dup() per migration. All
+ exchanges are completed before each call returns, so no messages can cross between calls. Callers
+ must either rebuild the neighbor topology (resetting swarm->de_layout_id to 0) or reuse it only
+ when swarm->de_layout_id proves it was built from the same cell DM.
+*/
+static PetscErrorCode DMSwarmGetDataExchanger_Private(DM dm, DMSwarmDataEx *de)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+
+  PetscFunctionBegin;
+  if (!swarm->de) PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &swarm->de));
+  *de = swarm->de;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
  User loads desired location (MPI rank) into field DMSwarm_rank
 
  It should be storing the rank information as MPIInt not Int
@@ -25,7 +42,8 @@ PetscErrorCode DMSwarmMigrate_Push_Basic(DM dm, PetscBool remove_sent_points)
 
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
   PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-  PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &de));
+  PetscCall(DMSwarmGetDataExchanger_Private(dm, &de));
+  swarm->de_layout_id = 0;
   PetscCall(DMSwarmDataExTopologyInitialize(de));
   for (p = 0; p < npoints; ++p) {
     PetscCall(PetscMPIIntCast(rankval[p], &nrank));
@@ -90,7 +108,6 @@ PetscErrorCode DMSwarmMigrate_Push_Basic(DM dm, PetscBool remove_sent_points)
   }
   if (debug) PetscCall(DMSwarmDataExView(de));
   PetscCall(DMSwarmDataBucketDestroyPackedArray(swarm->db, &point_buffer));
-  PetscCall(DMSwarmDataExDestroy(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -107,6 +124,7 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
   PetscInt           nneighbors;
   PetscMPIInt        mynneigh, *myneigh;
   const char        *cellid;
+  PetscObjectId      layout_id;
 
   PetscFunctionBegin;
   PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)dm), &rank));
@@ -114,14 +132,25 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
   PetscCall(DMSwarmGetCellDMActive(dm, &celldm));
   PetscCall(DMSwarmCellDMGetCellID(celldm, &cellid));
   PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
-  PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &de));
-  PetscCall(DMGetNeighbors(dmcell, &nneighbors, &neighbourranks));
-  PetscCall(DMSwarmDataExTopologyInitialize(de));
-  for (r = 0; r < nneighbors; r++) {
-    _rank = neighbourranks[r];
-    if ((_rank != rank) && (_rank > 0)) PetscCall(DMSwarmDataExTopologyAddNeighbour(de, _rank));
+  PetscCall(DMSwarmGetDataExchanger_Private(dm, &de));
+  /*
+   The symmetrized neighbor topology and message tags built by DMSwarmDataExTopologyFinalize() are a
+   deterministic function of the ranks returned by DMGetNeighbors(), which are fixed for a given cell
+   DM. The cached topology is therefore reused unless the cell DM changed or another exchange rebuilt
+   the topology, both of which reset swarm->de_layout_id. The check is collectively consistent since
+   every exchange over the swarm is collective with the same cell DM on every rank.
+  */
+  PetscCall(PetscObjectGetId((PetscObject)dmcell, &layout_id));
+  if (swarm->de_layout_id != layout_id) {
+    PetscCall(DMGetNeighbors(dmcell, &nneighbors, &neighbourranks));
+    PetscCall(DMSwarmDataExTopologyInitialize(de));
+    for (r = 0; r < nneighbors; r++) {
+      _rank = neighbourranks[r];
+      if ((_rank != rank) && (_rank > 0)) PetscCall(DMSwarmDataExTopologyAddNeighbour(de, _rank));
+    }
+    PetscCall(DMSwarmDataExTopologyFinalize(de));
+    swarm->de_layout_id = layout_id;
   }
-  PetscCall(DMSwarmDataExTopologyFinalize(de));
   PetscCall(DMSwarmDataExTopologyGetNeighbours(de, &mynneigh, &myneigh));
   PetscCall(DMSwarmDataExInitializeSendCount(de));
   for (p = 0; p < npoints; p++) {
@@ -177,7 +206,6 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     PetscCall(DMSwarmDataBucketInsertPackedArray(swarm->db, npoints + p, data_p));
   }
   PetscCall(DMSwarmDataBucketDestroyPackedArray(swarm->db, &point_buffer));
-  PetscCall(DMSwarmDataExDestroy(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -374,7 +402,8 @@ PetscErrorCode DMSwarmMigrate_GlobalToLocal_Basic(DM dm, PetscInt *globalsize)
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
   *globalsize = npoints;
   PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-  PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &de));
+  PetscCall(DMSwarmGetDataExchanger_Private(dm, &de));
+  swarm->de_layout_id = 0;
   PetscCall(DMSwarmDataExTopologyInitialize(de));
   for (p = 0; p < npoints; p++) {
     PetscCall(PetscMPIIntCast(rankval[p], &negrank));
@@ -421,7 +450,6 @@ PetscErrorCode DMSwarmMigrate_GlobalToLocal_Basic(DM dm, PetscInt *globalsize)
   }
   PetscCall(DMSwarmDataExView(de));
   PetscCall(DMSwarmDataBucketDestroyPackedArray(swarm->db, &point_buffer));
-  PetscCall(DMSwarmDataExDestroy(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -478,7 +506,8 @@ PETSC_EXTERN PetscErrorCode DMSwarmCollect_DMDABoundingBox(DM dm, PetscInt *glob
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
   *globalsize = npoints;
   PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-  PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &de));
+  PetscCall(DMSwarmGetDataExchanger_Private(dm, &de));
+  swarm->de_layout_id = 0;
   /* use DMDA neighbours */
   PetscCall(DMDAGetNeighbors(dmcell, &dmneighborranks));
   if (dim == 1) {
@@ -569,7 +598,6 @@ PETSC_EXTERN PetscErrorCode DMSwarmCollect_DMDABoundingBox(DM dm, PetscInt *glob
   PetscCall(DMSwarmDataBucketDestroyPackedArray(swarm->db, &point_buffer));
   PetscCall(PetscFree(bbox));
   PetscCall(DMSwarmDataExView(de));
-  PetscCall(DMSwarmDataExDestroy(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -618,7 +646,8 @@ PETSC_EXTERN PetscErrorCode DMSwarmCollect_General(DM dm, PetscErrorCode (*colle
     n2collect[r]   = _n2collect;
     collectlist[r] = _collectlist;
   }
-  PetscCall(DMSwarmDataExCreate(PetscObjectComm((PetscObject)dm), 0, &de));
+  PetscCall(DMSwarmGetDataExchanger_Private(dm, &de));
+  swarm->de_layout_id = 0;
   /* Define topology */
   PetscCall(DMSwarmDataExTopologyInitialize(de));
   for (PetscMPIInt r = 0; r < size; r++) {
@@ -661,7 +690,6 @@ PETSC_EXTERN PetscErrorCode DMSwarmCollect_General(DM dm, PetscErrorCode (*colle
   PetscCall(PetscFree(ctxlist));
   PetscCall(DMSwarmDataBucketDestroyPackedArray(swarm->db, &point_buffer));
   PetscCall(DMSwarmDataExView(de));
-  PetscCall(DMSwarmDataExDestroy(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
