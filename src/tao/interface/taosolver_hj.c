@@ -58,22 +58,15 @@ PetscErrorCode TaoSetHessianMatrices(Tao tao, Mat H, Mat Hpre)
 - ctx  - [optional] user-defined context for private data for the
          Hessian evaluation routine (may be `NULL`)
 
-  Calling sequence of `func`:
-+ tao  - the `Tao`  context
-. x    - input vector
-. H    - Hessian matrix
-. Hpre - matrix used to construct the preconditioner, usually the same as `H`
-- ctx  - [optional] user-defined Hessian context
-
   Level: beginner
 
   Note:
   This routine must be called before `TaoAddTerm()`. Once `TaoAddTerm()` has replaced the callback objective,
   Hessian routines and matrix creation must be configured on the individual `TaoTerm`s instead.
 
-.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoSetHessianMatrices()`, `TaoSetObjective()`, `TaoSetGradient()`, `TaoSetObjectiveAndGradient()`, `TaoGetHessian()`
+.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoHessianFn`, `TaoSetHessianMatrices()`, `TaoSetObjective()`, `TaoSetGradient()`, `TaoSetObjectiveAndGradient()`, `TaoGetHessian()`
 @*/
-PetscErrorCode TaoSetHessian(Tao tao, Mat H, Mat Hpre, PetscErrorCode (*func)(Tao tao, Vec x, Mat H, Mat Hpre, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoSetHessian(Tao tao, Mat H, Mat Hpre, TaoHessianFn *func, PetscCtx ctx)
 {
   PetscBool is_callbacks;
 
@@ -108,13 +101,6 @@ PetscErrorCode TaoSetHessian(Tao tao, Mat H, Mat Hpre, PetscErrorCode (*func)(Ta
 . func - Hessian evaluation routine
 - ctx  - user-defined context for private data for the Hessian evaluation routine
 
-  Calling sequence of `func`:
-+ tao  - the `Tao`  context
-. x    - input vector
-. H    - Hessian matrix
-. Hpre - matrix used to construct the preconditioner, usually the same as `H`
-- ctx  - [optional] user-defined Hessian context
-
   Level: beginner
 
   Notes:
@@ -126,9 +112,9 @@ PetscErrorCode TaoSetHessian(Tao tao, Mat H, Mat Hpre, PetscErrorCode (*func)(Ta
   `TaoSetHessian()`, even if the objective function has been changed by
   calling `TaoAddTerm()`.
 
-.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoGetObjective()`, `TaoGetGradient()`, `TaoGetObjectiveAndGradient()`, `TaoSetHessian()`, `TaoGetHessianMatrices()`
+.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoHessianFn`, `TaoGetObjective()`, `TaoGetGradient()`, `TaoGetObjectiveAndGradient()`, `TaoSetHessian()`, `TaoGetHessianMatrices()`
 @*/
-PetscErrorCode TaoGetHessian(Tao tao, Mat *H, Mat *Hpre, PetscErrorCode (**func)(Tao tao, Vec x, Mat H, Mat Hpre, PetscCtx ctx), PetscCtxRt ctx)
+PetscErrorCode TaoGetHessian(Tao tao, Mat *H, Mat *Hpre, TaoHessianFn **func, PetscCtxRt ctx)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(tao, TAO_CLASSID, 1);
@@ -147,22 +133,15 @@ PetscErrorCode TaoGetHessian(Tao tao, Mat *H, Mat *Hpre, PetscErrorCode (**func)
 . func - the Hessian-vector product evaluation routine
 - ctx  - [optional] application-specific context for the Hessian-vector product evaluation routine (may be `NULL`)
 
-  Calling sequence of `func`:
-+ tao - the `Tao` context
-. x   - the point at which the Hessian is evaluated
-. v   - the vector that the Hessian is applied to
-. Hv  - the resulting Hessian-vector product
-- ctx - [optional] application-specific Hessian-vector product context
-
   Level: intermediate
 
   Note:
   This provides a matrix-free action of the Hessian without assembling the Hessian matrix.
 
-.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoSetHessian()`, `TaoComputeHessianMult()`, `TaoGetHessianMult()`,
+.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoHessianMultFn`, `TaoSetHessian()`, `TaoComputeHessianMult()`, `TaoGetHessianMult()`,
           `TaoTermShellSetHessianMult()`
 @*/
-PetscErrorCode TaoSetHessianMult(Tao tao, PetscErrorCode (*func)(Tao tao, Vec x, Vec v, Vec Hv, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoSetHessianMult(Tao tao, TaoHessianMultFn *func, PetscCtx ctx)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(tao, TAO_CLASSID, 1);
@@ -182,18 +161,11 @@ PetscErrorCode TaoSetHessianMult(Tao tao, PetscErrorCode (*func)(Tao tao, Vec x,
 + func - the Hessian-vector product evaluation routine
 - ctx  - optional application context for private data for the Hessian-vector product evaluation routine
 
-  Calling sequence of `func`:
-+ tao - the `Tao` context
-. x   - the point at which the Hessian is evaluated
-. v   - the vector that the Hessian is applied to
-. Hv  - the resulting Hessian-vector product
-- ctx - [optional] application-specific Hessian-vector product context
-
   Level: intermediate
 
-.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoSetHessianMult()`, `TaoComputeHessianMult()`, `TaoGetHessian()`
+.seealso: [](ch_tao), `Tao`, `TaoType`, `TaoHessianMultFn`, `TaoSetHessianMult()`, `TaoComputeHessianMult()`, `TaoGetHessian()`
 @*/
-PetscErrorCode TaoGetHessianMult(Tao tao, PetscErrorCode (**func)(Tao tao, Vec x, Vec v, Vec Hv, PetscCtx ctx), PetscCtxRt ctx)
+PetscErrorCode TaoGetHessianMult(Tao tao, TaoHessianMultFn **func, PetscCtxRt ctx)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(tao, TAO_CLASSID, 1);

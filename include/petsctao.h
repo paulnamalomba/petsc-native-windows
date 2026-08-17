@@ -290,6 +290,84 @@ typedef enum {               /* converged */
 
 PETSC_EXTERN const char **TaoConvergedReasons;
 
+/*S
+  TaoObjectiveFn - A prototype of a `Tao` objective evaluation function
+
+  Calling Sequence:
++ tao - the `Tao` context
+. x   - the point at which the objective is evaluated
+. f   - the objective value
+- ctx - application context
+
+  Level: beginner
+
+.seealso: [](ch_tao), `Tao`, `TaoSetObjective()`, `TaoGetObjective()`, `TaoGradientFn`, `TaoObjectiveAndGradientFn`
+S*/
+PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoObjectiveFn(Tao tao, Vec x, PetscReal *f, PetscCtx ctx);
+
+/*S
+  TaoGradientFn - A prototype of a `Tao` gradient evaluation function
+
+  Calling Sequence:
++ tao - the `Tao` context
+. x   - the point at which the gradient is evaluated
+. g   - the gradient
+- ctx - application context
+
+  Level: beginner
+
+.seealso: [](ch_tao), `Tao`, `TaoSetGradient()`, `TaoGetGradient()`, `TaoObjectiveFn`, `TaoObjectiveAndGradientFn`
+S*/
+PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoGradientFn(Tao tao, Vec x, Vec g, PetscCtx ctx);
+
+/*S
+  TaoObjectiveAndGradientFn - A prototype of a `Tao` objective and gradient evaluation function
+
+  Calling Sequence:
++ tao - the `Tao` context
+. x   - the point at which the objective and gradient are evaluated
+. f   - the objective value
+. g   - the gradient
+- ctx - application context
+
+  Level: beginner
+
+.seealso: [](ch_tao), `Tao`, `TaoSetObjectiveAndGradient()`, `TaoGetObjectiveAndGradient()`, `TaoObjectiveFn`, `TaoGradientFn`
+S*/
+PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoObjectiveAndGradientFn(Tao tao, Vec x, PetscReal *f, Vec g, PetscCtx ctx);
+
+/*S
+  TaoHessianFn - A prototype of a `Tao` Hessian evaluation function
+
+  Calling Sequence:
++ tao  - the `Tao` context
+. x    - the point at which the Hessian is evaluated
+. H    - the Hessian
+. Hpre - the matrix used to construct the preconditioner
+- ctx  - application context
+
+  Level: beginner
+
+.seealso: [](ch_tao), `Tao`, `TaoSetHessian()`, `TaoGetHessian()`, `TaoHessianMultFn`
+S*/
+PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoHessianFn(Tao tao, Vec x, Mat H, Mat Hpre, PetscCtx ctx);
+
+/*S
+  TaoHessianMultFn - A prototype of a `Tao` Hessian-vector product evaluation function
+
+  Calling Sequence:
++ tao - the `Tao` context
+. x   - the point at which the Hessian is evaluated
+. v   - the vector to which the Hessian is applied
+. Hv  - the Hessian-vector product
+- ctx - application context
+
+  Level: intermediate
+
+.seealso: [](ch_tao), `Tao`, `TaoSetHessianMult()`, `TaoGetHessianMult()`, `TaoHessianFn`
+S*/
+PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoHessianMultFn(Tao tao, Vec x, Vec v, Vec Hv, PetscCtx ctx);
+
 PETSC_EXTERN PetscErrorCode TaoInitializePackage(void);
 PETSC_EXTERN PetscErrorCode TaoFinalizePackage(void);
 PETSC_EXTERN PetscErrorCode TaoCreate(MPI_Comm, Tao *);
@@ -319,16 +397,16 @@ PETSC_EXTERN PetscErrorCode     TaoSetConvergedReason(Tao, TaoConvergedReason);
 PETSC_EXTERN PetscErrorCode     TaoSetSolution(Tao, Vec);
 PETSC_EXTERN PetscErrorCode     TaoGetSolution(Tao, Vec *);
 
-PETSC_EXTERN PetscErrorCode TaoSetObjective(Tao, PetscErrorCode (*)(Tao, Vec, PetscReal *, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoGetObjective(Tao, PetscErrorCode (**)(Tao, Vec, PetscReal *, PetscCtx), PetscCtxRt);
-PETSC_EXTERN PetscErrorCode TaoSetGradient(Tao, Vec, PetscErrorCode (*)(Tao, Vec, Vec, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoGetGradient(Tao, Vec *, PetscErrorCode (**)(Tao, Vec, Vec, PetscCtx), PetscCtxRt);
-PETSC_EXTERN PetscErrorCode TaoSetObjectiveAndGradient(Tao, Vec, PetscErrorCode (*)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoGetObjectiveAndGradient(Tao, Vec *, PetscErrorCode (**)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtxRt);
-PETSC_EXTERN PetscErrorCode TaoSetHessian(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoGetHessian(Tao, Mat *, Mat *, PetscErrorCode (**)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtxRt);
-PETSC_EXTERN PetscErrorCode TaoSetHessianMult(Tao, PetscErrorCode (*)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoGetHessianMult(Tao, PetscErrorCode (**)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetObjective(Tao, TaoObjectiveFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetObjective(Tao, TaoObjectiveFn **, PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetGradient(Tao, Vec, TaoGradientFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetGradient(Tao, Vec *, TaoGradientFn **, PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetObjectiveAndGradient(Tao, Vec, TaoObjectiveAndGradientFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetObjectiveAndGradient(Tao, Vec *, TaoObjectiveAndGradientFn **, PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetHessian(Tao, Mat, Mat, TaoHessianFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetHessian(Tao, Mat *, Mat *, TaoHessianFn **, PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetHessianMult(Tao, TaoHessianMultFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoGetHessianMult(Tao, TaoHessianMultFn **, PetscCtxRt);
 PETSC_EXTERN PetscErrorCode TaoSetHessianMatrices(Tao, Mat, Mat);
 PETSC_EXTERN PetscErrorCode TaoGetHessianMatrices(Tao, Mat *, Mat *);
 PETSC_EXTERN PetscErrorCode TaoGetDM(Tao, DM *);
@@ -511,7 +589,7 @@ PETSC_EXTERN const char *const TaoBRGNRegularizationTypes[];
 PETSC_EXTERN PetscErrorCode TaoBRGNGetSubsolver(Tao, Tao *);
 PETSC_EXTERN PetscErrorCode TaoBRGNGetRegularizationType(Tao, TaoBRGNRegularizationType *);
 PETSC_EXTERN PetscErrorCode TaoBRGNSetRegularizationType(Tao, TaoBRGNRegularizationType);
-PETSC_EXTERN PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine(Tao, PetscErrorCode (*)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine(Tao, TaoObjectiveAndGradientFn *, PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoBRGNSetRegularizerHessianRoutine(Tao, Mat, PetscErrorCode (*)(Tao, Vec, Mat, PetscCtx), PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoBRGNSetRegularizerWeight(Tao, PetscReal);
 PETSC_EXTERN PetscErrorCode TaoBRGNSetL1SmoothEpsilon(Tao, PetscReal);
@@ -532,10 +610,10 @@ PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerCoefficient(Tao, PetscReal);
 PETSC_EXTERN PetscErrorCode TaoADMMGetRegularizerCoefficient(Tao, PetscReal *);
 PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitConstraintJacobian(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerConstraintJacobian(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerHessianRoutine(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerObjectiveAndGradientRoutine(Tao, PetscErrorCode (*)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitHessianRoutine(Tao, Mat, Mat, PetscErrorCode (*)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtx);
-PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitObjectiveAndGradientRoutine(Tao, PetscErrorCode (*)(Tao, Vec, PetscReal *, Vec, PetscCtx), PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerHessianRoutine(Tao, Mat, Mat, TaoHessianFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoADMMSetRegularizerObjectiveAndGradientRoutine(Tao, TaoObjectiveAndGradientFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitHessianRoutine(Tao, Mat, Mat, TaoHessianFn *, PetscCtx);
+PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitObjectiveAndGradientRoutine(Tao, TaoObjectiveAndGradientFn *, PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoADMMSetMisfitHessianChangeStatus(Tao, PetscBool);
 PETSC_EXTERN PetscErrorCode TaoADMMSetRegHessianChangeStatus(Tao, PetscBool);
 PETSC_EXTERN PetscErrorCode TaoADMMSetMinimumSpectralPenalty(Tao, PetscReal);

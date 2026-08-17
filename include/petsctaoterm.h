@@ -146,7 +146,7 @@ PETSC_EXTERN PetscErrorCode TaoTermSetCreateHessianMode(TaoTerm, PetscBool, MatT
 PETSC_EXTERN PetscErrorCode TaoTermGetCreateHessianMode(TaoTerm, PetscBool *, MatType *, MatType *);
 
 /*S
-  TaoTermObjectiveFn - A prototype of a `TaoTerm` function that would be passed to `TaoTermShellSetObjective()`
+  TaoTermObjectiveFn - A prototype of a `TaoTerm` objective evaluation function
 
   Calling Sequence:
 + term   - a `TaoTerm`
@@ -162,7 +162,7 @@ S*/
 PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoTermObjectiveFn(TaoTerm term, Vec x, Vec params, PetscReal *value);
 
 /*S
-  TaoTermObjectiveAndGradientFn - A prototype of a `TaoTerm` function that would be passed to `TaoTermShellSetObjectiveAndGradient()`
+  TaoTermObjectiveAndGradientFn - A prototype of a `TaoTerm` objective and gradient evaluation function
 
   Calling Sequence:
 + term   - a `TaoTerm`
@@ -179,7 +179,7 @@ S*/
 PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoTermObjectiveAndGradientFn(TaoTerm term, Vec x, Vec params, PetscReal *value, Vec g);
 
 /*S
-  TaoTermGradientFn - A prototype of a `TaoTerm` function that would be passed to `TaoTermShellSetGradient()`
+  TaoTermGradientFn - A prototype of a `TaoTerm` gradient evaluation function
 
   Calling Sequence:
 + term   - a `TaoTerm`
@@ -195,7 +195,7 @@ S*/
 PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoTermGradientFn(TaoTerm term, Vec x, Vec params, Vec g);
 
 /*S
-  TaoTermHessianFn - A prototype of a `TaoTerm` function that would be passed to `TaoTermShellSetHessian()`
+  TaoTermHessianFn - A prototype of a `TaoTerm` Hessian evaluation function
 
   Calling Sequence:
 + term   - a `TaoTerm`
@@ -212,7 +212,7 @@ S*/
 PETSC_EXTERN_TYPEDEF typedef PetscErrorCode TaoTermHessianFn(TaoTerm term, Vec x, Vec params, Mat H, Mat Hpre);
 
 /*S
-  TaoTermHessianMultFn - A prototype of a `TaoTerm` function that would be passed to `TaoTermShellSetHessianMult()`
+  TaoTermHessianMultFn - A prototype of a `TaoTerm` Hessian-vector product evaluation function
 
   Calling Sequence:
 + term   - a `TaoTerm`
