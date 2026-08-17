@@ -18,6 +18,8 @@ PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerBegin;
 PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerEnd;
 PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerSendCount;
 PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerPack;
+PETSC_EXTERN PetscLogEvent DMSWARM_CopyToGPU;
+PETSC_EXTERN PetscLogEvent DMSWARM_CopyFromGPU;
 
 typedef struct _DMSwarmCellDMOps *DMSwarmCellDMOps;
 struct _DMSwarmCellDMOps {

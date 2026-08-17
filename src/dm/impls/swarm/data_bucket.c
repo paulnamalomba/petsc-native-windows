@@ -47,7 +47,9 @@ PetscErrorCode DMSwarmDataFieldCreate(const char registration_function[], const 
   PetscCall(PetscMemzero(df->data, size * L));
   df->data_d           = NULL;
   df->data_allocated_d = NULL;
+  df->capacity_d       = 0;
   df->offloadmask      = PETSC_OFFLOAD_CPU;
+  df->bucket           = NULL;
   *DF                  = df;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -57,6 +59,8 @@ PetscErrorCode DMSwarmDataFieldDestroy(DMSwarmDataField *DF)
   DMSwarmDataField df = *DF;
 
   PetscFunctionBegin;
+  /* device mirrors are released through the bucket-level ops.fieldfreedevice dispatch, since freeing them requires the device backend */
+  PetscCheck(!df->data_allocated_d, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Device mirror of field \"%s\" was not released; dispatch ops.fieldfreedevice before DMSwarmDataFieldDestroy()", df->name);
   PetscCall(PetscFree(df->registration_function));
   PetscCall(PetscFree(df->name));
   PetscCall(PetscFree(df->data));
@@ -78,7 +82,30 @@ static PetscErrorCode DMSwarmDataFieldToHost_Host(DMSwarmDataField df)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket, PetscInt, PetscInt);
+static PetscErrorCode DMSwarmDataFieldFreeDevice_Host(DMSwarmDataField df)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmDataFieldAllocDevice_Host(DMSwarmDataField df)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Make the host array of df valid before its bytes are read or written on the host. Only acts
+  when the device copy is the sole valid residence (PETSC_OFFLOAD_GPU); the D2H transfer is
+  dispatched through the owning bucket's ops so this file stays device-agnostic. A field
+  created outside a bucket has no back-pointer and is always host valid.
+*/
+static PetscErrorCode DMSwarmDataFieldSyncToHost_Private(const DMSwarmDataField df)
+{
+  PetscFunctionBegin;
+  if (df->bucket && df->offloadmask == PETSC_OFFLOAD_GPU) PetscCall((*df->bucket->ops.fieldtohost)(df));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 /* data bucket */
 PetscErrorCode DMSwarmDataBucketCreate(DMSwarmDataBucket *DB)
@@ -95,13 +122,15 @@ PetscErrorCode DMSwarmDataBucketCreate(DMSwarmDataBucket *DB)
   db->allocated = 1;
   db->nfields   = 0;
   PetscCall(PetscMalloc1(1, &db->field));
-  db->memtype            = PETSC_MEMTYPE_HOST;
-  db->ops.fieldalloc     = DMSwarmDataFieldSetSize;
-  db->ops.fieldtodevice  = DMSwarmDataFieldToDevice_Host;
-  db->ops.fieldtohost    = DMSwarmDataFieldToHost_Host;
-  db->ops.fieldzerorange = DMSwarmDataFieldZeroBlock;
-  db->ops.setsizes       = DMSwarmDataBucketSetSizes_Host;
-  *DB                    = db;
+  db->memtype              = PETSC_MEMTYPE_HOST;
+  db->ops.fieldalloc       = DMSwarmDataFieldSetSize;
+  db->ops.fieldallocdevice = DMSwarmDataFieldAllocDevice_Host;
+  db->ops.fieldtodevice    = DMSwarmDataFieldToDevice_Host;
+  db->ops.fieldtohost      = DMSwarmDataFieldToHost_Host;
+  db->ops.fieldzerorange   = DMSwarmDataFieldZeroBlock;
+  db->ops.fieldfreedevice  = DMSwarmDataFieldFreeDevice_Host;
+  db->ops.setsizes         = DMSwarmDataBucketSetSizes_Host;
+  *DB                      = db;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -111,8 +140,11 @@ PetscErrorCode DMSwarmDataBucketDestroy(DMSwarmDataBucket *DB)
   PetscInt          f;
 
   PetscFunctionBegin;
-  /* release fields */
-  for (f = 0; f < db->nfields; ++f) PetscCall(DMSwarmDataFieldDestroy(&db->field[f]));
+  /* release fields; device mirrors first, since only the backend ops can free them */
+  for (f = 0; f < db->nfields; ++f) {
+    PetscCall((*db->ops.fieldfreedevice)(db->field[f]));
+    PetscCall(DMSwarmDataFieldDestroy(&db->field[f]));
+  }
   /* this will catch the initially allocated objects in the event that no fields are registered */
   if (db->field != NULL) PetscCall(PetscFree(db->field));
   PetscCall(PetscFree(db));
@@ -155,6 +187,7 @@ PetscErrorCode DMSwarmDataBucketRegisterField(DMSwarmDataBucket db, const char r
   PetscCall(PetscRealloc(sizeof(DMSwarmDataField) * (db->nfields + 1), &db->field));
   /* add field */
   PetscCall(DMSwarmDataFieldCreate(registration_function, field_name, atomic_size, db->allocated, &fp));
+  fp->bucket             = db;
   db->field[db->nfields] = fp;
   db->nfields++;
   if (_gfield != NULL) *_gfield = fp;
@@ -305,7 +338,7 @@ PetscErrorCode DMSwarmDataFieldZeroBlock(DMSwarmDataField df, const PetscInt sta
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket db, PetscInt L, PetscInt buffer)
+PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket db, PetscInt L, PetscInt buffer)
 {
   PetscInt current_allocated, current_used, new_used, new_unused, new_buffer, new_allocated, f, end;
 
@@ -360,6 +393,13 @@ PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket db, const PetscInt L,
   PetscCheck(db->finalised != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "You must call DMSwarmDataBucketFinalize() before DMSwarmDataBucketSetSizes()");
   PetscCall(DMSwarmDataBucketQueryForActiveFields(db, &any_active_fields));
   PetscCheck(!any_active_fields, PETSC_COMM_SELF, PETSC_ERR_USER, "Cannot safely re-size as at least one DMSwarmDataField is currently being accessed");
+  /*
+    No sync to host is needed for device-authoritative fields: the sizing logic dispatches
+    ops.fieldalloc/ops.fieldzerorange, whose device implementations resize the mirror by
+    copying its surviving entries and zero both residences over the same ranges, so a
+    PETSC_OFFLOAD_GPU field stays valid on the device while the host realloc only moves
+    bytes that were stale to begin with.
+  */
   PetscCall((*db->ops.setsizes)(db, L, buffer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -370,10 +410,8 @@ PetscErrorCode DMSwarmDataBucketSetInitialSizes(DMSwarmDataBucket db, const Pets
 
   PetscFunctionBegin;
   PetscCall(DMSwarmDataBucketSetSizes(db, L, buffer));
-  for (f = 0; f < db->nfields; ++f) {
-    DMSwarmDataField field = db->field[f];
-    PetscCall(DMSwarmDataFieldZeroBlock(field, 0, db->allocated));
-  }
+  /* dispatch through the bucket ops so any device mirror is zeroed alongside the host array */
+  for (f = 0; f < db->nfields; ++f) PetscCall((*db->ops.fieldzerorange)(db->field[f], 0, db->allocated));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -403,11 +441,29 @@ PetscErrorCode DMSwarmDataBucketGetDMSwarmDataFields(DMSwarmDataBucket db, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode DMSwarmDataFieldGetAccess(const DMSwarmDataField gfield)
+/* Take the exclusive access lock of a field without any coherence action; the device accessors in swarm.c pair this with a residence update dispatched through the bucket ops */
+PetscErrorCode DMSwarmDataFieldAcquireAccess(const DMSwarmDataField gfield)
 {
   PetscFunctionBegin;
   PetscCheck(!gfield->active, PETSC_COMM_SELF, PETSC_ERR_USER, "Field \"%s\" is already active. You must call DMSwarmDataFieldRestoreAccess()", gfield->name);
   gfield->active = PETSC_TRUE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode DMSwarmDataFieldReleaseAccess(DMSwarmDataField gfield)
+{
+  PetscFunctionBegin;
+  PetscCheck(gfield->active != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "Field \"%s\" is not active. You must call DMSwarmDataFieldGetAccess()", gfield->name);
+  gfield->active = PETSC_FALSE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode DMSwarmDataFieldGetAccess(const DMSwarmDataField gfield)
+{
+  PetscFunctionBegin;
+  PetscCall(DMSwarmDataFieldAcquireAccess(gfield));
+  /* access through this lock is host read-write, so the host bytes must be valid */
+  PetscCall(DMSwarmDataFieldSyncToHost_Private(gfield));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -447,8 +503,9 @@ PetscErrorCode DMSwarmDataFieldAccessPointOffset(const DMSwarmDataField gfield, 
 PetscErrorCode DMSwarmDataFieldRestoreAccess(DMSwarmDataField gfield)
 {
   PetscFunctionBegin;
-  PetscCheck(gfield->active != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "Field \"%s\" is not active. You must call DMSwarmDataFieldGetAccess()", gfield->name);
-  gfield->active = PETSC_FALSE;
+  PetscCall(DMSwarmDataFieldReleaseAccess(gfield));
+  /* the caller may have written the host array, so any device copy is now stale */
+  gfield->offloadmask = PETSC_OFFLOAD_CPU;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -482,13 +539,14 @@ PetscErrorCode DMSwarmDataFieldGetAtomicSize(const DMSwarmDataField gfield, size
   Level: developer
 
   Note:
-  The array has `L * bs` entries of `atomic_size` bytes, where `L` is the number of particles and `bs` is the block size of the field.
+  The array has `L * bs` entries of `atomic_size` bytes, where `L` is the number of particles and `bs` is the block size of the field. Access is host read-write; stale host entries are refreshed from the device first, and `DMSwarmDataFieldRestoreEntries()` marks the host copy authoritative.
 
 .seealso: `DMSwarmDataField`, `DMSwarmDataFieldRestoreEntries()`, `DMSwarmDataFieldGetNumEntries()`, `DMSwarmDataFieldGetAtomicSize()`
 @*/
 PetscErrorCode DMSwarmDataFieldGetEntries(const DMSwarmDataField gfield, void **data)
 {
   PetscFunctionBegin;
+  PetscCall(DMSwarmDataFieldSyncToHost_Private(gfield));
   if (data) *data = gfield->data;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -506,11 +564,16 @@ PetscErrorCode DMSwarmDataFieldGetEntries(const DMSwarmDataField gfield, void **
 
   Level: developer
 
+  Note:
+  Since the access is host read-write, the host copy of the entries is marked authoritative and any device copy becomes stale.
+
 .seealso: `DMSwarmDataField`, `DMSwarmDataFieldGetEntries()`
 @*/
 PetscErrorCode DMSwarmDataFieldRestoreEntries(const DMSwarmDataField gfield, void **data)
 {
   PetscFunctionBegin;
+  /* the caller may have written the host array, so any device copy is now stale */
+  gfield->offloadmask = PETSC_OFFLOAD_CPU;
   if (data) *data = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -571,7 +634,10 @@ PetscErrorCode DMSwarmDataFieldInsertPoint(const DMSwarmDataField field, const P
   PetscCheck(index >= 0, PETSC_COMM_SELF, PETSC_ERR_USER, "index must be >= 0");
   PetscCheck(index < field->L, PETSC_COMM_SELF, PETSC_ERR_USER, "index must be < %" PetscInt_FMT, field->L);
 #endif
+  /* a single point is written, so the untouched host entries must be valid before the host copy is marked authoritative */
+  PetscCall(DMSwarmDataFieldSyncToHost_Private(field));
   PetscCall(PetscMemcpy(DMSWARM_DATAFIELD_point_access(field->data, index, field->atomic_size), data, field->atomic_size));
+  field->offloadmask = PETSC_OFFLOAD_CPU;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -619,7 +685,11 @@ PetscErrorCode DMSwarmDataFieldCopyPoint(const PetscInt pid_x, const DMSwarmData
   PetscCheck(pid_y < field_y->L, PETSC_COMM_SELF, PETSC_ERR_USER, "(OUT) index must be < %" PetscInt_FMT, field_y->L);
   PetscCheck(field_y->atomic_size == field_x->atomic_size, PETSC_COMM_SELF, PETSC_ERR_USER, "atomic size must match");
 #endif
+  PetscCall(DMSwarmDataFieldSyncToHost_Private(field_x));
+  /* a single point of y is written, so its untouched host entries must be valid before the host copy is marked authoritative */
+  if (field_y != field_x) PetscCall(DMSwarmDataFieldSyncToHost_Private(field_y));
   PetscCall(PetscMemcpy(DMSWARM_DATAFIELD_point_access(field_y->data, pid_y, field_y->atomic_size), DMSWARM_DATAFIELD_point_access(field_x->data, pid_x, field_x->atomic_size), field_y->atomic_size));
+  field_y->offloadmask = PETSC_OFFLOAD_CPU;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -632,7 +702,10 @@ PetscErrorCode DMSwarmDataFieldZeroPoint(const DMSwarmDataField field, const Pet
   PetscCheck(index >= 0, PETSC_COMM_SELF, PETSC_ERR_USER, "index must be >= 0");
   PetscCheck(index < field->L, PETSC_COMM_SELF, PETSC_ERR_USER, "index must be < %" PetscInt_FMT, field->L);
 #endif
+  /* a single point is zeroed, so the untouched host entries must be valid before the host copy is marked authoritative */
+  PetscCall(DMSwarmDataFieldSyncToHost_Private(field));
   PetscCall(PetscMemzero(DMSWARM_DATAFIELD_point_access(field->data, index, field->atomic_size), field->atomic_size));
+  field->offloadmask = PETSC_OFFLOAD_CPU;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -681,6 +754,8 @@ static PetscErrorCode DMSwarmDataBucketView_stdout(MPI_Comm comm, DMSwarmDataBuc
   PetscCall(PetscPrintf(comm, "  buffer             = %" PetscInt_FMT " \n", db->buffer));
   PetscCall(PetscPrintf(comm, "  allocated          = %" PetscInt_FMT " \n", db->allocated));
   PetscCall(PetscPrintf(comm, "  nfields registered = %" PetscInt_FMT " \n", db->nfields));
+  /* device-backend introspection only: host bucket output must stay unchanged */
+  if (PetscMemTypeDevice(db->memtype)) PetscCall(PetscPrintf(comm, "  memtype            = %s \n", PetscMemTypeToString(db->memtype)));
 
   for (f = 0; f < db->nfields; ++f) {
     double memory_usage_f = (double)(db->field[f]->atomic_size * db->allocated) * 1.0e-6;
@@ -698,6 +773,8 @@ static PetscErrorCode DMSwarmDataBucketView_stdout(MPI_Comm comm, DMSwarmDataBuc
     } else {
       PetscCall(PetscPrintf(comm, "                            atomic size      = %zu \n", db->field[f]->atomic_size));
     }
+    /* repeat the field name here so the state survives the "grep -v usage" test filters */
+    if (PetscMemTypeDevice(db->memtype)) PetscCall(PetscPrintf(comm, "    [%3" PetscInt_FMT "] %15s : offload          = %s \n", f, db->field[f]->name, PetscOffloadMaskToString(db->field[f]->offloadmask)));
   }
   PetscCall(PetscPrintf(comm, "  Total mem. usage                           = %1.2e (MB) (collective)\n", memory_usage_total));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -839,6 +916,8 @@ PetscErrorCode DMSwarmDataBucketFillPackedArray(DMSwarmDataBucket db, const Pets
   for (PetscInt f = 0; f < db->nfields; ++f) {
     DMSwarmDataField df = db->field[f];
 
+    /* read-only host access: refresh stale host entries, leave the offload mask untouched */
+    PetscCall(DMSwarmDataFieldSyncToHost_Private(df));
     asize  = df->atomic_size;
     data   = df->data;
     data_p = (void *)((char *)data + index * asize);

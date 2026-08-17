@@ -103,10 +103,11 @@ static PetscErrorCode CreateSwarm(DM dm, AppCtx *user, DM *sw)
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "species", 1, PETSC_INT));
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "initCoordinates", dim, PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
+  /* consume options (notably -dm_swarm_backend) before the sizing/initialization calls below trigger DMSetUp() */
+  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSwarmComputeLocalSizeFromOptions(*sw));
   PetscCall(DMSwarmInitializeCoordinates(*sw));
   PetscCall(DMSwarmInitializeVelocitiesFromOptions(*sw, v0));
-  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSetApplicationContext(*sw, user));
   PetscCall(PetscObjectSetName((PetscObject)*sw, "Particles"));
   PetscCall(DMViewFromOptions(*sw, NULL, "-sw_view"));
@@ -523,6 +524,13 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_1
        args: -ts_basicsymplectic_type 1
+     # Same integration with device-resident particle storage; the TS math runs on the
+     # wrapped device Vecs, so the output is unchanged
+     test:
+       suffix: bsi_1_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex4_bsi_1.out
      test:
        suffix: bsi_2
        args: -ts_basicsymplectic_type 2

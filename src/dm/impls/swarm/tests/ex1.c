@@ -69,8 +69,10 @@ static PetscErrorCode CreateSwarm(DM dm, DM *sw, AppCtx *user)
   PetscCall(DMSwarmSetType(*sw, DMSWARM_PIC));
   PetscCall(DMSwarmSetCellDM(*sw, dm));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
-  PetscCall(DMSwarmSetLocalSizes(*sw, rank == 0 ? particleInitSize : 0, 0));
+  /* Options must be consumed before DMSwarmSetLocalSizes() triggers DMSetUp(), so that
+     -dm_swarm_backend can still be honored (it is a hard error after setup) */
   PetscCall(DMSetFromOptions(*sw));
+  PetscCall(DMSwarmSetLocalSizes(*sw, rank == 0 ? particleInitSize : 0, 0));
   PetscCall(DMSwarmGetCellDMActive(*sw, &celldm));
   PetscCall(DMSwarmCellDMGetCellID(celldm, &cellid));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
@@ -227,6 +229,17 @@ int main(int argc, char **argv)
     args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
           -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
           -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location false
+  # Same migration exercised with device-resident particle storage; migration itself still
+  # runs on the host through the sync-on-access machinery, so the output is unchanged
+  test:
+    suffix: swarm_migrate_backend_hip_scan
+    nsize: 2
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location false\
+          -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_vec_hip_scan.out
   test:
     suffix: swarm_migrate_vec_hip_hash
     nsize: 2

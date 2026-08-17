@@ -1,5 +1,6 @@
 #include "petscdmswarm.h"
 #include <petsc/private/dmswarmimpl.h> /*I   "petscdmswarm.h"   I*/
+#include <petsc/private/vecimpl.h>     /* for Vec offloadmask handoff in DMSwarmCreateVectorFromField_Private() */
 #include <petsc/private/hashsetij.h>
 #include <petsc/private/petscfeimpl.h>
 #include <petscviewer.h>
@@ -14,6 +15,7 @@
 PetscLogEvent DMSWARM_Migrate, DMSWARM_SetSizes, DMSWARM_AddPoints, DMSWARM_RemovePoints, DMSWARM_Sort;
 PetscLogEvent DMSWARM_DataExchangerTopologySetup, DMSWARM_DataExchangerBegin, DMSWARM_DataExchangerEnd;
 PetscLogEvent DMSWARM_DataExchangerSendCount, DMSWARM_DataExchangerPack;
+PetscLogEvent DMSWARM_CopyToGPU, DMSWARM_CopyFromGPU;
 
 const char *DMSwarmTypeNames[]          = {"basic", "pic", NULL};
 const char *DMSwarmMigrateTypeNames[]   = {"basic", "dmcellnscatter", "dmcellexact", "user", NULL};
@@ -300,8 +302,27 @@ static PetscErrorCode DMSwarmDestroyVectorFromField_Private(DM dm, const char fi
   PetscCall(VecGetBlockSize(*vec, &bs));
   PetscCheck(nlocal / bs == swarm->db->L, PetscObjectComm((PetscObject)dm), PETSC_ERR_USER, "DMSwarm sizes have changed since vector was created - cannot ensure pointers are valid");
   PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, fieldname, &gfield));
-  PetscCall(DMSwarmDataFieldRestoreAccess(gfield));
-  PetscCall(VecResetArray(*vec));
+  if (PetscMemTypeHost(swarm->db->memtype)) {
+    PetscCall(DMSwarmDataFieldRestoreAccess(gfield));
+    PetscCall(VecResetArray(*vec));
+  } else {
+    /*
+      Hand the Vec's offloadmask back to the field. This is the half of the round trip that
+      keeps a field GPU-resident after device-only work on the wrapped Vec: if all writes
+      happened through device kernels the mask comes back PETSC_OFFLOAD_GPU and no
+      device-to-host copy is triggered until a host accessor actually needs the entries.
+      The mask can never come back PETSC_OFFLOAD_UNALLOCATED (creation set it to a valid
+      state and Vec operations only move between CPU/GPU/BOTH), but map it to CPU
+      defensively since the field's host array always exists.
+
+      No VecResetArray() here: a *WithArrays() Vec owns neither aliased array. Its
+      Vec_Seq/Vec_MPI array_allocated and Vec_CUPM array_allocated_d stay NULL, and
+      VecDestroy() (Vec_CUPMBase::Destroy() -> DestroyDevice_()/DestroyHost_()) frees only
+      those _allocated pointers, so the field's data/data_d are never freed by the Vec.
+    */
+    gfield->offloadmask = PetscOffloadUnallocated((*vec)->offloadmask) ? PETSC_OFFLOAD_CPU : (*vec)->offloadmask;
+    PetscCall(DMSwarmDataFieldReleaseAccess(gfield));
+  }
   PetscCall(VecDestroy(vec));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -319,22 +340,60 @@ static PetscErrorCode DMSwarmCreateVectorFromField_Private(DM dm, const char fie
   PetscFunctionBegin;
   if (!swarm->issetup) PetscCall(DMSetUp(dm));
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &n, NULL, NULL));
-  PetscCall(DMSwarmGetField(dm, fieldname, &bs, &type, (void **)&array));
-  PetscCheck(type == PETSC_REAL, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Only valid for PETSC_REAL");
-
   PetscCallMPI(MPI_Comm_size(comm, &size));
-  /* suffix comparison so that the seq/mpi variants of each device vectype are also matched */
-  PetscCall(PetscStrendswith(dm->vectype, VECKOKKOS, &iskokkos));
-  PetscCall(PetscStrendswith(dm->vectype, VECCUDA, &iscuda));
-  PetscCall(PetscStrendswith(dm->vectype, VECHIP, &iship));
-  PetscCall(VecCreate(comm, vec));
-  PetscCall(VecSetSizes(*vec, n * bs, PETSC_DETERMINE));
-  PetscCall(VecSetBlockSize(*vec, bs));
-  if (iskokkos) PetscCall(VecSetType(*vec, VECKOKKOS));
-  else if (iscuda) PetscCall(VecSetType(*vec, VECCUDA));
-  else if (iship) PetscCall(VecSetType(*vec, VECHIP));
-  else PetscCall(VecSetType(*vec, VECSTANDARD));
-  PetscCall(VecPlaceArray(*vec, array));
+  if (PetscMemTypeHost(swarm->db->memtype)) {
+    /* host bucket: the Vec (of the DM's vectype, possibly a device type) borrows the host array via VecPlaceArray(), the historical behavior */
+    PetscCall(DMSwarmGetField(dm, fieldname, &bs, &type, (void **)&array));
+    PetscCheck(type == PETSC_REAL, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Only valid for PETSC_REAL");
+
+    /* suffix comparison so that the seq/mpi variants of each device vectype are also matched */
+    PetscCall(PetscStrendswith(dm->vectype, VECKOKKOS, &iskokkos));
+    PetscCall(PetscStrendswith(dm->vectype, VECCUDA, &iscuda));
+    PetscCall(PetscStrendswith(dm->vectype, VECHIP, &iship));
+    PetscCall(VecCreate(comm, vec));
+    PetscCall(VecSetSizes(*vec, n * bs, PETSC_DETERMINE));
+    PetscCall(VecSetBlockSize(*vec, bs));
+    if (iskokkos) PetscCall(VecSetType(*vec, VECKOKKOS));
+    else if (iscuda) PetscCall(VecSetType(*vec, VECCUDA));
+    else if (iship) PetscCall(VecSetType(*vec, VECHIP));
+    else PetscCall(VecSetType(*vec, VECSTANDARD));
+    PetscCall(VecPlaceArray(*vec, array));
+  } else if (PetscMemTypeHIP(swarm->db->memtype)) {
+    DMSwarmDataField gfield;
+
+    /*
+      Device bucket: zero-copy wrap. The Vec aliases BOTH the field's host array and its
+      device mirror, so no data motion happens here; the field's offloadmask is handed to
+      the Vec (and handed back in DMSwarmDestroyVectorFromField_Private()) so whichever
+      residence holds the valid entries simply stays valid.
+
+      The field lock is taken with the pure DMSwarmDataFieldAcquireAccess() (same lock
+      DMSwarmGetField() takes on the host path) rather than through a host accessor, which
+      would trigger a device-to-host sync and defeat the zero-copy wrap.
+    */
+    PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, fieldname, &gfield));
+    PetscCheck(gfield->petsc_type == PETSC_REAL, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Only valid for PETSC_REAL");
+    PetscCall(DMSwarmDataFieldAcquireAccess(gfield));
+    bs = gfield->bs;
+    /* ensure the device mirror exists (lazily sized, no transfer) so the Vec can alias it */
+    PetscCall((*swarm->db->ops.fieldallocdevice)(gfield));
+    /*
+      The *WithArrays() constructors take ownership of neither array (see the teardown notes
+      in DMSwarmDestroyVectorFromField_Private()). In a non-HIP build they are static-inline
+      error stubs from petscvec.h, so this compiles and links everywhere; the branch itself
+      is unreachable there because DMSwarmSetBackend() refuses the hip backend without HIP.
+    */
+    if (size == 1) PetscCall(VecCreateSeqHIPWithArrays(comm, bs, n * bs, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+    else PetscCall(VecCreateMPIHIPWithArrays(comm, bs, n * bs, PETSC_DETERMINE, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+    /*
+      Hand the field's offloadmask to the Vec. A field mask of PETSC_OFFLOAD_UNALLOCATED maps
+      to PETSC_OFFLOAD_CPU: the mirror exists by now (sized above) but has never received the
+      entries, so the host array is the only valid copy - exactly what CPU means to the Vec.
+      The constructor itself set PETSC_OFFLOAD_BOTH (or CPU when the mirror is empty because
+      the field has no entries), which is wrong whenever one residence is stale.
+    */
+    (*vec)->offloadmask = PetscOffloadUnallocated(gfield->offloadmask) ? PETSC_OFFLOAD_CPU : gfield->offloadmask;
+  } else SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "No support for creating Vecs from a DMSwarm with %s particle storage", PetscMemTypeToString(swarm->db->memtype));
 
   PetscCall(PetscSNPrintf(name, PETSC_MAX_PATH_LEN - 1, "DMSwarmSharedField_%s", fieldname));
   PetscCall(PetscObjectSetName((PetscObject)*vec, name));
@@ -388,6 +447,17 @@ static PetscErrorCode DMSwarmDestroyVectorFromFields_Private(DM sw, PetscInt Nf,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Unlike the single-field wrap above, the multi-field variant interleaves several fields into
+  one Vec, so it is copy-in (here) / copy-out (in DMSwarmDestroyVectorFromFields_Private()) by
+  construction. On a device bucket the host accessors below transparently sync the fields
+  (per-field offloadmask coherence), so this path is correct for every backend; it is left
+  host-based deliberately because it sits on no device-resident hot path today: TS examples
+  (e.g. tests/ex4) integrate either a standalone solution Vec or single-field wraps, and the
+  only in-tree callers besides the public API are the migration paths in swarm_migrate.c,
+  which are host-based until the migration phase of the device backend. Revisit (strided
+  cupmMemcpy2DAsync per field) if a device-resident consumer appears.
+*/
 static PetscErrorCode DMSwarmCreateVectorFromFields_Private(DM sw, PetscInt Nf, const char *fieldnames[], MPI_Comm comm, Vec *vec)
 {
   DM_Swarm    *swarm = (DM_Swarm *)sw->data;
@@ -1975,6 +2045,55 @@ PetscErrorCode DMSwarmRestoreField(DM dm, const char fieldname[], PetscInt *bloc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Common implementation of the DMSwarmGetField*AndMemType() accessors. On a host bucket this is
+  DMSwarmGetField() returning PETSC_MEMTYPE_HOST. On a device bucket the field lock is taken
+  without any host coherence traffic and the device pointer is returned; sync selects whether
+  stale device entries are refreshed from the host first (read paths) or the mirror is merely
+  sized without a transfer (write-only path).
+*/
+static PetscErrorCode DMSwarmGetFieldNative_Private(DM dm, const char fieldname[], PetscBool sync, PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+
+  PetscFunctionBegin;
+  if (PetscMemTypeHost(swarm->db->memtype)) {
+    PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
+    if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  } else {
+    DMSwarmDataField gfield;
+
+    if (!swarm->issetup) PetscCall(DMSetUp(dm));
+    PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, fieldname, &gfield));
+    PetscCall(DMSwarmDataFieldAcquireAccess(gfield));
+    if (sync) PetscCall((*swarm->db->ops.fieldtodevice)(gfield)); /* no-op unless the host copy is newer */
+    else PetscCall((*swarm->db->ops.fieldallocdevice)(gfield));
+    *data = gfield->data_d;
+    if (blocksize) *blocksize = gfield->bs;
+    if (type) *type = gfield->petsc_type;
+    if (mtype) *mtype = swarm->db->memtype;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Restore counterpart of DMSwarmGetFieldNative_Private(); dirty marks the device copy authoritative (the host copy becomes stale) */
+static PetscErrorCode DMSwarmRestoreFieldNative_Private(DM dm, const char fieldname[], PetscBool dirty, PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dm->data;
+
+  PetscFunctionBegin;
+  if (PetscMemTypeHost(swarm->db->memtype)) PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  else {
+    DMSwarmDataField gfield;
+
+    PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, fieldname, &gfield));
+    PetscCall(DMSwarmDataFieldReleaseAccess(gfield));
+    if (dirty) gfield->offloadmask = PETSC_OFFLOAD_GPU;
+    if (data) *data = NULL;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /*@
   DMSwarmGetFieldAndMemType - Get access to the array storing all entries of a registered field in the memory space native to the storage backend
 
@@ -1995,7 +2114,7 @@ PetscErrorCode DMSwarmRestoreField(DM dm, const char fieldname[], PetscInt *bloc
   Notes:
   The array must be returned using a matching call to `DMSwarmRestoreFieldAndMemType()`. Access is read-write; on restore the entries in the backend's native memory space are considered authoritative.
 
-  On the host backend this returns the same array as `DMSwarmGetField()` and `mtype` is `PETSC_MEMTYPE_HOST`. On a device backend the returned pointer addresses device memory and no host-device copy is performed, making this the primitive for user-written device kernels; use `DMSwarmGetField()` when a host pointer is required.
+  On the host backend this returns the same array as `DMSwarmGetField()` and `mtype` is `PETSC_MEMTYPE_HOST`. On a device backend the returned pointer addresses device memory, with stale device entries first refreshed from the host if needed, making this the primitive for user-written device kernels; use `DMSwarmGetField()` when a host pointer is required.
 
 .seealso: `DM`, `DMSWARM`, `DMSwarmRestoreFieldAndMemType()`, `DMSwarmGetFieldReadAndMemType()`, `DMSwarmGetFieldWriteAndMemType()`, `DMSwarmGetField()`
 @*/
@@ -2003,8 +2122,7 @@ PetscErrorCode DMSwarmGetFieldAndMemType(DM dm, const char fieldname[], PetscInt
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
-  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscCall(DMSwarmGetFieldNative_Private(dm, fieldname, PETSC_TRUE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2029,7 +2147,7 @@ PetscErrorCode DMSwarmRestoreFieldAndMemType(DM dm, const char fieldname[], Pets
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  PetscCall(DMSwarmRestoreFieldNative_Private(dm, fieldname, PETSC_TRUE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2059,8 +2177,7 @@ PetscErrorCode DMSwarmGetFieldReadAndMemType(DM dm, const char fieldname[], Pets
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
-  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscCall(DMSwarmGetFieldNative_Private(dm, fieldname, PETSC_TRUE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2085,7 +2202,7 @@ PetscErrorCode DMSwarmRestoreFieldReadAndMemType(DM dm, const char fieldname[], 
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  PetscCall(DMSwarmRestoreFieldNative_Private(dm, fieldname, PETSC_FALSE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2115,8 +2232,7 @@ PetscErrorCode DMSwarmGetFieldWriteAndMemType(DM dm, const char fieldname[], Pet
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmGetField(dm, fieldname, blocksize, type, data));
-  if (mtype) *mtype = PETSC_MEMTYPE_HOST;
+  PetscCall(DMSwarmGetFieldNative_Private(dm, fieldname, PETSC_FALSE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2141,7 +2257,7 @@ PetscErrorCode DMSwarmRestoreFieldWriteAndMemType(DM dm, const char fieldname[],
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
-  PetscCall(DMSwarmRestoreField(dm, fieldname, blocksize, type, data));
+  PetscCall(DMSwarmRestoreFieldNative_Private(dm, fieldname, PETSC_TRUE, blocksize, type, mtype, data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -3027,6 +3143,7 @@ PetscErrorCode DMSwarmSetBackend(DM dm, DMSwarmBackendType backend)
     PetscCheck(PetscDefined(HAVE_HIP), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with HIP support");
     PetscCall(DMSetVecType(dm, VECHIP));
     swarm->db->memtype = PETSC_MEMTYPE_HIP;
+    if (PetscDefined(HAVE_HIP)) PetscCall(DMSwarmDataBucketSetUpDevice_HIP(swarm->db));
     break;
   case DMSWARM_BACKEND_CUDA:
     PetscCheck(PetscDefined(HAVE_CUDA), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with CUDA support");

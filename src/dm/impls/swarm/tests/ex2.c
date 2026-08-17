@@ -201,8 +201,10 @@ static PetscErrorCode CreateParticles(DM dm, DM *sw, AppCtx *user)
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "w_q", 1, PETSC_SCALAR));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
   PetscCall(DMPlexGetHeightStratum(dm, 0, NULL, &Ncell));
-  PetscCall(DMSwarmSetLocalSizes(*sw, Ncell * Np, 0));
+  /* Options must be consumed before DMSwarmSetLocalSizes() triggers DMSetUp(), so that
+     -dm_swarm_backend can still be honored (it is a hard error after setup) */
   PetscCall(DMSetFromOptions(*sw));
+  PetscCall(DMSwarmSetLocalSizes(*sw, Ncell * Np, 0));
 
   PetscCall(DMSwarmGetCellDMActive(*sw, &celldm));
   PetscCall(DMSwarmCellDMGetCellID(celldm, &cellid));
@@ -292,8 +294,10 @@ static PetscErrorCode CreateParticles_Shape(DM dm, DM *sw, AppCtx *user)
   PetscCheck(Nfc == 1, PetscObjectComm((PetscObject)sw), PETSC_ERR_SUP, "We only support a single coordinate field right now, not %" PetscInt_FMT, Nfc);
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "w_q", 1, PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
-  PetscCall(DMSwarmSetLocalSizes(*sw, (cEnd - cStart) * Nq, 0));
+  /* Options must be consumed before DMSwarmSetLocalSizes() triggers DMSetUp(), so that
+     -dm_swarm_backend can still be honored (it is a hard error after setup) */
   PetscCall(DMSetFromOptions(*sw));
+  PetscCall(DMSwarmSetLocalSizes(*sw, (cEnd - cStart) * Nq, 0));
   PetscCall(PetscMalloc4(dim, &xi0, dim, &v0, dim * dim, &J, dim * dim, &invJ));
   for (c = 0; c < dim; c++) xi0[c] = -1.;
   PetscCall(DMSwarmGetField(*sw, coordFields[0], NULL, NULL, (void **)&coords));
@@ -710,6 +714,14 @@ int main(int argc, char *argv[])
     nsize: 1
     args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type hip -mat_type aijhipsparse -ptof_ksp_type cg -ptof_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
+  # Same projection with device-resident particle storage instead of a host bucket
+  test:
+    suffix: proj_quad_backend_hip_serial
+    requires: triangle hip
+    nsize: 1
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type hip -mat_type aijhipsparse -ptof_ksp_type cg -ptof_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_serial.out
   test:
     suffix: proj_quad_hip_parallel
     requires: triangle hip

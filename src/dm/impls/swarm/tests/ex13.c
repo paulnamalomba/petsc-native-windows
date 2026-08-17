@@ -143,6 +143,9 @@ int main(int argc, char **argv)
   PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
   PetscCall(VecScale(v, 2.0));
   PetscCall(DMSwarmDestroyGlobalVectorFromField(sw, "phi", &v));
+  /* On a device backend the VecScale() left phi device resident, so an ascii_info_detail
+     view here shows a nontrivial per-field offload state before PrintState() syncs it back */
+  PetscCall(DMViewFromOptions(sw, NULL, "-sw_view"));
   PetscCall(PrintState(sw, "After scaling phi by 2 through the global Vec"));
 
   PetscCall(DMSwarmCreateLocalVectorFromField(sw, "vel", &v));
@@ -179,5 +182,12 @@ int main(int argc, char **argv)
   test:
     suffix: 2
     nsize: 2
+
+  # Device-resident bucket: same data path plus memtype/offload introspection in the view
+  test:
+    suffix: hip
+    requires: hip
+    args: -dm_swarm_backend hip -sw_view ::ascii_info_detail
+    filter: grep -v atomic | grep -v usage
 
 TEST*/

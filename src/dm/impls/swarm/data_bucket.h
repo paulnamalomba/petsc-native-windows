@@ -16,22 +16,40 @@ typedef enum {
 } DMSwarmDataBucketViewType;
 
 struct _p_DMSwarmDataField {
-  char         *registration_function;
-  PetscInt      L, bs;
-  PetscBool     active;
-  size_t        atomic_size;
-  char         *name; /* what are they called */
-  void         *data; /* the data - an array of structs */
-  PetscDataType petsc_type;
+  char             *registration_function;
+  PetscInt          L, bs;
+  PetscBool         active;
+  size_t            atomic_size;
+  char             *name; /* what are they called */
+  void             *data; /* the data - an array of structs */
+  PetscDataType     petsc_type;
+  void             *data_d;           /* device mirror of data */
+  void             *data_allocated_d; /* non-NULL iff we own data_d */
+  PetscInt          capacity_d;       /* entries allocated in data_d; may exceed L under geometric growth */
+  PetscOffloadMask  offloadmask;      /* which of data/data_d holds valid entries */
+  DMSwarmDataBucket bucket;           /* owning bucket, so field-level entry points can dispatch its ops; NULL for a field created outside a bucket */
 };
 
+/* Backend dispatch for every operation that touches particle storage; host implementations are the historical code paths */
+typedef struct _DMSwarmDataBucketOps {
+  PetscErrorCode (*fieldalloc)(DMSwarmDataField, PetscInt); /* resize field storage to a new capacity */
+  PetscErrorCode (*fieldallocdevice)(DMSwarmDataField);     /* size the device mirror without transferring entries (write-only device access) */
+  PetscErrorCode (*fieldtodevice)(DMSwarmDataField);        /* H2D */
+  PetscErrorCode (*fieldtohost)(DMSwarmDataField);          /* D2H */
+  PetscErrorCode (*fieldzerorange)(DMSwarmDataField, PetscInt, PetscInt);
+  PetscErrorCode (*fieldfreedevice)(DMSwarmDataField); /* release the device mirror of a field; must be dispatched before DMSwarmDataFieldDestroy() */
+  PetscErrorCode (*setsizes)(DMSwarmDataBucket, PetscInt, PetscInt);
+} DMSwarmDataBucketOps;
+
 struct _p_DMSwarmDataBucket {
-  PetscInt          L;         /* number in use */
-  PetscInt          buffer;    /* memory buffer used for re-allocation */
-  PetscInt          allocated; /* number allocated, this will equal datafield->L */
-  PetscBool         finalised; /* DEPRECATED */
-  PetscInt          nfields;   /* how many fields of this type */
-  DMSwarmDataField *field;     /* the data */
+  PetscInt             L;         /* number in use */
+  PetscInt             buffer;    /* memory buffer used for re-allocation */
+  PetscInt             allocated; /* number allocated, this will equal datafield->L */
+  PetscBool            finalised; /* DEPRECATED */
+  PetscInt             nfields;   /* how many fields of this type */
+  DMSwarmDataField    *field;     /* the data */
+  PetscMemType         memtype;   /* where particle data natively lives */
+  DMSwarmDataBucketOps ops;       /* backend dispatch */
 };
 
 #define DMSWARM_DATAFIELD_point_access(data, index, atomic_size)                (void *)((char *)(data) + (index) * (atomic_size))
@@ -51,6 +69,8 @@ PETSC_INTERN PetscErrorCode DMSwarmDataFieldGetNumEntries(DMSwarmDataField, Pets
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldSetBlockSize(DMSwarmDataField, PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldSetSize(DMSwarmDataField, const PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldZeroBlock(DMSwarmDataField, const PetscInt, const PetscInt);
+PETSC_INTERN PetscErrorCode DMSwarmDataFieldAcquireAccess(const DMSwarmDataField);
+PETSC_INTERN PetscErrorCode DMSwarmDataFieldReleaseAccess(DMSwarmDataField);
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldGetAccess(const DMSwarmDataField);
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldAccessPoint(const DMSwarmDataField, const PetscInt, void **);
 PETSC_INTERN PetscErrorCode DMSwarmDataFieldAccessPointOffset(const DMSwarmDataField, const size_t, const PetscInt, void **);
@@ -65,6 +85,9 @@ PETSC_INTERN PetscErrorCode DMSwarmDataFieldZeroPoint(const DMSwarmDataField, co
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketFinalize(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetInitialSizes(DMSwarmDataBucket, const PetscInt, const PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket, const PetscInt, const PetscInt);
+PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket, PetscInt, PetscInt);
+/* Defined in src/dm/impls/swarm/cupm/hip/; declared unconditionally, call only when PetscDefined(HAVE_HIP) */
+PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetUpDevice_HIP(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetSizes(DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetGlobalSizes(MPI_Comm, DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetDMSwarmDataFields(DMSwarmDataBucket, PetscInt *, DMSwarmDataField *[]);
