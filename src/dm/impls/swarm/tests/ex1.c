@@ -247,6 +247,17 @@ int main(int argc, char **argv)
     args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
           -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
           -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location true
+  # Same migration with device-resident particle storage; the cell ids are computed by the
+  # device grid-hash locate kernel, bitwise identical to the host path
+  test:
+    suffix: swarm_migrate_backend_hip_hash
+    nsize: 2
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location true\
+          -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_vec_hip_hash.out
   test:
     suffix: swarm_migrate_vec_hip_hash_tensor_permutation
     nsize: 2
@@ -255,6 +266,16 @@ int main(int argc, char **argv)
           -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
           -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location true\
           -set_closure_permutation
+  # Device-resident twin of the tensor-permutation hash variant, see swarm_migrate_backend_hip_hash
+  test:
+    suffix: swarm_migrate_backend_hip_hash_tensor_permutation
+    nsize: 2
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location true\
+          -set_closure_permutation -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_vec_hip_hash_tensor_permutation.out
   test:
     suffix: swarm_migrate_hash
     nsize: 2
@@ -283,4 +304,55 @@ int main(int argc, char **argv)
           -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
           -dm_plex_hash_location false -set_closure_permutation
     filter: grep -v marker | grep -v atomic | grep -v usage
+  # Simplex migration: the host variants pin the baseline and the hip-backend twins share their
+  # expected output, making device-host parity of the simplex (v0/invJ barycentric) locate path
+  # a committed regression
+  test:
+    suffix: swarm_migrate_tri
+    nsize: 2
+    requires: triangle
+    args: -dm_plex_dim 2 -dm_plex_simplex 1 -dm_distribute_overlap 1 -dm_plex_box_faces 4,16\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false
+  test:
+    suffix: swarm_migrate_backend_hip_tri
+    nsize: 2
+    requires: triangle hip
+    args: -dm_plex_dim 2 -dm_plex_simplex 1 -dm_distribute_overlap 1 -dm_plex_box_faces 4,16\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_tri.out
+  # The RCM reordering makes the contiguous-chunk (simple) partition of the ctetgen mesh clean
+  # enough for the rank-boundary tie-breaking check
+  test:
+    suffix: swarm_migrate_tet
+    nsize: 2
+    requires: ctetgen
+    args: -dm_plex_dim 3 -dm_plex_simplex 1 -dm_plex_reorder rcm -dm_distribute_overlap 1\
+          -dm_plex_box_faces 2,2,8 -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10.\
+          -dm_plex_box_bd none,none,none -dm_plex_hash_location false
+  test:
+    suffix: swarm_migrate_backend_hip_tet
+    nsize: 2
+    requires: ctetgen hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 1 -dm_plex_reorder rcm -dm_distribute_overlap 1\
+          -dm_plex_box_faces 2,2,8 -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10.\
+          -dm_plex_box_bd none,none,none -dm_plex_hash_location false -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_tet.out
+  # Degree-2 coordinate space: the point-location geometry cache reports itself unavailable, so
+  # the hip backend silently falls back to host point location with identical output
+  test:
+    suffix: swarm_migrate_coord_deg2
+    nsize: 2
+    args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false -dm_coord_petscspace_degree 2
+  test:
+    suffix: swarm_migrate_backend_hip_coord_deg2
+    nsize: 2
+    requires: hip
+    args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false -dm_coord_petscspace_degree 2 -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_coord_deg2.out
 TEST*/

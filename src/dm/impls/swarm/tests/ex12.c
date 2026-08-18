@@ -61,6 +61,9 @@ static PetscErrorCode CreateSwarm(DM mesh, DM *swarm, UserContext *user)
   PetscCall(DMSwarmSetCellDM(*swarm, mesh));
   PetscCall(DMSwarmInitializeFieldRegister(*swarm));
   PetscCall(DMSwarmFinalizeFieldRegister(*swarm));
+  /* Options must be consumed before DMSwarmSetLocalSizes() triggers DMSetUp(), so that
+     -pic_dm_swarm_backend can still be honored (it is a hard error after setup) */
+  PetscCall(DMSetFromOptions(*swarm));
   PetscCall(DMSwarmSetLocalSizes(*swarm, user->Np / size, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -118,6 +121,14 @@ int main(int argc, char **args)
 
     test:
       suffix: p1
+
+    # The hip backend cannot use device point location on a DMDA cell DM and must silently
+    # fall back to the host path with identical output
+    test:
+      suffix: p1_hip
+      requires: hip
+      args: -pic_dm_swarm_backend hip
+      output_file: output/ex12_2d_p1.out
 
     test:
       suffix: p2

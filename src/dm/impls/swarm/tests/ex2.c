@@ -697,6 +697,15 @@ int main(int argc, char *argv[])
     args: -dm_plex_box_faces 2,2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
 
+  # Device-resident twin of proj_tri_2_faces: simplex projection through the hip backend must
+  # reproduce the host expected output
+  test:
+    suffix: proj_tri_2_faces_backend_hip
+    requires: triangle hip
+    args: -dm_plex_box_faces 2,2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_2_faces.out
+
   test:
     suffix: proj_quad_0
     requires: triangle
@@ -746,6 +755,30 @@ int main(int argc, char *argv[])
     args: -dm_plex_box_faces 1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
 
+  # Device-resident twin of the perturbed-mesh variant proj_tri_mdx
+  test:
+    suffix: proj_tri_mdx_backend_hip
+    requires: triangle hip
+    args: -dm_plex_box_faces 1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_mdx.out
+
+  # Perturbed quad mesh. The moment tolerance is loose because the swarm mass matrix maps
+  # particles to reference coordinates through an affine approximation of the cell geometry,
+  # which is inexact on perturbed (bilinear) quadrilaterals.
+  test:
+    suffix: proj_quad_mdx
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 2,2 -mesh_perturbation 1.0e-1 -moment_tol 5.0e-2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
+    filter: grep -v marker | grep -v atomic | grep -v usage
+
+  # Device-resident twin of proj_quad_mdx: perturbed-tensor-mesh parity with the host baseline
+  test:
+    suffix: proj_quad_mdx_backend_hip
+    requires: hip
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 2,2 -mesh_perturbation 1.0e-1 -moment_tol 5.0e-2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_mdx.out
+
   test:
     suffix: proj_tri_mdx_5P
     requires: triangle
@@ -757,6 +790,14 @@ int main(int argc, char *argv[])
     requires: ctetgen
     args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
+
+  # Device-resident twin of proj_tri_3d: tetrahedral projection through the hip backend
+  test:
+    suffix: proj_tri_3d_backend_hip
+    requires: ctetgen hip
+    args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d.out
 
   test:
     suffix: proj_tri_3d_2_faces
@@ -840,4 +881,27 @@ int main(int argc, char *argv[])
           -dm_view -sw_view\
           -petscspace_degree 1 -petscfe_default_quadrature_order 1\
           -pc_type lu
+  # Perturbed quad mesh through the shape path, whose DMSwarmMigrate() locates every particle.
+  # The hip twin therefore runs the device quad (ray-cast) containment kernel on perturbed
+  # tensor cells against the host baseline output, pinning the FP-contraction (FMA) fix in the
+  # device locate kernels: with contraction enabled the near-zero ray-cast slopes flip on
+  # exactly this cell shape.
+  test:
+    suffix: proj_shape_linear_quad_2d_mdx
+    nsize: 2
+    args: -shape -dm_plex_simplex 0 -dm_plex_box_faces 4,4\
+          -mesh_perturbation 1.0e-1\
+          -dm_view -sw_view\
+          -petscspace_degree 1 -petscfe_default_quadrature_order 1\
+          -pc_type redundant
+  test:
+    suffix: proj_shape_linear_quad_2d_mdx_backend_hip
+    nsize: 2
+    requires: hip
+    args: -shape -dm_plex_simplex 0 -dm_plex_box_faces 4,4\
+          -mesh_perturbation 1.0e-1\
+          -dm_view -sw_view\
+          -petscspace_degree 1 -petscfe_default_quadrature_order 1\
+          -pc_type redundant -dm_swarm_backend hip
+    output_file: output/ex2_proj_shape_linear_quad_2d_mdx.out
 TEST*/

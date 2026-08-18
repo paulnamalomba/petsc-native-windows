@@ -1,0 +1,16 @@
+DM Object: box 2 MPI processes
+  type: plex
+box in 2 dimensions:
+  Number of 0-cells per rank: 15 15
+  Number of 1-cells per rank: 22 22
+  Number of 2-cells per rank: 8 8
+Labels:
+  depth: 3 strata with value/size (0 (15), 1 (22), 2 (8))
+  marker: 1 strata with value/size (1 (17))
+  Face Sets: 3 strata with value/size (1 (4), 2 (2), 4 (2))
+  celltype: 3 strata with value/size (0 (15), 1 (22), 4 (8))
+DM Object: Particles 2 MPI processes
+  type: swarm
+Particles in 2 dimensions:
+  Number of particles per rank: 32 32
+Projected L2 Error: 0.126596
