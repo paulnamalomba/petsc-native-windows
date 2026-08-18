@@ -1,10 +1,10 @@
 Tao Object: (t_) 1 MPI process
   type: nls
-    Newton steps: 50
+    Newton steps: 10
     BFGS steps: 0
     Gradient steps: 0
     nls ksp atol: 0
-    nls ksp rtol: 50
+    nls ksp rtol: 10
     nls ksp ctol: 0
     nls ksp negc: 0
     nls ksp dtol: 0
@@ -28,8 +28,8 @@ Tao Object: (t_) 1 MPI process
                 parameter vector space: (none)
                 Hessian MatType (tao_term_hessian_mat_type): seqaij
                 attached to Tao [name omitted] (t_)
-                The following methods have been set: objectiveandgradient, hessian,
-                total number of function/gradient evaluations=107
+                The following methods have been set: objectiveandgradient, hessian
+                total number of function/gradient evaluations=27
             Map: unmapped
             Mask (tao_term_sum_t_callbacks_mask): hessian
           Summand 1:
@@ -41,20 +41,20 @@ Tao Object: (t_) 1 MPI process
                 parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian, hessianmult,
-                total number of function/gradient evaluations=107
-                total number of Hessian evaluations=51
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
+                total number of function/gradient evaluations=27
+                total number of Hessian evaluations=11
             Map:
               Mat Object: (A1_) 1 MPI process
                 type: seqaij
                 rows=10, cols=10
-                total: nonzeros=43, allocated nonzeros=50
+                total: nonzeros=40, allocated nonzeros=50
                 total number of mallocs used during MatSetValues calls=0
                   not using I-node routines
         total number of function evaluations=5
         total number of gradient evaluations=1
-        total number of function/gradient evaluations=101
-        total number of Hessian evaluations=51
+        total number of function/gradient evaluations=21
+        total number of Hessian evaluations=11
     Map: unmapped
   TaoLineSearch Object: (t_) 1 MPI process
     type: more-thuente
@@ -82,23 +82,23 @@ Tao Object: (t_) 1 MPI process
             type: seqaij
             rows=10, cols=10
             package used to perform factorization: petsc
-            total: nonzeros=86, allocated nonzeros=86
-              using I-node routines: found 8 nodes, limit used is 5
+            total: nonzeros=70, allocated nonzeros=70
+              not using I-node routines
     linear system matrix, which is also used to construct the preconditioner:
     Mat Object: 1 MPI process
       type: seqaij
       rows=10, cols=10
-      total: nonzeros=86, allocated nonzeros=86
+      total: nonzeros=70, allocated nonzeros=70
       total number of mallocs used during MatSetValues calls=0
-        using I-node routines: found 8 nodes, limit used is 5
-  total KSP iterations: 250
+        not using I-node routines
+  total KSP iterations: 30
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=1.08311
-  Objective value=3.39317
-  total number of iterations=50,                          (max: 50)
+  Residual in Function/Gradient:=1.38669e-08
+  Objective value=2.01648
+  total number of iterations=10,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of gradient evaluations=1,                  (max: unlimited)
-  total number of function/gradient evaluations=101,      (max: unlimited)
-  total number of Hessian evaluations=51
-  Solver failed:    Maximum Iterations
+  total number of function/gradient evaluations=21,      (max: unlimited)
+  total number of Hessian evaluations=11
+  Solution converged:    ||g(X)||/|f(X)| <= grtol
 Reference callback comparison passed

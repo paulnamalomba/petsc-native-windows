@@ -50,7 +50,7 @@ Tao Object: (t_) 1 MPI process
               Mat Object: (A1_) 1 MPI process
                 type: seqaij
                 rows=9, cols=10
-                total: nonzeros=38, allocated nonzeros=45
+                total: nonzeros=36, allocated nonzeros=45
                 total number of mallocs used during MatSetValues calls=0
                   not using I-node routines
         total number of function evaluations=5
@@ -84,8 +84,8 @@ Tao Object: (t_) 1 MPI process
             type: seqaij
             rows=10, cols=10
             package used to perform factorization: petsc
-            total: nonzeros=84, allocated nonzeros=84
-              using I-node routines: found 8 nodes, limit used is 5
+            total: nonzeros=68, allocated nonzeros=68
+              not using I-node routines
     linear system matrix, followed by the matrix used to construct the preconditioner:
     Mat Object: 1 MPI process
       type: shell
@@ -93,13 +93,13 @@ Tao Object: (t_) 1 MPI process
     Mat Object: 1 MPI process
       type: seqaij
       rows=10, cols=10
-      total: nonzeros=84, allocated nonzeros=84
+      total: nonzeros=68, allocated nonzeros=68
       total number of mallocs used during MatSetValues calls=0
-        using I-node routines: found 8 nodes, limit used is 5
+        not using I-node routines
   total KSP iterations: 4
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=2.27382e-11
-  Objective value=2.81038
+  Residual in Function/Gradient:=1.55528e-12
+  Objective value=1.71232
   total number of iterations=2,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of function/gradient evaluations=3,      (max: unlimited)

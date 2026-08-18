@@ -28,7 +28,7 @@ Tao Object: (t_) 1 MPI process
                 parameter vector space: (none)
                 Using finite differences for Hessian computation
                 attached to Tao [name omitted] (t_)
-                The following methods have been set: objectiveandgradient, hessian,
+                The following methods have been set: objectiveandgradient, hessian
                 total number of function/gradient evaluations=30
                 total number of Hessian evaluations=2
             Map: unmapped
@@ -41,20 +41,20 @@ Tao Object: (t_) 1 MPI process
                 parameter vector space: (optional) K = 11 [VecType standard (tao_term_parameters_vec_type)]
                 Using finite differences for Hessian computation
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian,
+                The following methods have been set: objectiveandgradient, hessian
                 total number of function/gradient evaluations=32
                 total number of Hessian evaluations=2
             Map:
               Mat Object: (A1_) 1 MPI process
                 type: seqaij
                 rows=11, cols=10
-                total: nonzeros=45, allocated nonzeros=55
+                total: nonzeros=44, allocated nonzeros=55
                 total number of mallocs used during MatSetValues calls=0
                   not using I-node routines
         total number of function evaluations=5
         total number of function/gradient evaluations=3
         total number of Hessian evaluations=2
-        total number of HessianMult evaluations=16
+        total number of HessianMult evaluations=14
     Map: unmapped
   TaoLineSearch Object: (t_) 1 MPI process
     type: more-thuente
@@ -76,10 +76,10 @@ Tao Object: (t_) 1 MPI process
     Mat Object: 1 MPI process
       type: shell
       rows=10, cols=10
-  total KSP iterations: 11
+  total KSP iterations: 9
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=4.30512e-12
-  Objective value=3.02788
+  Residual in Function/Gradient:=3.803e-11
+  Objective value=2.09742
   total number of iterations=2,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of function/gradient evaluations=3,      (max: unlimited)

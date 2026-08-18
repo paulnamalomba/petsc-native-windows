@@ -43,18 +43,18 @@ Tao Object: (t_) 1 MPI process
                 Context has been set
                 The following methods have been set: objectiveandgradient, hessian, hessianmult,
                 total number of function/gradient evaluations=8
-                total number of HessianMult evaluations=16
+                total number of HessianMult evaluations=14
             Map:
               Mat Object: (A1_) 1 MPI process
                 type: seqaij
                 rows=9, cols=10
-                total: nonzeros=38, allocated nonzeros=45
+                total: nonzeros=36, allocated nonzeros=45
                 total number of mallocs used during MatSetValues calls=0
                   not using I-node routines
         total number of function evaluations=5
         total number of function/gradient evaluations=3
         total number of Hessian evaluations=2
-        total number of HessianMult evaluations=16
+        total number of HessianMult evaluations=14
     Map: unmapped
   TaoLineSearch Object: (t_) 1 MPI process
     type: more-thuente
@@ -76,10 +76,10 @@ Tao Object: (t_) 1 MPI process
     Mat Object: 1 MPI process
       type: shell
       rows=10, cols=10
-  total KSP iterations: 11
+  total KSP iterations: 9
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=8.65264e-12
-  Objective value=2.81038
+  Residual in Function/Gradient:=4.48309e-13
+  Objective value=1.71232
   total number of iterations=2,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of function/gradient evaluations=3,      (max: unlimited)

@@ -191,6 +191,7 @@ static PetscErrorCode CheckRepeatedSetFromOptions(TestState *state)
 static PetscErrorCode CreateTaoTermWithOptions(TestCtx *ctx, ExampleTerm *term, const char *term_prefix, const char *A_prefix)
 {
   MPI_Comm    comm = ctx->comm;
+  PetscInt    rstart, rend;
   PetscMPIInt size;
 
   PetscFunctionBeginUser;
@@ -200,7 +201,10 @@ static PetscErrorCode CreateTaoTermWithOptions(TestCtx *ctx, ExampleTerm *term, 
     PetscCall(VecCreate(comm, &term->parameters));
     PetscCall(VecSetSizes(term->parameters, PETSC_DECIDE, term->use_map ? term->size : ctx->n));
     PetscCall(VecSetFromOptions(term->parameters));
-    PetscCall(VecSetRandom(term->parameters, NULL));
+    PetscCall(VecGetOwnershipRange(term->parameters, &rstart, &rend));
+    for (PetscInt i = rstart; i < rend; i++) PetscCall(VecSetValue(term->parameters, i, 0.5 + 0.1 * (i + 1), INSERT_VALUES));
+    PetscCall(VecAssemblyBegin(term->parameters));
+    PetscCall(VecAssemblyEnd(term->parameters));
   }
 
   /* Create map matrix A if requested */
@@ -214,7 +218,14 @@ static PetscErrorCode CreateTaoTermWithOptions(TestCtx *ctx, ExampleTerm *term, 
     if (size == 1) PetscCall(MatSeqAIJSetPreallocation(term->map, PETSC_DEFAULT, NULL));
     else PetscCall(MatMPIAIJSetPreallocation(term->map, 5, NULL, 5, NULL));
     PetscCall(MatSetUp(term->map));
-    PetscCall(MatSetRandom(term->map, NULL));
+    PetscCall(MatGetOwnershipRange(term->map, &rstart, &rend));
+    for (PetscInt i = rstart; i < rend; i++) {
+      PetscInt          cols[4];
+      const PetscScalar vals[] = {2.0, -0.3, 0.2, -0.1};
+
+      for (PetscInt k = 0; k < 4; k++) cols[k] = (i + k) % ctx->n;
+      PetscCall(MatSetValues(term->map, 1, &i, 4, cols, vals, INSERT_VALUES));
+    }
     PetscCall(MatAssemblyBegin(term->map, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyEnd(term->map, MAT_FINAL_ASSEMBLY));
   }
