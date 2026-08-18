@@ -2,6 +2,42 @@ const char help[] = "Demonstration of elastic net regularization (https://en.wik
 
 #include <petsctao.h>
 
+static PetscErrorCode FillMatDeterministic(Mat M, PetscReal shift)
+{
+  const PetscScalar weights[] = {2.0, -0.3, 0.2, -0.1};
+  PetscInt          rstart, rend, N;
+  PetscInt         *cols;
+  PetscScalar      *vals;
+
+  PetscFunctionBeginUser;
+  PetscCall(MatGetOwnershipRange(M, &rstart, &rend));
+  PetscCall(MatGetSize(M, NULL, &N));
+  PetscCall(PetscMalloc2(N, &cols, N, &vals));
+  for (PetscInt j = 0; j < N; j++) cols[j] = j;
+  for (PetscInt i = rstart; i < rend; i++) {
+    PetscCall(PetscArrayzero(vals, N));
+    for (PetscInt j = 0; j < 4; j++) vals[(i + j) % N] += weights[j];
+    vals[i % N] += shift;
+    PetscCall(MatSetValues(M, 1, &i, N, cols, vals, INSERT_VALUES));
+  }
+  PetscCall(PetscFree2(cols, vals));
+  PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FillVecDeterministic(Vec v, PetscReal shift)
+{
+  PetscInt rstart, rend;
+
+  PetscFunctionBeginUser;
+  PetscCall(VecGetOwnershipRange(v, &rstart, &rend));
+  for (PetscInt i = rstart; i < rend; i++) PetscCall(VecSetValue(v, i, shift + 0.1 * (i % 11 - 5), INSERT_VALUES));
+  PetscCall(VecAssemblyBegin(v));
+  PetscCall(VecAssemblyEnd(v));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   /*
@@ -28,7 +64,6 @@ int main(int argc, char **argv)
   TaoTerm     l2_reg_term;
   TaoTerm     l1_reg_term;
   TaoTerm     full_objective;
-  PetscRandom rand;
   PetscReal   lambda_1 = 0.1;
   PetscReal   lambda_2 = 0.1;
   Tao         tao;
@@ -48,17 +83,13 @@ int main(int argc, char **argv)
 
   PetscCall(TaoCreate(comm, &tao));
 
-  PetscCall(PetscRandomCreate(comm, &rand));
-  PetscCall(PetscRandomSetInterval(rand, -1.0, 1.0));
-  PetscCall(PetscRandomSetFromOptions(rand));
-
   // create the model data, A, W and b
   PetscCall(MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, m, n, NULL, &A));
-  PetscCall(MatSetRandom(A, rand));
+  PetscCall(FillMatDeterministic(A, 0.0));
   PetscCall(MatCreateVecs(A, NULL, &b));
-  PetscCall(VecSetRandom(b, rand));
+  PetscCall(FillVecDeterministic(b, 0.0));
   PetscCall(VecDuplicate(b, &w));
-  PetscCall(VecSetRandom(w, rand));
+  PetscCall(FillVecDeterministic(w, 0.0));
   PetscCall(VecAbs(w));
   PetscCall(VecShift(w, 1.0));
   PetscCall(MatCreateDiagonal(w, &W));
@@ -66,9 +97,9 @@ int main(int argc, char **argv)
 
   // create the dictionary data, D and y
   PetscCall(MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, k, n, NULL, &D));
-  PetscCall(MatSetRandom(D, rand));
+  PetscCall(FillMatDeterministic(D, 0.5));
   PetscCall(MatCreateVecs(D, NULL, &y));
-  PetscCall(VecSetRandom(y, rand));
+  PetscCall(FillVecDeterministic(y, 0.25));
 
   // the model term,  (1/2) || Ax - b ||_W^2
   PetscCall(TaoTermCreateQuadratic(W, &data_term));
@@ -101,7 +132,7 @@ int main(int argc, char **argv)
 
   PetscCall(TaoGetTerm(tao, NULL, &full_objective, NULL, NULL));
   PetscCall(TaoTermCreateSolutionVec(full_objective, &x));
-  PetscCall(VecSetRandom(x, rand));
+  PetscCall(FillVecDeterministic(x, 0.1));
   PetscCall(TaoSetSolution(tao, x));
   PetscCall(TaoSetFromOptions(tao));
   PetscCall(TaoSolve(tao));
@@ -146,7 +177,6 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&b));
   PetscCall(MatDestroy(&W));
   PetscCall(MatDestroy(&A));
-  PetscCall(PetscRandomDestroy(&rand));
   PetscCall(TaoDestroy(&tao));
   PetscCall(PetscFinalize());
   return 0;
@@ -161,35 +191,37 @@ int main(int argc, char **argv)
     suffix: 0
     args: -tao_monitor -tao_view -lasso_tao_term_l1_epsilon 0.1 -tao_type nls -check_l1_eps 1
 
-  test:
-    suffix: 1
-    args: -tao_type nls -lasso_tao_term_hessian_mat_type aij -tao_view ::ascii_info_detail
+  testset:
+    args: -tao_type nls -tao_view ::ascii_info_detail -lasso_tao_term_l1_epsilon 0.1
 
-  test:
-    suffix: sum_hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail -tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: 1
+      args: -lasso_tao_term_hessian_mat_type aij
 
-  test:
-    suffix: data_hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail -data_tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: sum_hpre_is_not_h
+      args: -tao_term_hessian_pre_is_hessian 0
 
-  test:
-    suffix: ridge_hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail -ridge_tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: data_hpre_is_not_h
+      args: -data_tao_term_hessian_pre_is_hessian 0
 
-  test:
-    suffix: lasso_hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail -lasso_tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: ridge_hpre_is_not_h
+      args: -ridge_tao_term_hessian_pre_is_hessian 0
 
-  test:
-    suffix: hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail -lasso_tao_term_hessian_pre_is_hessian 0
-    args: -ridge_tao_term_hessian_pre_is_hessian 0 -data_tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: lasso_hpre_is_not_h
+      args: -lasso_tao_term_hessian_pre_is_hessian 0
 
-  test:
-    suffix: data_ridge_hpre_is_not_h
-    args: -tao_type nls -tao_view ::ascii_info_detail
-    args: -ridge_tao_term_hessian_pre_is_hessian 0 -data_tao_term_hessian_pre_is_hessian 0
+    test:
+      suffix: hpre_is_not_h
+      args: -lasso_tao_term_hessian_pre_is_hessian 0
+      args: -ridge_tao_term_hessian_pre_is_hessian 0 -data_tao_term_hessian_pre_is_hessian 0
+
+    test:
+      suffix: data_ridge_hpre_is_not_h
+      args: -ridge_tao_term_hessian_pre_is_hessian 0 -data_tao_term_hessian_pre_is_hessian 0
 
   test:
     suffix: no_prefix

@@ -1,20 +1,14 @@
-  0 TAO,  Function value: 153.545,  Residual: 132.41 
-  1 TAO,  Function value: 19.5801,  Residual: 1.83082 
-  2 TAO,  Function value: 19.5516,  Residual: 0.0449057 
-  3 TAO,  Function value: 19.5515,  Residual: 0.00639275 
-  4 TAO,  Function value: 19.5515,  Residual: 0.000967751 
-  5 TAO,  Function value: 19.5515,  Residual: 0.000147493 
-  6 TAO,  Function value: 19.5515,  Residual: 2.25016e-05 
-  7 TAO,  Function value: 19.5515,  Residual: 3.43352e-06 
-  8 TAO,  Function value: 19.5515,  Residual: 5.23945e-07 
-  9 TAO,  Function value: 19.5515,  Residual: 7.99536e-08 
+  0 TAO,  Function value: 28.8635,  Residual: 32.3211
+  1 TAO,  Function value: 7.05568,  Residual: 0.550118
+  2 TAO,  Function value: 7.05506,  Residual: 0.418073
+  3 TAO,  Function value: 7.05506,  Residual: 0.341952
 Tao Object: 1 MPI process
   type: nls
-    Newton steps: 9
+    Newton steps: 4
     BFGS steps: 0
-    Gradient steps: 0
+    Gradient steps: 1
     nls ksp atol: 0
-    nls ksp rtol: 9
+    nls ksp rtol: 4
     nls ksp ctol: 0
     nls ksp negc: 0
     nls ksp dtol: 0
@@ -44,8 +38,8 @@ Tao Object: 1 MPI process
                       type: seq
                       length=100
                 total number of function evaluations=5
-                total number of function/gradient evaluations=10
-                total number of Hessian evaluations=9
+                total number of function/gradient evaluations=66
+                total number of Hessian evaluations=4
             Map:
               Mat Object: (Amat_) 1 MPI process
                 type: seqdense
@@ -60,8 +54,8 @@ Tao Object: 1 MPI process
                 solution vector space: N = 20 [VecType standard (tao_term_solution_vec_type)]
                 parameter vector space: (optional) K = 20 [VecType standard (tao_term_parameters_vec_type)]
                 Hessian MatType (tao_term_hessian_mat_type): diagonal
-                total number of gradient evaluations=10
-                total number of Hessian evaluations=9
+                total number of gradient evaluations=66
+                total number of Hessian evaluations=4
             Map: unmapped
             Mask (tao_term_sum_ridge_mask): objective
           Summand 2:
@@ -73,8 +67,8 @@ Tao Object: 1 MPI process
                 parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
                 Hessian MatType (tao_term_hessian_mat_type): diagonal
                 epsilon (tao_term_l1_epsilon): 0.1
-                total number of function evaluations=15
-                total number of Hessian evaluations=9
+                total number of function evaluations=71
+                total number of Hessian evaluations=4
             Map:
               Mat Object: (Dmat_) 1 MPI process
                 type: seqdense
@@ -83,8 +77,8 @@ Tao Object: 1 MPI process
                 total number of mallocs used during MatSetValues calls=0
             Mask (tao_term_sum_lasso_mask): gradient
         total number of function evaluations=5
-        total number of function/gradient evaluations=10
-        total number of Hessian evaluations=9
+        total number of function/gradient evaluations=66
+        total number of Hessian evaluations=4
     Map: unmapped
   TaoLineSearch Object: 1 MPI process
     type: more-thuente
@@ -92,8 +86,8 @@ Tao Object: 1 MPI process
     tolerances: ftol=0.0001, rtol=1e-10, gtol=0.9
     total number of function evaluations=0
     total number of gradient evaluations=0
-    total number of function/gradient evaluations=1
-    Termination reason: SUCCESS
+    total number of function/gradient evaluations=30
+    Termination reason: HALTED_OTHER
   KSP Object: (tao_nls_) 1 MPI process
     type: stcg
     maximum iterations=10000, initial guess is zero
@@ -121,12 +115,12 @@ Tao Object: 1 MPI process
       total: nonzeros=400, allocated nonzeros=400
       total number of mallocs used during MatSetValues calls=0
         using I-node routines: found 4 nodes, limit used is 5
-  total KSP iterations: 9
+  total KSP iterations: 4
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=7.99536e-08
-  Objective value=19.5515
-  total number of iterations=9,                          (max: 50)
+  Residual in Function/Gradient:=0.341952
+  Objective value=7.05506
+  total number of iterations=4,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
-  total number of function/gradient evaluations=10,      (max: unlimited)
-  total number of Hessian evaluations=9
-  Solution converged:    ||g(X)||/|f(X)| <= grtol
+  total number of function/gradient evaluations=66,      (max: unlimited)
+  total number of Hessian evaluations=4
+  Solver failed:    Line Search Failure
