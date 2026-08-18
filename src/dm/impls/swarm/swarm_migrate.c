@@ -242,7 +242,7 @@ static PetscErrorCode DMSwarmMigrate_LocatePointsDevice_Private(DM dm, DM dmcell
       PetscCall(DMPlexGetLocationCache_Internal(dmcell, &cache));
       if (!cache->unavailable) ok = 1;
       else PetscCall(PetscInfo(dm, "DMSwarmMigrate: using host point location, the cell DM cannot use the location cache\n"));
-    }
+    } else PetscCall(PetscInfo(dm, "DMSwarmMigrate: using host point location, the cell DM is not a DMPlex with a single coordinate field\n"));
     /* The host location path performs collective operations, so every rank must take the same branch */
     PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &ok, 1, MPIU_INT, MPI_MIN, PetscObjectComm((PetscObject)dm)));
     if (ok) {
