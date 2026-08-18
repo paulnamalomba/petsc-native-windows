@@ -375,6 +375,7 @@ static PetscErrorCode CheckReferenceTermType(TaoTerm term)
 
   test:
     suffix: shell_mapped
+    nsize: {{1 3}separate output}
     args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -t_tao_term_hessian_mat_type shell
 
   test:
@@ -385,12 +386,14 @@ static PetscErrorCode CheckReferenceTermType(TaoTerm term)
 
   test:
     suffix: shell_mapped_separate_hpre
+    nsize: {{1 3}separate output}
     args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A
     args: -t_tao_term_hessian_mat_type shell -t_tao_term_hessian_pre_is_hessian false
     args: -t_tao_term_hessian_pre_mat_type aij
 
   test:
     suffix: masked_hessian
+    nsize: {{1 3}separate output}
     args: -t_tao_type nls -use_term1 -reg1_tao_term_type halfl2squared -t_tao_term_sum_reg1_mask hessian
 
   test:
@@ -431,6 +434,7 @@ static PetscErrorCode CheckReferenceTermType(TaoTerm term)
 
   test:
     suffix: promoted_shell_mapped_fallback
+    nsize: {{1 3}separate output}
     args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A
     args: -term1_hessian_mult false -t_tao_term_sum_t_callbacks_mask objective,gradient,hessian
     args: -t_tao_term_hessian_mat_type shell

@@ -28,7 +28,7 @@ Tao Object: (shell_) 1 MPI process
                 parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian,
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
                 total number of function/gradient evaluations=8
                 total number of Hessian evaluations=2
             Map:
@@ -47,7 +47,7 @@ Tao Object: (shell_) 1 MPI process
                 parameter vector space: (optional) K = 12 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian,
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
                 total number of function/gradient evaluations=8
                 total number of Hessian evaluations=2
             Map:
@@ -106,5 +106,4 @@ Tao Object: (shell_) 1 MPI process
   total number of Hessian evaluations=2
   Solution converged:    ||g(X)|| <= gatol
 Reference callback comparison passed
-Shared Hessian cache check passed
 Least-squares TaoTerm operator check passed

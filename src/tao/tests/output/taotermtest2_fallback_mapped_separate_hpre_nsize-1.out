@@ -1,4 +1,4 @@
-Tao Object: (t_) 1 MPI process
+Tao Object: (shell_) 1 MPI process
   type: nls
     Newton steps: 2
     BFGS steps: 0
@@ -13,44 +13,51 @@ Tao Object: (t_) 1 MPI process
   Objective function:
     Scale (tao_objective_scale): 1.
     Function:
-      TaoTerm Object: (t_) 1 MPI process
+      TaoTerm Object: (shell_) 1 MPI process
         type: sum
-        solution vector space: N = 10 [VecType seq (tao_term_solution_vec_type)]
-        parameter vector space: (optional) K = 9 [VecType nest (tao_term_parameters_vec_type)]
+        solution vector space: N = 10 [VecType standard (tao_term_solution_vec_type)]
+        parameter vector space: (optional) K = 22 [VecType nest (tao_term_parameters_vec_type)]
         Hessian MatType (tao_term_hessian_mat_type): shell
         Hessian preconditioning MatType (tao_term_hessian_pre_mat_type): aij
         Sum of 2 terms:
           Summand 0:
-            Scale (tao_term_sum_t_callbacks_scale): 1.
+            Scale (tao_term_sum_data_scale): 1.
             Term:
-              TaoTerm Object: (t_callbacks_) 1 MPI process
-                type: callbacks
-                solution vector space: N = 10 [VecType seq (tao_term_solution_vec_type)]
-                parameter vector space: (none)
-                Hessian MatType (tao_term_hessian_mat_type): seqaij
-                attached to Tao [name omitted] (t_)
-                The following methods have been set: objectiveandgradient, hessian,
-                total number of function/gradient evaluations=8
-                total number of Hessian evaluations=2
-            Map: unmapped
-          Summand 1:
-            Scale (tao_term_sum_reg1_scale): 0.1
-            Term:
-              TaoTerm Object: (reg1_) 1 MPI process
+              TaoTerm Object: (data_) 1 MPI process
                 type: shell
-                solution vector space: N = 9 [VecType standard (tao_term_solution_vec_type)]
-                parameter vector space: (optional) K = 9 [VecType standard (tao_term_parameters_vec_type)]
+                solution vector space: N = 10 [VecType standard (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
+                default Hessian preconditioning MatType (tao_term_hessian_pre_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian, hessianmult,
+                The following methods have been set: objectiveandgradient, hessian
                 total number of function/gradient evaluations=8
                 total number of Hessian evaluations=2
-                total number of HessianMult evaluations=9
             Map:
-              Mat Object: (A1_) 1 MPI process
+              Mat Object: 1 MPI process
                 type: seqaij
-                rows=9, cols=10
-                total: nonzeros=36, allocated nonzeros=45
+                rows=10, cols=10
+                total: nonzeros=20, allocated nonzeros=20
+                total number of mallocs used during MatSetValues calls=0
+                  not using I-node routines
+          Summand 1:
+            Scale (tao_term_sum_extra_scale): 0.25
+            Term:
+              TaoTerm Object: (extra_) 1 MPI process
+                type: shell
+                solution vector space: N = 12 [VecType standard (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 12 [VecType standard (tao_term_parameters_vec_type)]
+                default Hessian MatType (tao_term_hessian_mat_type): aij
+                default Hessian preconditioning MatType (tao_term_hessian_pre_mat_type): aij
+                Context has been set
+                The following methods have been set: objectiveandgradient, hessian
+                total number of function/gradient evaluations=8
+                total number of Hessian evaluations=2
+            Map:
+              Mat Object: 1 MPI process
+                type: seqaij
+                rows=12, cols=10
+                total: nonzeros=24, allocated nonzeros=24
                 total number of mallocs used during MatSetValues calls=0
                   not using I-node routines
         total number of function evaluations=5
@@ -58,7 +65,7 @@ Tao Object: (t_) 1 MPI process
         total number of Hessian evaluations=2
         total number of HessianMult evaluations=9
     Map: unmapped
-  TaoLineSearch Object: (t_) 1 MPI process
+  TaoLineSearch Object: (shell_) 1 MPI process
     type: more-thuente
     maximum function evaluations=30
     tolerances: ftol=0.0001, rtol=1e-10, gtol=0.9
@@ -66,13 +73,13 @@ Tao Object: (t_) 1 MPI process
     total number of gradient evaluations=0
     total number of function/gradient evaluations=1
     Termination reason: SUCCESS
-  KSP Object: (t_tao_nls_) 1 MPI process
+  KSP Object: (shell_tao_nls_) 1 MPI process
     type: stcg
     maximum iterations=10000, initial guess is zero
     tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
     left preconditioning
     using UNPRECONDITIONED norm type for convergence test
-  PC Object: (t_tao_nls_) 1 MPI process
+  PC Object: (shell_tao_nls_) 1 MPI process
     type: ilu
       out-of-place factorization
       0 levels of fill
@@ -80,11 +87,11 @@ Tao Object: (t_) 1 MPI process
       matrix ordering: natural
       factor fill ratio given 1., needed 1.
         Factored matrix:
-          Mat Object: (t_tao_nls_) 1 MPI process
+          Mat Object: (shell_tao_nls_) 1 MPI process
             type: seqaij
             rows=10, cols=10
             package used to perform factorization: petsc
-            total: nonzeros=68, allocated nonzeros=68
+            total: nonzeros=30, allocated nonzeros=30
               not using I-node routines
     linear system matrix, followed by the matrix used to construct the preconditioner:
     Mat Object: 1 MPI process
@@ -93,16 +100,17 @@ Tao Object: (t_) 1 MPI process
     Mat Object: 1 MPI process
       type: seqaij
       rows=10, cols=10
-      total: nonzeros=68, allocated nonzeros=68
+      total: nonzeros=30, allocated nonzeros=30
       total number of mallocs used during MatSetValues calls=0
         not using I-node routines
   total KSP iterations: 4
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=1.55528e-12
-  Objective value=1.71232
+  Residual in Function/Gradient:=2.46074e-10
+  Objective value=1.55704
   total number of iterations=2,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of function/gradient evaluations=3,      (max: unlimited)
   total number of Hessian evaluations=2
   Solution converged:    ||g(X)|| <= gatol
 Reference callback comparison passed
+Least-squares TaoTerm operator check passed

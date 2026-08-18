@@ -16,8 +16,8 @@ Tao Object: (shell_) 1 MPI process
       TaoTerm Object: (shell_) 1 MPI process
         type: sum
         solution vector space: N = 10 [VecType standard (tao_term_solution_vec_type)]
-        parameter vector space: (optional) K = 20 [VecType nest (tao_term_parameters_vec_type)]
-        Hessian MatType (tao_term_hessian_mat_type): aij
+        parameter vector space: (optional) K = 22 [VecType nest (tao_term_parameters_vec_type)]
+        Hessian MatType (tao_term_hessian_mat_type): shell
         Sum of 2 terms:
           Summand 0:
             Scale (tao_term_sum_data_scale): 1.
@@ -28,9 +28,9 @@ Tao Object: (shell_) 1 MPI process
                 parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian, hessianmult,
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
                 total number of function/gradient evaluations=8
-                total number of Hessian evaluations=2
+                total number of HessianMult evaluations=18
             Map:
               Mat Object: 1 MPI process
                 type: seqaij
@@ -43,17 +43,24 @@ Tao Object: (shell_) 1 MPI process
             Term:
               TaoTerm Object: (extra_) 1 MPI process
                 type: shell
-                solution vector space: N = 10 [VecType standard (tao_term_solution_vec_type)]
-                parameter vector space: (optional) K = 10 [VecType standard (tao_term_parameters_vec_type)]
+                solution vector space: N = 12 [VecType standard (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 12 [VecType standard (tao_term_parameters_vec_type)]
                 default Hessian MatType (tao_term_hessian_mat_type): aij
                 Context has been set
-                The following methods have been set: objectiveandgradient, hessian, hessianmult,
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
                 total number of function/gradient evaluations=8
-                total number of Hessian evaluations=2
-            Map: unmapped
+                total number of HessianMult evaluations=18
+            Map:
+              Mat Object: 1 MPI process
+                type: seqaij
+                rows=12, cols=10
+                total: nonzeros=24, allocated nonzeros=24
+                total number of mallocs used during MatSetValues calls=0
+                  not using I-node routines
         total number of function evaluations=5
         total number of function/gradient evaluations=3
         total number of Hessian evaluations=2
+        total number of HessianMult evaluations=18
     Map: unmapped
   TaoLineSearch Object: (shell_) 1 MPI process
     type: more-thuente
@@ -70,30 +77,15 @@ Tao Object: (shell_) 1 MPI process
     left preconditioning
     using UNPRECONDITIONED norm type for convergence test
   PC Object: (shell_tao_nls_) 1 MPI process
-    type: ilu
-      out-of-place factorization
-      0 levels of fill
-      tolerance for zero pivot 2.22045e-14
-      matrix ordering: natural
-      factor fill ratio given 1., needed 1.
-        Factored matrix:
-          Mat Object: (shell_tao_nls_) 1 MPI process
-            type: seqaij
-            rows=10, cols=10
-            package used to perform factorization: petsc
-            total: nonzeros=30, allocated nonzeros=30
-              not using I-node routines
+    type: none
     linear system matrix, which is also used to construct the preconditioner:
     Mat Object: 1 MPI process
-      type: seqaij
+      type: shell
       rows=10, cols=10
-      total: nonzeros=30, allocated nonzeros=30
-      total number of mallocs used during MatSetValues calls=0
-        not using I-node routines
-  total KSP iterations: 4
+  total KSP iterations: 13
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=4.58848e-12
-  Objective value=1.77172
+  Residual in Function/Gradient:=5.15723e-11
+  Objective value=1.55704
   total number of iterations=2,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
   total number of function/gradient evaluations=3,      (max: unlimited)

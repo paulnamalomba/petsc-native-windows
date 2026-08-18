@@ -411,6 +411,7 @@ static PetscErrorCode CheckOperator(Tao tao, Vec x, ExampleTerm terms[], PetscIn
 
     test:
       suffix: two_mapped_assembled
+      nsize: {{1 3}separate output}
       args: -second_term -shell_tao_type nls
 
     test:
@@ -431,17 +432,20 @@ static PetscErrorCode CheckOperator(Tao tao, Vec x, ExampleTerm terms[], PetscIn
 
     test:
       suffix: fallback_mapped_separate_hpre
+      nsize: {{1 3}separate output}
       args: -second_term -provide_hessian_mult false -split_hpre -shell_tao_type nls
       args: -shell_tao_term_hessian_mat_type shell -shell_tao_term_hessian_pre_is_hessian false
       args: -shell_tao_term_hessian_pre_mat_type aij
 
     test:
       suffix: sum_hessian_mult
+      nsize: {{1 3}separate output}
       args: -second_term -check_hessian_mult -shell_tao_type nls
       args: -shell_tao_term_hessian_mat_type shell
 
     test:
       suffix: shared_hessian_cache
+      nsize: {{1 3}separate output}
       args: -second_term -provide_hessian_mult false -check_hessian_cache -shell_tao_type nls
 
     test:
@@ -465,6 +469,7 @@ static PetscErrorCode CheckOperator(Tao tao, Vec x, ExampleTerm terms[], PetscIn
 
   test:
     suffix: asymmetric_map_assembled
+    nsize: {{1 3}separate output}
     args: -second_term -data_use_map true -extra_use_map false -shell_tao_type nls
 
   test:
@@ -475,6 +480,7 @@ static PetscErrorCode CheckOperator(Tao tao, Vec x, ExampleTerm terms[], PetscIn
 
   test:
     suffix: sum_fd_mapped
+    nsize: {{1 3}separate output}
     args: -second_term -shell_tao_type nls -shell_tao_fd_hessian
 
   test:
