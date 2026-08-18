@@ -1018,7 +1018,7 @@ static PetscErrorCode DMPlexClosestPoint_Internal(DM dm, PetscInt dim, const Pet
 
 .seealso: `DMPLEX`, `PetscGridHashCreate()`, `PetscGridHashGetEnclosingBox()`
 */
-static PetscErrorCode DMPlexComputeGridHash_Internal(DM dm, PetscGridHash *localBox)
+PetscErrorCode DMPlexComputeGridHash_Internal(DM dm, PetscGridHash *localBox)
 {
   PetscInt        debug = ((DM_Plex *)dm->data)->printLocate;
   PetscGridHash   lbox;
@@ -1314,6 +1314,8 @@ PetscErrorCode DMLocatePoints_Plex(DM dm, Vec v, DMPointLocationType ltype, Pets
   // We ignore extra coordinates
   PetscCheck(bs >= cdim, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONG, "Block size for point vector %" PetscInt_FMT " must be the mesh coordinate dimension %" PetscInt_FMT, bs, cdim);
   PetscCall(DMGetCoordinatesLocalSetUp(dm));
+  /* Drop the grid hash and location cache if the coordinates changed since they were built */
+  PetscCall(DMPlexInvalidateStaleLocationCache_Internal(dm));
   PetscCall(DMPlexGetSimplexOrBoxCells(dm, 0, &cStart, &cEnd));
   PetscCall(DMGetPointSF(dm, &sf));
   if (sf) PetscCall(PetscSFGetGraph(sf, NULL, &Nl, &leaves, NULL));

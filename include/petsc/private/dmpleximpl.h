@@ -91,6 +91,48 @@ struct _n_PetscGridHash {
   DMLabel      cellsSparse; /* Sparse storage for cell map */
 };
 
+/*
+  Flattened point-location geometry cache. Host-built from the same objects the host point
+  location uses (DMPlexComputeCellGeometryFEM(), DMPlexGetCellCoordinates(), DMGetBoundingBox(),
+  DMPlexComputeGridHash_Internal()); the flat arrays are uploaded to the device on first request
+  so that location kernels can consume them without traversing PETSc objects. Device mirrors are
+  stored as void * so this header stays free of device types in host-only builds. The cache is
+  invalidated together with DM_Plex->lbox whenever the coordinates change, see
+  DMPlexInvalidateStaleLocationCache_Internal().
+*/
+typedef struct _n_DMPlexLocationCache *DMPlexLocationCache;
+struct _n_DMPlexLocationCache {
+  PetscBool      unavailable;      /* Configuration unsupported (high-order coordinates, cdim != dim, unsupported cell type, complex scalars): callers must use the host location path */
+  PetscInt       generation;       /* Incremented on every rebuild, so callers can detect a rebuild */
+  PetscInt       dim, cdim;        /* Topological and coordinate dimension */
+  PetscInt       cStart, cEnd;     /* Covered cell range (height-0 simplex-or-box cells), matching DMLocatePoints_Plex() */
+  PetscBool      uniform;          /* All cells have the same polytope type */
+  DMPolytopeType uniformCt;        /* The cell type when uniform */
+  PetscInt      *celltype;         /* [cEnd-cStart] DMPolytopeType per cell, or NULL when uniform */
+  PetscReal     *v0;               /* [(cEnd-cStart) * cdim] affine origin per simplex cell (segment/tri/tet), or NULL if no simplex cells */
+  PetscReal     *invJ;             /* [(cEnd-cStart) * cdim * cdim] affine inverse Jacobian per simplex cell, or NULL if no simplex cells */
+  PetscInt       maxCorners;       /* Vertices per cell slot in cellCoords */
+  PetscReal     *cellCoords;       /* [(cEnd-cStart) * maxCorners * cdim] closure-order vertex coordinates per tensor cell (quad/hex), or NULL if no tensor cells */
+  PetscBool     *leafCell;         /* [cEnd-cStart] PETSC_TRUE when the cell is a point SF leaf, which the host brute-force scan skips, or NULL when no cell is a leaf */
+  PetscReal      gmin[3], gmax[3]; /* Global bounding box from DMGetBoundingBox() */
+  PetscReal      lower[3], h[3];   /* Grid hash origin and subbox size */
+  PetscReal      upper[3];         /* Grid hash upper bounds, needed verbatim for the host's 1e-9 upper-boundary snap */
+  PetscInt       n[3];             /* Grid hash subbox counts */
+  PetscInt       binStart, binEnd; /* Chart of the grid hash cell section */
+  PetscInt      *binOffset;        /* [binEnd-binStart+1] CSR offsets into boxCells, flattened from the grid hash PetscSection */
+  PetscInt      *boxCells;         /* [binOffset[binEnd-binStart]] candidate cells per bin, flattened from the grid hash IS */
+  /* Device mirrors of the arrays above, allocated by the first DMPlexGetLocationCacheDevice_Internal() */
+  PetscBool onDevice; /* Device mirrors are allocated and valid */
+  void     *celltype_d;
+  void     *v0_d;
+  void     *invJ_d;
+  void     *cellCoords_d;
+  void     *leafCell_d;
+  void     *binOffset_d;
+  void     *boxCells_d;
+  PetscErrorCode (*freedevice)(DMPlexLocationCache); /* Set alongside the device mirrors so DMPlexLocationCacheDestroy_Internal() can free them without referencing device symbols */
+};
+
 typedef struct {
   PetscBool isotropic;               /* Is the metric isotropic? */
   PetscBool uniform;                 /* Is the metric uniform? */
@@ -228,10 +270,14 @@ typedef struct {
   PetscReal scale[NUM_PETSC_UNITS]; /* The scale for each SI unit */
 
   /* Geometry */
-  PetscReal     minradius;       /* Minimum distance from cell centroid to face */
-  PetscBool     useHashLocation; /* Use grid hashing for point location */
-  PetscGridHash lbox;            /* Local box for searching */
-  PetscPointFn *coordFunc;       /* Function used to remap newly introduced vertices */
+  PetscReal           minradius;       /* Minimum distance from cell centroid to face */
+  PetscBool           useHashLocation; /* Use grid hashing for point location */
+  PetscGridHash       lbox;            /* Local box for searching */
+  DMPlexLocationCache loccache;        /* Flattened point-location geometry, invalidated together with lbox */
+  PetscObjectId       coordId[2];      /* Id of the (local coordinates, local cell coordinates) Vecs when lbox/loccache were built */
+  PetscObjectState    coordState[2];   /* State of the (local coordinates, local cell coordinates) Vecs when lbox/loccache were built */
+  PetscInt            loccachegen;     /* Build count for loccache */
+  PetscPointFn       *coordFunc;       /* Function used to remap newly introduced vertices */
 
   /* Neighbors */
   PetscMPIInt *neighbors;
@@ -351,6 +397,15 @@ PETSC_INTERN PetscErrorCode DMPlexAnchorsModifyMat(DM, PetscSection, PetscInt, P
 PETSC_INTERN PetscErrorCode DMPlexAnchorsModifyMat_Internal(DM, PetscSection, PetscInt, PetscInt, const PetscInt[], const PetscInt ***, PetscInt, PetscInt, const PetscScalar[], PetscInt *, PetscInt *, PetscInt *[], PetscScalar *[], PetscInt[], PetscBool, PetscBool);
 PETSC_INTERN PetscErrorCode DMPlexAnchorsGetSubMatModification(DM, PetscSection, PetscInt, PetscInt, const PetscInt[], const PetscInt ***, PetscInt *, PetscInt *, PetscInt *[], PetscInt[], PetscScalar *[]);
 PETSC_INTERN PetscErrorCode DMPlexLocatePoint_Internal(DM, PetscInt, const PetscScalar[], PetscInt, PetscInt *);
+PETSC_INTERN PetscErrorCode DMPlexComputeGridHash_Internal(DM, PetscGridHash *);
+PETSC_INTERN PetscErrorCode DMPlexInvalidateStaleLocationCache_Internal(DM);
+PETSC_INTERN PetscErrorCode DMPlexGetLocationCache_Internal(DM, DMPlexLocationCache *);
+PETSC_INTERN PetscErrorCode DMPlexGetLocationCacheDevice_Internal(DM, DMPlexLocationCache *);
+PETSC_INTERN PetscErrorCode DMPlexLocationCacheDestroy_Internal(DMPlexLocationCache *);
+/* Defined in src/dm/impls/plex/cupm/hip/; declared unconditionally, call only when PetscDefined(HAVE_HIP) */
+PETSC_INTERN PetscErrorCode DMPlexLocationCacheUpload_HIP(DMPlexLocationCache);
+PETSC_INTERN PetscErrorCode DMPlexLocationCacheFreeDevice_HIP(DMPlexLocationCache);
+PETSC_INTERN PetscErrorCode DMPlexLocatePointsInPlace_Internal_HIP(DM, PetscInt, PetscInt, const PetscReal[], PetscInt[]);
 /* this is PETSC_EXTERN just because of src/dm/impls/plex/tests/ex18.c */
 PETSC_EXTERN PetscErrorCode DMPlexOrientInterface_Internal(DM);
 PETSC_INTERN PetscErrorCode DMPlexOrientCells_Internal(DM, IS, IS);

@@ -100,7 +100,7 @@ struct _DMSwarmSortOps {
   PetscErrorCode (*create)(DMSwarmSort);
   PetscErrorCode (*destroy)(DMSwarmSort);
   PetscErrorCode (*setfromoptions)(PetscOptionItems *, DMSwarmSort);
-  PetscErrorCode (*setup)(DMSwarmSort);
+  PetscErrorCode (*setup)(DMSwarmSort, DM, PetscInt); /* (sort, swarm, ncells) builds the cell CSR; backend chosen in DMSwarmSortGetAccess() from the bucket memtype */
   PetscErrorCode (*view)(DMSwarmSort, PetscViewer);
 };
 
@@ -110,7 +110,17 @@ struct _p_DMSwarmSort {
   PetscInt    ncells, npoints;
   PetscInt   *pcell_offsets;
   SwarmPoint *list;
+  /* Device-resident CSR, built by the device setup op alongside the host arrays above (which
+     always hold a bitwise-identical mirror). The device arrays are valid only while isvalid is
+     PETSC_TRUE and memtype is a device memtype; they keep their allocation across rebuilds. */
+  PetscMemType memtype;             /* memory space the last setup ran in; PETSC_MEMTYPE_HOST for the host path */
+  PetscInt    *pcell_offsets_d;     /* [ncells+1] device mirror of pcell_offsets */
+  PetscInt    *list_d;              /* [npoints] sorted point indices, the device analog of list[].point_index */
+  PetscInt    *cell_index_d;        /* [npoints] ascending cell index per CSR slot, the device analog of list[].cell_index */
+  PetscInt     ncells_d, npoints_d; /* allocated sizes of the device arrays, -1 when unallocated */
 };
+
+PETSC_INTERN PetscErrorCode DMSwarmSortSetUpDevice_HIP(DMSwarmSort);
 
 PETSC_INTERN PetscErrorCode DMSwarmMigrate_Push_Basic(DM, PetscBool);
 PETSC_INTERN PetscErrorCode DMSwarmMigrate_CellDMScatter(DM, PetscBool);

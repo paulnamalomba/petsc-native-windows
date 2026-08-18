@@ -1,0 +1,105 @@
+field phi     blocksize 1 type real
+field vel     blocksize 2 type real
+field tag     blocksize 1 type int
+field payload blocksize 1 type struct
+field csum    blocksize 2 type user
+After initial fill: global size 7
+  [0] nlocal 3
+  [0]  0: phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [1] nlocal 4
+  [1]  0: phi  100.50 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  101.50 vel ( 101.10,  101.20) tag  -101 payload ( 203,  25.25) csum ( 1010,  1011)
+  [1]  2: phi  102.50 vel ( 102.10,  102.20) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  103.50 vel ( 103.10,  103.20) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+After DMSwarmAddPoint() + DMSwarmAddNPoints(2): global size 13
+  [0] nlocal 6
+  [0]  0: phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [0]  4: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [0]  5: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [1] nlocal 7
+  [1]  0: phi  100.50 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  101.50 vel ( 101.10,  101.20) tag  -101 payload ( 203,  25.25) csum ( 1010,  1011)
+  [1]  2: phi  102.50 vel ( 102.10,  102.20) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  103.50 vel ( 103.10,  103.20) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+  [1]  4: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [1]  5: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [1]  6: phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+After filling the added points: global size 13
+  [0] nlocal 6
+  [0]  0: phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: phi   50.50 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [0]  4: phi   51.50 vel (  51.10,   51.20) tag   -51 payload ( 103,  12.75) csum (  510,   511)
+  [0]  5: phi   52.50 vel (  52.10,   52.20) tag   -52 payload ( 105,  13.00) csum (  520,   521)
+  [1] nlocal 7
+  [1]  0: phi  100.50 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  101.50 vel ( 101.10,  101.20) tag  -101 payload ( 203,  25.25) csum ( 1010,  1011)
+  [1]  2: phi  102.50 vel ( 102.10,  102.20) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  103.50 vel ( 103.10,  103.20) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+  [1]  4: phi  150.50 vel ( 150.10,  150.20) tag  -150 payload ( 301,  37.50) csum ( 1500,  1501)
+  [1]  5: phi  151.50 vel ( 151.10,  151.20) tag  -151 payload ( 303,  37.75) csum ( 1510,  1511)
+  [1]  6: phi  152.50 vel ( 152.10,  152.20) tag  -152 payload ( 305,  38.00) csum ( 1520,  1521)
+After copy 0 -> last, remove index 1, remove last: global size 9
+  [0] nlocal 4
+  [0]  0: phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: phi   50.50 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [1] nlocal 5
+  [1]  0: phi  100.50 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  100.50 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  2: phi  102.50 vel ( 102.10,  102.20) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  103.50 vel ( 103.10,  103.20) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+  [1]  4: phi  150.50 vel ( 150.10,  150.20) tag  -150 payload ( 301,  37.50) csum ( 1500,  1501)
+Vec Object: DMSwarmSharedField_phi 2 MPI processes
+  type: mpi
+Process [0]
+0.5
+0.5
+2.5
+50.5
+Process [1]
+100.5
+100.5
+102.5
+103.5
+150.5
+After scaling phi by 2 through the global Vec: global size 9
+  [0] nlocal 4
+  [0]  0: phi    1.00 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.00 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: phi    5.00 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: phi  101.00 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [1] nlocal 5
+  [1]  0: phi  201.00 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  201.00 vel ( 100.10,  100.20) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  2: phi  205.00 vel ( 102.10,  102.20) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  207.00 vel ( 103.10,  103.20) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+  [1]  4: phi  301.00 vel ( 150.10,  150.20) tag  -150 payload ( 301,  37.50) csum ( 1500,  1501)
+  [0] ||vel||_1 105.20
+  [1] ||vel||_1 1111.50
+After scaling vel by 0.5 through the local Vec: global size 9
+  [0] nlocal 4
+  [0]  0: phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: phi    5.00 vel (   1.05,    1.10) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: phi  101.00 vel (  25.05,   25.10) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [1] nlocal 5
+  [1]  0: phi  201.00 vel (  50.05,   50.10) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  201.00 vel (  50.05,   50.10) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  2: phi  205.00 vel (  51.05,   51.10) tag  -102 payload ( 205,  25.50) csum ( 1020,  1021)
+  [1]  3: phi  207.00 vel (  51.55,   51.60) tag  -103 payload ( 207,  25.75) csum ( 1030,  1031)
+  [1]  4: phi  301.00 vel (  75.05,   75.10) tag  -150 payload ( 301,  37.50) csum ( 1500,  1501)
+After shrinking to 2 local points: global size 4
+  [0] nlocal 2
+  [0]  0: phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [1] nlocal 2
+  [1]  0: phi  201.00 vel (  50.05,   50.10) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)
+  [1]  1: phi  201.00 vel (  50.05,   50.10) tag  -100 payload ( 201,  25.00) csum ( 1000,  1001)

@@ -1,6 +1,7 @@
 #include <petscdmda.h>                 /*I  "petscdmda.h"      I*/
 #include <petscdmplex.h>               /*I  "petscdmplex.h"    I*/
 #include <petsc/private/dmswarmimpl.h> /*I  "petscdmswarm.h"   I*/
+#include "data_bucket.h"
 
 PetscClassId DMSWARMSORT_CLASSID;
 
@@ -14,6 +15,11 @@ static int sort_CompareSwarmPoint(const void *dataA, const void *dataB)
   } else if (pointA->cell_index > pointB->cell_index) {
     return 1;
   } else {
+    /* Tie-break on the point index so the ordering is a total order: within a cell, points
+       appear in ascending point index independent of the qsort() algorithm. This keeps the
+       host CSR deterministic and bitwise identical to the stable device sort. */
+    if (pointA->point_index < pointB->point_index) return -1;
+    if (pointA->point_index > pointB->point_index) return 1;
     return 0;
   }
 }
@@ -25,51 +31,15 @@ static PetscErrorCode DMSwarmSortApplyCellIndexSort(DMSwarmSort ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMSwarmSortCreate(DMSwarmSort *sort)
-{
-  DMSwarmSort s;
-
-  PetscFunctionBegin;
-  PetscCall(DMInitializePackage());
-  PetscCall(PetscHeaderCreate(s, DMSWARMSORT_CLASSID, "DMSwarmSort", "Sort context for a DMSwarm", "DM", PETSC_COMM_SELF, DMSwarmSortDestroy, DMSwarmSortView));
-  PetscCall(PetscObjectSetName((PetscObject)s, "Sort"));
-  s->isvalid = PETSC_FALSE;
-  s->ncells  = 0;
-  s->npoints = 0;
-  PetscCall(PetscMalloc1(1, &s->pcell_offsets));
-  PetscCall(PetscMalloc1(1, &s->list));
-  *sort = s;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode DMSwarmSortSetup(DMSwarmSort ctx, DM dm, PetscInt ncells)
+/* Host build of the cell CSR: the ops->setup implementation for host-memtype buckets */
+static PetscErrorCode DMSwarmSortSetup_Host(DMSwarmSort ctx, DM dm, PetscInt ncells)
 {
   DMSwarmCellDM celldm;
   PetscInt     *swarm_cellid;
-  PetscInt      npoints;
   PetscInt      tmp, c, count;
   const char   *cellid;
 
   PetscFunctionBegin;
-  if (!ctx) PetscFunctionReturn(PETSC_SUCCESS);
-  if (ctx->isvalid) PetscFunctionReturn(PETSC_SUCCESS);
-
-  PetscCall(PetscLogEventBegin(DMSWARM_Sort, 0, 0, 0, 0));
-  /* check the number of cells */
-  if (ncells != ctx->ncells) {
-    PetscCall(PetscRealloc(sizeof(PetscInt) * (ncells + 1), &ctx->pcell_offsets));
-    ctx->ncells = ncells;
-  }
-  PetscCall(PetscArrayzero(ctx->pcell_offsets, ctx->ncells + 1));
-
-  /* get the number of points */
-  PetscCall(DMSwarmGetLocalSize(dm, &npoints));
-  if (npoints != ctx->npoints) {
-    PetscCall(PetscRealloc(sizeof(SwarmPoint) * npoints, &ctx->list));
-    ctx->npoints = npoints;
-  }
-  PetscCall(PetscArrayzero(ctx->list, npoints));
-
   PetscCall(DMSwarmGetCellDMActive(dm, &celldm));
   PetscCall(DMSwarmCellDMGetCellID(celldm, &cellid));
   PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&swarm_cellid));
@@ -92,6 +62,60 @@ static PetscErrorCode DMSwarmSortSetup(DMSwarmSort ctx, DM dm, PetscInt ncells)
     count                 = count + tmp;
   }
   ctx->pcell_offsets[c] = count;
+  ctx->memtype          = PETSC_MEMTYPE_HOST;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmSortCreate(DMSwarmSort *sort)
+{
+  DMSwarmSort s;
+
+  PetscFunctionBegin;
+  PetscCall(DMInitializePackage());
+  PetscCall(PetscHeaderCreate(s, DMSWARMSORT_CLASSID, "DMSwarmSort", "Sort context for a DMSwarm", "DM", PETSC_COMM_SELF, DMSwarmSortDestroy, DMSwarmSortView));
+  PetscCall(PetscObjectSetName((PetscObject)s, "Sort"));
+  s->isvalid = PETSC_FALSE;
+  s->ncells  = 0;
+  s->npoints = 0;
+  PetscCall(PetscMalloc1(1, &s->pcell_offsets));
+  PetscCall(PetscMalloc1(1, &s->list));
+  s->ops->setup      = DMSwarmSortSetup_Host;
+  s->memtype         = PETSC_MEMTYPE_HOST;
+  s->pcell_offsets_d = NULL;
+  s->list_d          = NULL;
+  s->cell_index_d    = NULL;
+  s->ncells_d        = -1;
+  s->npoints_d       = -1;
+  *sort              = s;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmSortSetup(DMSwarmSort ctx, DM dm, PetscInt ncells)
+{
+  PetscInt npoints;
+
+  PetscFunctionBegin;
+  if (!ctx) PetscFunctionReturn(PETSC_SUCCESS);
+  if (ctx->isvalid) PetscFunctionReturn(PETSC_SUCCESS);
+
+  PetscCall(PetscLogEventBegin(DMSWARM_Sort, 0, 0, 0, 0));
+  /* size the host CSR arrays; the device setup op mirrors its result into them as well */
+  /* check the number of cells */
+  if (ncells != ctx->ncells) {
+    PetscCall(PetscRealloc(sizeof(PetscInt) * (ncells + 1), &ctx->pcell_offsets));
+    ctx->ncells = ncells;
+  }
+  PetscCall(PetscArrayzero(ctx->pcell_offsets, ctx->ncells + 1));
+
+  /* get the number of points */
+  PetscCall(DMSwarmGetLocalSize(dm, &npoints));
+  if (npoints != ctx->npoints) {
+    PetscCall(PetscRealloc(sizeof(SwarmPoint) * npoints, &ctx->list));
+    ctx->npoints = npoints;
+  }
+  PetscCall(PetscArrayzero(ctx->list, npoints));
+
+  PetscUseTypeMethod(ctx, setup, dm, ncells);
 
   ctx->isvalid = PETSC_TRUE;
   PetscCall(PetscLogEventEnd(DMSWARM_Sort, 0, 0, 0, 0));
@@ -301,6 +325,7 @@ PetscErrorCode DMSwarmSortGetAccess(DM sw)
   DM            dm;
   DMSwarmCellDM celldm;
   DMSwarmSort   ctx;
+  DM_Swarm     *swarm  = (DM_Swarm *)sw->data;
   PetscInt      ncells = 0;
   PetscBool     isda, isplex, isshell;
 
@@ -313,6 +338,11 @@ PetscErrorCode DMSwarmSortGetAccess(DM sw)
     PetscCall(DMSwarmSortDestroy(&ctx));
     PetscCall(DMSwarmCellDMGetSort(celldm, &ctx));
   }
+  /* Backend dispatch: a device-memtype bucket gets the device setup/destroy ops installed here,
+     the one place where the sort context meets the swarm (same precedent as the bucket ops
+     table, which is installed from DMSwarmSetBackend()). PetscDefined() keeps the branch
+     compiled out of non-HIP builds. */
+  if (PetscDefined(HAVE_HIP) && PetscMemTypeHIP(swarm->db->memtype)) PetscCall(DMSwarmSortSetUpDevice_HIP(ctx));
 
   /* get the number of cells */
   PetscCall(DMSwarmGetCellDM(sw, &dm));

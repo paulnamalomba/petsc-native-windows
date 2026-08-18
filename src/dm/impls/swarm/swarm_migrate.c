@@ -2,6 +2,7 @@
 #include <petscdmswarm.h>
 #include <petscdmda.h>
 #include <petsc/private/dmswarmimpl.h> /*I   "petscdmswarm.h"   I*/
+#include <petsc/private/dmpleximpl.h>
 #include "../src/dm/impls/swarm/data_bucket.h"
 #include "../src/dm/impls/swarm/data_ex.h"
 
@@ -209,6 +210,69 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+ Attempt the point-location step of DMSwarmMigrate_CellDMScatter() on the device. For a hip-backend
+ swarm whose cell DM is a DMPlex with a usable point-location geometry cache, the cell ids of the
+ points [pStart, pStart + npoints) are computed in place in the cell id field's device mirror from
+ the coordinate field's device mirror, reproducing the host location decisions bitwise, see
+ DMPlexLocatePointsInPlace_Internal_HIP(). When useSeeds is PETSC_FALSE the incoming cell ids
+ (freshly received points carry the sender's local cell numbers) are reset first, matching the host
+ path which locates received points through a fresh cell SF. On return *located indicates whether
+ the device path ran; otherwise (host backend, non-DMPlex cell DM, unusable cache, multiple
+ coordinate fields) the caller must run the host location path unchanged. The decision is made
+ collectively consistent because the host path performs collective operations.
+*/
+static PetscErrorCode DMSwarmMigrate_LocatePointsDevice_Private(DM dm, DM dmcell, PetscInt pStart, PetscInt npoints, PetscBool useSeeds, PetscBool *located)
+{
+  PetscFunctionBegin;
+  *located = PETSC_FALSE;
+#if PetscDefined(HAVE_HIP)
+  if (((DM_Swarm *)dm->data)->backend == DMSWARM_BACKEND_HIP) {
+    DMSwarmCellDM celldm;
+    PetscInt      Nfc, ok = 0;
+    const char  **coordFields, *cellid;
+    PetscBool     isplex;
+
+    PetscCall(PetscObjectTypeCompare((PetscObject)dmcell, DMPLEX, &isplex));
+    PetscCall(DMSwarmGetCellDMActive(dm, &celldm));
+    PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+    if (isplex && Nfc == 1) {
+      DMPlexLocationCache cache;
+
+      PetscCall(DMPlexGetLocationCache_Internal(dmcell, &cache));
+      if (!cache->unavailable) ok = 1;
+      else PetscCall(PetscInfo(dm, "DMSwarmMigrate: using host point location, the cell DM cannot use the location cache\n"));
+    }
+    /* The host location path performs collective operations, so every rank must take the same branch */
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &ok, 1, MPIU_INT, MPI_MIN, PetscObjectComm((PetscObject)dm)));
+    if (ok) {
+      PetscInt     bs;
+      PetscMemType mtc = PETSC_MEMTYPE_HOST, mti = PETSC_MEMTYPE_HOST;
+      PetscReal   *coords_d;
+      PetscInt    *cellids_d;
+
+      PetscCall(DMSwarmCellDMGetCellID(celldm, &cellid));
+      if (!useSeeds && npoints) {
+        PetscInt *p_cellid;
+
+        PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+        for (PetscInt p = 0; p < npoints; ++p) p_cellid[pStart + p] = DMLOCATEPOINT_POINT_NOT_FOUND;
+        PetscCall(DMSwarmRestoreField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+      }
+      PetscCall(DMSwarmGetFieldReadAndMemType(dm, coordFields[0], &bs, NULL, &mtc, (void **)&coords_d));
+      PetscCall(DMSwarmGetFieldAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
+      PetscCheck(PetscMemTypeDevice(mtc) && PetscMemTypeDevice(mti), PetscObjectComm((PetscObject)dm), PETSC_ERR_PLIB, "hip-backend swarm returned host pointers for its fields");
+      PetscCall(DMPlexLocatePointsInPlace_Internal_HIP(dmcell, npoints, bs, coords_d + pStart * bs, cellids_d + pStart));
+      PetscCall(DMSwarmRestoreFieldAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
+      PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, coordFields[0], &bs, NULL, &mtc, (void **)&coords_d));
+      PetscCall(PetscInfo(dm, "DMSwarmMigrate: located %" PetscInt_FMT " points on the device\n", npoints));
+      *located = PETSC_TRUE;
+    }
+  }
+#endif
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
 {
   DM_Swarm          *swarm = (DM_Swarm *)dm->data;
@@ -218,7 +282,8 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
   const PetscSFNode *LA_sfcell;
   DM                 dmcell;
   Vec                pos;
-  PetscBool          error_check = swarm->migrate_error_on_missing_point;
+  PetscBool          error_check       = swarm->migrate_error_on_missing_point;
+  PetscBool          located_on_device = PETSC_FALSE;
   const char       **coordFields;
   PetscMPIInt        size, rank;
   const char        *cellid;
@@ -232,8 +297,11 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
   PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)dm), &size));
   PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)dm), &rank));
 
-#if 1
-  {
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+  PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
+  PetscCall(DMSwarmMigrate_LocatePointsDevice_Private(dm, dmcell, 0, npoints, PETSC_TRUE, &located_on_device));
+  if (!located_on_device) {
+    /* Seed the point location with the current cell ids */
     PetscInt     npoints_curr, range = 0;
     PetscSFNode *sf_cells;
 
@@ -251,27 +319,29 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
     /* PetscCall(PetscSFCreate(PetscObjectComm((PetscObject)dm),&sfcell)); */
     PetscCall(PetscSFCreate(PETSC_COMM_SELF, &sfcell));
     PetscCall(PetscSFSetGraph(sfcell, range, npoints_curr, NULL, PETSC_OWN_POINTER, sf_cells, PETSC_OWN_POINTER));
-  }
-#endif
 
-  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
-  PetscCall(DMSwarmCreateLocalVectorFromFields(dm, Nfc, coordFields, &pos));
-  PetscCall(DMLocatePoints(dmcell, pos, DM_POINTLOCATION_NONE, &sfcell));
-  PetscCall(DMSwarmDestroyLocalVectorFromFields(dm, Nfc, coordFields, &pos));
+    PetscCall(DMSwarmCreateLocalVectorFromFields(dm, Nfc, coordFields, &pos));
+    PetscCall(DMLocatePoints(dmcell, pos, DM_POINTLOCATION_NONE, &sfcell));
+    PetscCall(DMSwarmDestroyLocalVectorFromFields(dm, Nfc, coordFields, &pos));
+  }
 
   if (error_check) PetscCall(DMSwarmGetSize(dm, &npointsg));
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
-  PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
   PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-  PetscCall(PetscSFGetGraph(sfcell, NULL, NULL, NULL, &LA_sfcell));
-
-  for (p = 0; p < npoints; p++) {
-    p_cellid[p] = LA_sfcell[p].index;
-    rankval[p]  = rank;
+  if (!located_on_device) {
+    PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+    PetscCall(PetscSFGetGraph(sfcell, NULL, NULL, NULL, &LA_sfcell));
+    for (p = 0; p < npoints; p++) {
+      p_cellid[p] = LA_sfcell[p].index;
+      rankval[p]  = rank;
+    }
+    PetscCall(DMSwarmRestoreField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+    PetscCall(PetscSFDestroy(&sfcell));
+  } else {
+    /* Cell ids were written in place in the cell id field's device mirror; only the owning rank is recorded here */
+    for (p = 0; p < npoints; p++) rankval[p] = rank;
   }
   PetscCall(DMSwarmRestoreField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-  PetscCall(DMSwarmRestoreField(dm, cellid, NULL, NULL, (void **)&p_cellid));
-  PetscCall(PetscSFDestroy(&sfcell));
 
   if (size > 1) {
     PetscCall(DMSwarmMigrate_DMNeighborScatter(dm, dmcell, remove_sent_points, &npoints_prior_migration));
@@ -309,9 +379,11 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
 
     npoints_from_neighbours = npoints2 - npoints_prior_migration;
 
-    PetscCall(DMSwarmCreateLocalVectorFromFields(dm, Nfc, coordFields, &pos));
-    PetscCall(VecGetBlockSize(pos, &bs));
-    PetscCall(ISCreateStride(PETSC_COMM_SELF, npoints_from_neighbours * bs, npoints_prior_migration * bs, 1, &nis));
+    PetscCall(DMSwarmMigrate_LocatePointsDevice_Private(dm, dmcell, npoints_prior_migration, npoints_from_neighbours, PETSC_FALSE, &located_on_device));
+    if (!located_on_device) {
+      PetscCall(DMSwarmCreateLocalVectorFromFields(dm, Nfc, coordFields, &pos));
+      PetscCall(VecGetBlockSize(pos, &bs));
+      PetscCall(ISCreateStride(PETSC_COMM_SELF, npoints_from_neighbours * bs, npoints_prior_migration * bs, 1, &nis));
 /*
   Device VecGetSubVector to zero sized subvector triggers
   debug error with mismatching memory types due to the device
@@ -320,38 +392,42 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
   DMLocatePoints to avoid deadlock
 */
 #if PetscDefined(HAVE_DEVICE)
-    if (npoints_from_neighbours > 0) {
+      if (npoints_from_neighbours > 0) {
+        PetscCall(VecGetSubVector(pos, nis, &npos));
+        PetscCall(DMLocatePoints(dmcell, npos, DM_POINTLOCATION_NONE, &sfcell));
+        PetscCall(VecRestoreSubVector(pos, nis, &npos));
+      } else {
+        PetscCall(VecCreate(PETSC_COMM_SELF, &npos));
+        PetscCall(VecSetSizes(npos, 0, PETSC_DETERMINE));
+        PetscCall(VecSetBlockSize(npos, bs));
+        PetscCall(VecSetType(npos, dm->vectype));
+        PetscCall(DMLocatePoints(dmcell, npos, DM_POINTLOCATION_NONE, &sfcell));
+        PetscCall(VecDestroy(&npos));
+      }
+#else
       PetscCall(VecGetSubVector(pos, nis, &npos));
       PetscCall(DMLocatePoints(dmcell, npos, DM_POINTLOCATION_NONE, &sfcell));
       PetscCall(VecRestoreSubVector(pos, nis, &npos));
-    } else {
-      PetscCall(VecCreate(PETSC_COMM_SELF, &npos));
-      PetscCall(VecSetSizes(npos, 0, PETSC_DETERMINE));
-      PetscCall(VecSetBlockSize(npos, bs));
-      PetscCall(VecSetType(npos, dm->vectype));
-      PetscCall(DMLocatePoints(dmcell, npos, DM_POINTLOCATION_NONE, &sfcell));
-      PetscCall(VecDestroy(&npos));
-    }
-#else
-    PetscCall(VecGetSubVector(pos, nis, &npos));
-    PetscCall(DMLocatePoints(dmcell, npos, DM_POINTLOCATION_NONE, &sfcell));
-    PetscCall(VecRestoreSubVector(pos, nis, &npos));
 #endif
-    PetscCall(ISDestroy(&nis));
-    PetscCall(DMSwarmDestroyLocalVectorFromFields(dm, Nfc, coordFields, &pos));
+      PetscCall(ISDestroy(&nis));
+      PetscCall(DMSwarmDestroyLocalVectorFromFields(dm, Nfc, coordFields, &pos));
 
-    PetscCall(PetscSFGetGraph(sfcell, NULL, NULL, NULL, &LA_sfcell));
-    PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-    PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
-    for (p = 0; p < npoints_from_neighbours; p++) {
-      rankval[npoints_prior_migration + p]  = rank;
-      p_cellid[npoints_prior_migration + p] = LA_sfcell[p].index;
+      PetscCall(PetscSFGetGraph(sfcell, NULL, NULL, NULL, &LA_sfcell));
     }
-
-    PetscCall(DMSwarmRestoreField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+    PetscCall(DMSwarmGetField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
+    if (!located_on_device) {
+      PetscCall(DMSwarmGetField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+      for (p = 0; p < npoints_from_neighbours; p++) {
+        rankval[npoints_prior_migration + p]  = rank;
+        p_cellid[npoints_prior_migration + p] = LA_sfcell[p].index;
+      }
+      PetscCall(DMSwarmRestoreField(dm, cellid, NULL, NULL, (void **)&p_cellid));
+      PetscCall(PetscSFDestroy(&sfcell));
+    } else {
+      /* Cell ids of the received points were written in place in the cell id field's device mirror */
+      for (p = 0; p < npoints_from_neighbours; p++) rankval[npoints_prior_migration + p] = rank;
+    }
     PetscCall(DMSwarmRestoreField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
-
-    PetscCall(PetscSFDestroy(&sfcell));
 
     /* remove points which left processor */
     PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, cellid, &PField));

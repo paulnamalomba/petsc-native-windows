@@ -11,17 +11,20 @@ static char help[] = "Tests for point location\n\n";
 typedef struct {
   PetscBool centroids;
   PetscBool custom;
+  PetscBool coordShift;
 } AppCtx;
 
 static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
 {
   PetscFunctionBeginUser;
-  options->centroids = PETSC_TRUE;
-  options->custom    = PETSC_FALSE;
+  options->centroids  = PETSC_TRUE;
+  options->custom     = PETSC_FALSE;
+  options->coordShift = PETSC_FALSE;
 
   PetscOptionsBegin(comm, "", "Point Location Options", "DMPLEX");
   PetscCall(PetscOptionsBool("-centroids", "Locate cell centroids", "ex17.c", options->centroids, &options->centroids, NULL));
   PetscCall(PetscOptionsBool("-custom", "Locate user-defined points", "ex17.c", options->custom, &options->custom, NULL));
+  PetscCall(PetscOptionsBool("-coord_shift", "Locate points, shift the coordinates, and locate again", "ex17.c", options->coordShift, &options->coordShift, NULL));
   PetscOptionsEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -133,6 +136,53 @@ static PetscErrorCode TestCustomLocation(DM dm, AppCtx *user)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode LocateAndReport(DM dm, PetscInt Np, PetscInt cdim, const PetscReal pcoords[], const char *label)
+{
+  Vec                points;
+  PetscSF            cellSF = NULL;
+  const PetscSFNode *cells;
+  const PetscInt    *found;
+  PetscScalar       *a;
+  PetscInt           nFound;
+
+  PetscFunctionBeginUser;
+  PetscCall(VecCreateSeq(PETSC_COMM_SELF, Np * cdim, &points));
+  PetscCall(VecSetBlockSize(points, cdim));
+  PetscCall(VecGetArray(points, &a));
+  for (PetscInt i = 0; i < Np * cdim; ++i) a[i] = pcoords[i];
+  PetscCall(VecRestoreArray(points, &a));
+  PetscCall(DMLocatePoints(dm, points, DM_POINTLOCATION_NONE, &cellSF));
+  PetscCall(PetscSFGetGraph(cellSF, NULL, &nFound, &found, &cells));
+  PetscCall(PetscPrintf(PETSC_COMM_SELF, "%s: located %" PetscInt_FMT " of %" PetscInt_FMT " points\n", label, nFound, Np));
+  for (PetscInt p = 0; p < nFound; ++p) PetscCall(PetscPrintf(PETSC_COMM_SELF, "  point %" PetscInt_FMT " -> cell %" PetscInt_FMT "\n", found ? found[p] : p, cells[p].index));
+  PetscCall(PetscSFDestroy(&cellSF));
+  PetscCall(VecDestroy(&points));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Check that point location does not use stale coordinate-derived structures, like the grid hash, after the coordinates change */
+static PetscErrorCode TestCoordinateShift(DM dm, AppCtx *user)
+{
+  Vec             coords;
+  const PetscReal shift       = 0.15;
+  const PetscReal pcoords[8]  = {0.07, 0.11, 0.44, 0.32, 0.61, 0.87, 0.93, 0.05};
+  PetscReal       spcoords[8] = {0., 0., 0., 0., 0., 0., 0., 0.};
+  const PetscInt  Np          = 4;
+  PetscInt        cdim;
+
+  PetscFunctionBeginUser;
+  if (!user->coordShift) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(DMGetCoordinateDim(dm, &cdim));
+  PetscCheck(cdim == 2, PETSC_COMM_SELF, PETSC_ERR_SUP, "Coordinate shift test requires a 2D mesh, not %" PetscInt_FMT "D", cdim);
+  PetscCall(LocateAndReport(dm, Np, cdim, pcoords, "Before shift"));
+  PetscCall(DMGetCoordinates(dm, &coords));
+  PetscCall(VecShift(coords, shift));
+  PetscCall(DMSetCoordinates(dm, coords));
+  for (PetscInt i = 0; i < Np * cdim; ++i) spcoords[i] = pcoords[i] + shift;
+  PetscCall(LocateAndReport(dm, Np, cdim, spcoords, "After shift"));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM     dm;
@@ -144,6 +194,7 @@ int main(int argc, char **argv)
   PetscCall(CreateMesh(PETSC_COMM_WORLD, &dm));
   PetscCall(TestCentroidLocation(dm, &user));
   PetscCall(TestCustomLocation(dm, &user));
+  PetscCall(TestCoordinateShift(dm, &user));
   PetscCall(DMDestroy(&dm));
   PetscCall(PetscFinalize());
   return 0;
@@ -225,6 +276,11 @@ int main(int argc, char **argv)
     test:
       suffix: quad_overlap
       args: -dm_plex_hash_location {{0 1}}
+
+  # Locate, shift the coordinates, locate again: exercises the invalidation of the grid hash on coordinate changes
+  test:
+    suffix: quad_shift
+    args: -centroids 0 -coord_shift -dm_plex_simplex 0 -dm_plex_box_faces 5,5 -dm_plex_hash_location {{0 1}}
 
   # Test location on a Monge Manifold
   testset:
