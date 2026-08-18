@@ -240,6 +240,17 @@ int main(int argc, char **argv)
           -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location false\
           -dm_swarm_backend hip
     output_file: output/ex1_swarm_migrate_vec_hip_scan.out
+  # Same device migration with the particle payload staged through pinned host buffers instead
+  # of gpu-aware MPI; the transport moves identical bytes, so the expected output is shared
+  test:
+    suffix: swarm_migrate_backend_hip_scan_no_gpu_aware
+    nsize: 2
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type hip -dm_plex_hash_location false\
+          -dm_swarm_backend hip -use_gpu_aware_mpi 0
+    output_file: output/ex1_swarm_migrate_vec_hip_scan.out
   test:
     suffix: swarm_migrate_vec_hip_hash
     nsize: 2
@@ -355,4 +366,42 @@ int main(int argc, char **argv)
           -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
           -dm_plex_hash_location false -dm_coord_petscspace_degree 2 -dm_swarm_backend hip
     output_file: output/ex1_swarm_migrate_coord_deg2.out
+  # Four-rank migration: the 8 z-slabs split into two clean slabs per rank under the simple
+  # partitioner, and the particle line at the domain z midpoint sits on the rank 1/rank 2
+  # ownership plane, one neighbour hop from rank 0 where every point starts. Points a receiving
+  # rank cannot locate are dropped, so all particles must be locatable within one hop of their
+  # origin (a four-band partition of the particle spread dimension would lose points).
+  test:
+    suffix: swarm_migrate_scan_np4
+    nsize: 4
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false
+  # Device-resident twins of the four-rank migration under every payload transport: the default
+  # (gpu-aware where supported), forced host staging, and forced gpu-aware MPI. Every transport
+  # moves identical bytes, so all three share the host baseline's expected output.
+  test:
+    suffix: swarm_migrate_backend_hip_scan_np4
+    nsize: 4
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend hip
+    output_file: output/ex1_swarm_migrate_scan_np4.out
+  test:
+    suffix: swarm_migrate_backend_hip_scan_np4_no_gpu_aware
+    nsize: 4
+    requires: hip
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend hip -use_gpu_aware_mpi 0
+    output_file: output/ex1_swarm_migrate_scan_np4.out
+  test:
+    suffix: swarm_migrate_backend_hip_scan_np4_gpu_aware
+    nsize: 4
+    requires: hip defined(PETSC_HAVE_MPI_GPU_AWARE)
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend hip -use_gpu_aware_mpi 1
+    output_file: output/ex1_swarm_migrate_scan_np4.out
 TEST*/

@@ -39,6 +39,23 @@ typedef struct _DMSwarmDataBucketOps {
   PetscErrorCode (*fieldzerorange)(DMSwarmDataField, PetscInt, PetscInt);
   PetscErrorCode (*fieldfreedevice)(DMSwarmDataField); /* release the device mirror of a field; must be dispatched before DMSwarmDataFieldDestroy() */
   PetscErrorCode (*setsizes)(DMSwarmDataBucket, PetscInt, PetscInt);
+  /*
+    Migration wire records: one record is the concatenation of every field's atomic_size bytes for
+    one point, in field registration order (the DMSwarmDataBucketFillPackedArray() layout). For the
+    host backend the index list and buffer are host pointers; for a device backend both live on the
+    device. packrecords gathers the records of the points in list[] (in list order) into a
+    contiguous buffer; unpackrecords scatters n contiguous records into the points [start, start+n).
+  */
+  PetscErrorCode (*packrecords)(DMSwarmDataBucket, PetscInt, const PetscInt *, void *);
+  PetscErrorCode (*unpackrecords)(DMSwarmDataBucket, PetscInt, PetscInt, const void *);
+  /*
+    Remove the nsent points whose indices are listed (strictly ascending, in [0, L)) in sentlist,
+    reproducing exactly the survivor order and size bookkeeping of the historical migration loop
+    (ascending scan calling DMSwarmDataBucketRemovePointAtIndex() with swap-with-last and
+    re-check). For the host backend sentlist is a host pointer; for a device backend it lives on
+    the device. Call through DMSwarmDataBucketCompact(), which performs the argument checking.
+  */
+  PetscErrorCode (*compact)(DMSwarmDataBucket, PetscInt, const PetscInt *);
 } DMSwarmDataBucketOps;
 
 struct _p_DMSwarmDataBucket {
@@ -88,6 +105,17 @@ PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket, const P
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket, PetscInt, PetscInt);
 /* Defined in src/dm/impls/swarm/cupm/hip/; declared unconditionally, call only when PetscDefined(HAVE_HIP) */
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetUpDevice_HIP(DMSwarmDataBucket);
+/*
+  Device helpers for the migration fork in swarm_migrate.c (same build/call rule as above).
+  DMSwarmDataFieldFillIntRange_HIP() fills [start, end) of a PetscInt field's device mirror with a
+  constant and leaves the field device authoritative. DMSwarmSentListCreate_HIP() enumerates, in
+  strictly ascending order, the indices in [start, end) whose entry of a device-resident PetscInt
+  array equals a match value, into a freshly allocated device list released with
+  DMSwarmSentListDestroy_HIP().
+*/
+PETSC_INTERN PetscErrorCode DMSwarmDataFieldFillIntRange_HIP(DMSwarmDataField, PetscInt, PetscInt, PetscInt);
+PETSC_INTERN PetscErrorCode DMSwarmSentListCreate_HIP(PetscInt, PetscInt, PetscInt, const PetscInt *, PetscInt *, PetscInt **);
+PETSC_INTERN PetscErrorCode DMSwarmSentListDestroy_HIP(PetscInt **);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetSizes(DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetGlobalSizes(MPI_Comm, DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetDMSwarmDataFields(DMSwarmDataBucket, PetscInt *, DMSwarmDataField *[]);
@@ -101,6 +129,7 @@ PETSC_INTERN PetscErrorCode DMSwarmDataBucketView(MPI_Comm, DMSwarmDataBucket, c
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketAddPoint(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketRemovePoint(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketRemovePointAtIndex(const DMSwarmDataBucket, const PetscInt);
+PETSC_INTERN PetscErrorCode DMSwarmDataBucketCompact(DMSwarmDataBucket, PetscInt, const PetscInt[]);
 
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketDuplicateFields(DMSwarmDataBucket, DMSwarmDataBucket *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketInsertValues(DMSwarmDataBucket, DMSwarmDataBucket);

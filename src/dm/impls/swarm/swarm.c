@@ -3134,7 +3134,7 @@ PetscErrorCode DMSwarmSetBackend(DM dm, DMSwarmBackendType backend)
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSWARM);
   PetscValidLogicalCollectiveEnum(dm, backend, 2);
-  PetscCheck(!swarm->issetup, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONGSTATE, "Must call DMSwarmSetBackend() before DMSetUp()");
+  PetscCheck(!swarm->issetup, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONGSTATE, "Must call DMSwarmSetBackend() before DMSetUp(): the backend determines where the particle storage is allocated, which cannot change after the fields have been set up");
   switch (backend) {
   case DMSWARM_BACKEND_HOST:
     swarm->db->memtype = PETSC_MEMTYPE_HOST;

@@ -70,6 +70,7 @@ DMSwarmDataExEnd()
 */
 #include <petscvec.h>
 #include <petscmat.h>
+#include <petscdevice.h>
 #include <petsc/private/petscimpl.h>
 
 #include "../src/dm/impls/swarm/data_ex.h"
@@ -112,6 +113,12 @@ PetscErrorCode DMSwarmDataExCreate(MPI_Comm comm, const PetscInt count, DMSwarmD
   d->recv_message_length = -1;
   d->total_pack_cnt      = -1;
   d->pack_cnt            = NULL;
+
+  d->memtype           = PETSC_MEMTYPE_HOST;
+  d->message_on_device = PETSC_FALSE;
+  d->gpu_aware_cycle   = PETSC_FALSE;
+  d->send_message_d    = NULL;
+  d->recv_message_d    = NULL;
 
   d->send_tags = NULL;
   d->recv_tags = NULL;
@@ -158,6 +165,46 @@ PetscErrorCode DMSwarmDataExView(DMSwarmDataEx d)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Release the payload buffers of the last pack cycle. Device-mode buffers were obtained from the
+  device-aware allocator (the host staging buffers included, so the staging copies can go through
+  PetscDeviceMemcpy()), so they must be returned to it; host-mode buffers are plain mallocs.
+*/
+static PetscErrorCode DMSwarmDataExFreeMessages_Private(DMSwarmDataEx de)
+{
+  PetscFunctionBegin;
+  if (de->message_on_device) {
+    PetscDeviceContext dctx;
+
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall(PetscDeviceFree(dctx, de->send_message));
+    PetscCall(PetscDeviceFree(dctx, de->recv_message));
+    PetscCall(PetscDeviceFree(dctx, de->send_message_d));
+    PetscCall(PetscDeviceFree(dctx, de->recv_message_d));
+    de->message_on_device = PETSC_FALSE;
+  } else {
+    PetscCall(PetscFree(de->send_message));
+    PetscCall(PetscFree(de->recv_message));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Declare where the payload of the following pack/exchange cycles lives. The default,
+  PETSC_MEMTYPE_HOST, is the historical host path. For a device memory type the packed records
+  are reserved on the device through DMSwarmDataExPackDataDevice() and received records are
+  returned by DMSwarmDataExGetRecvDataDevice(); whether MPI sees device or staged host pointers
+  is decided by use_gpu_aware_mpi at DMSwarmDataExBegin() time.
+*/
+PetscErrorCode DMSwarmDataExSetMemType(DMSwarmDataEx de, PetscMemType mtype)
+{
+  PetscFunctionBegin;
+  PetscCheck(de->packer_status != DEOBJECT_INITIALIZED && de->communication_status != DEOBJECT_INITIALIZED, de->comm, PETSC_ERR_ORDER, "Cannot change the payload memory type while a pack/exchange cycle is in progress");
+  PetscCheck(!PetscMemTypeDevice(mtype) || PetscDefined(HAVE_DEVICE), de->comm, PETSC_ERR_SUP, "PETSc was not configured with device support");
+  de->memtype = mtype;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode DMSwarmDataExDestroy(DMSwarmDataEx d)
 {
   PetscFunctionBegin;
@@ -166,8 +213,7 @@ PetscErrorCode DMSwarmDataExDestroy(DMSwarmDataEx d)
   PetscCall(PetscFree(d->messages_to_be_sent));
   PetscCall(PetscFree(d->message_offsets));
   PetscCall(PetscFree(d->messages_to_be_recvieved));
-  PetscCall(PetscFree(d->send_message));
-  PetscCall(PetscFree(d->recv_message));
+  PetscCall(DMSwarmDataExFreeMessages_Private(d));
   PetscCall(PetscFree(d->pack_cnt));
   PetscCall(PetscFree(d->send_tags));
   PetscCall(PetscFree(d->recv_tags));
@@ -443,8 +489,7 @@ static PetscErrorCode _DMSwarmDataExInitializeTmpStorage(DMSwarmDataEx de)
     /*  de->messages_to_be_sent[i] = -1; */
     de->messages_to_be_recvieved[i] = -1;
   }
-  PetscCall(PetscFree(de->send_message));
-  PetscCall(PetscFree(de->recv_message));
+  PetscCall(DMSwarmDataExFreeMessages_Private(de));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -475,10 +520,23 @@ PetscErrorCode DMSwarmDataExPackInitialize(DMSwarmDataEx de, size_t unit_message
     }
     total = total + de->messages_to_be_sent[i];
   }
-  /* create space for the data to be sent */
-  PetscCall(PetscMalloc(unit_message_size * (total + 1), &de->send_message));
-  /* initialize memory */
-  PetscCall(PetscMemzero(de->send_message, unit_message_size * (total + 1)));
+  /* create space for the data to be sent; in device mode a device payload buffer plus a device-registered host staging buffer, both zeroed like the host path */
+  de->message_on_device = PetscMemTypeDevice(de->memtype);
+  if (de->message_on_device) {
+    PetscDeviceContext dctx;
+    char              *host_buf = NULL, *dev_buf = NULL;
+
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall(PetscDeviceCalloc(dctx, PETSC_MEMTYPE_HOST, unit_message_size * (total + 1), &host_buf));
+    PetscCall(PetscDeviceCalloc(dctx, de->memtype, unit_message_size * (total + 1), &dev_buf));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    de->send_message   = host_buf;
+    de->send_message_d = dev_buf;
+  } else {
+    PetscCall(PetscMalloc(unit_message_size * (total + 1), &de->send_message));
+    /* initialize memory */
+    PetscCall(PetscMemzero(de->send_message, unit_message_size * (total + 1)));
+  }
   /* set total items to send */
   de->send_message_length = total;
   de->message_offsets[0]  = 0;
@@ -507,6 +565,7 @@ PetscErrorCode DMSwarmDataExPackData(DMSwarmDataEx de, PetscMPIInt proc_id, Pets
   PetscCheck(de->packer_status == DEOBJECT_INITIALIZED, de->comm, PETSC_ERR_ORDER, "Packed data must be defined. Call DMSwarmDataExInitializeSendCount(), DMSwarmDataExAddToSendCount(), DMSwarmDataExPackInitialize() first");
 
   PetscCheck(de->send_message, de->comm, PETSC_ERR_ORDER, "send_message is not initialized. Call DMSwarmDataExPackInitialize() first");
+  PetscCheck(!de->message_on_device, de->comm, PETSC_ERR_ARG_WRONGSTATE, "The payload buffer resides on the device; reserve space with DMSwarmDataExPackDataDevice() instead");
   PetscCall(_DMSwarmDataExConvertProcIdToLocalIndex(de, proc_id, &local));
   PetscCheck(local != -1, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "proc_id %d is not registered neighbour", proc_id);
   PetscCheck(n + de->pack_cnt[local] <= de->messages_to_be_sent[local], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Trying to pack too many entries to be sent to proc %d. Space requested = %" PetscInt_FMT ": Attempt to insert %" PetscInt_FMT, proc_id, de->messages_to_be_sent[local], n + de->pack_cnt[local]);
@@ -515,6 +574,35 @@ PetscErrorCode DMSwarmDataExPackData(DMSwarmDataEx de, PetscMPIInt proc_id, Pets
   insert_location = de->message_offsets[local] + de->pack_cnt[local];
   dest            = ((char *)de->send_message) + de->unit_message_size * insert_location;
   PetscCall(PetscMemcpy(dest, data, de->unit_message_size * n));
+  /* increment counter */
+  de->pack_cnt[local] = de->pack_cnt[local] + n;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Device-mode counterpart of DMSwarmDataExPackData(): reserve space for n units destined for
+  proc_id inside the device send buffer and return its address in dest. The caller must fill the
+  returned range with the packed records (e.g. through the bucket packrecords op) before
+  DMSwarmDataExBegin(). The reservation bookkeeping (insert location, per-neighbour counters and
+  overflow checking) is identical to the host path, so the per-neighbour buffer layout matches
+  the host send buffer byte for byte.
+*/
+PetscErrorCode DMSwarmDataExPackDataDevice(DMSwarmDataEx de, PetscMPIInt proc_id, PetscInt n, void **dest)
+{
+  PetscMPIInt local;
+  PetscInt    insert_location;
+
+  PetscFunctionBegin;
+  PetscCheck(de->packer_status != DEOBJECT_FINALIZED, de->comm, PETSC_ERR_ORDER, "Packed data have been defined. To modify these call DMSwarmDataExInitializeSendCount(), DMSwarmDataExAddToSendCount(), DMSwarmDataExPackInitialize() first");
+  PetscCheck(de->packer_status == DEOBJECT_INITIALIZED, de->comm, PETSC_ERR_ORDER, "Packed data must be defined. Call DMSwarmDataExInitializeSendCount(), DMSwarmDataExAddToSendCount(), DMSwarmDataExPackInitialize() first");
+  PetscCheck(de->message_on_device, de->comm, PETSC_ERR_ARG_WRONGSTATE, "The payload buffer resides on the host; call DMSwarmDataExSetMemType() with a device memory type before DMSwarmDataExPackInitialize()");
+  PetscCheck(de->send_message_d, de->comm, PETSC_ERR_ORDER, "send_message_d is not initialized. Call DMSwarmDataExPackInitialize() first");
+  PetscCall(_DMSwarmDataExConvertProcIdToLocalIndex(de, proc_id, &local));
+  PetscCheck(local != -1, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "proc_id %d is not registered neighbour", proc_id);
+  PetscCheck(n + de->pack_cnt[local] <= de->messages_to_be_sent[local], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Trying to pack too many entries to be sent to proc %d. Space requested = %" PetscInt_FMT ": Attempt to insert %" PetscInt_FMT, proc_id, de->messages_to_be_sent[local], n + de->pack_cnt[local]);
+
+  insert_location = de->message_offsets[local] + de->pack_cnt[local];
+  *dest           = ((char *)de->send_message_d) + de->unit_message_size * insert_location;
   /* increment counter */
   de->pack_cnt[local] = de->pack_cnt[local] + n;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -540,12 +628,24 @@ PetscErrorCode DMSwarmDataExPackFinalize(DMSwarmDataEx de)
   for (i = 0; i < np; ++i) PetscCallMPI(MPIU_Isend(&de->messages_to_be_sent[i], 1, MPIU_INT, de->neighbour_procs[i], de->send_tags[i], de->comm, &de->_requests[i]));
   for (i = 0; i < np; ++i) PetscCallMPI(MPIU_Irecv(&de->messages_to_be_recvieved[i], 1, MPIU_INT, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
   PetscCallMPI(MPI_Waitall(2 * np, de->_requests, de->_stats));
-  /* create space for the data to be recvieved */
+  /* create space for the data to be recvieved; mirrored on the device in device mode */
   total = 0;
   for (i = 0; i < np; ++i) total = total + de->messages_to_be_recvieved[i];
-  PetscCall(PetscMalloc(de->unit_message_size * (total + 1), &de->recv_message));
-  /* initialize memory */
-  PetscCall(PetscMemzero(de->recv_message, de->unit_message_size * (total + 1)));
+  if (de->message_on_device) {
+    PetscDeviceContext dctx;
+    char              *host_buf = NULL, *dev_buf = NULL;
+
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall(PetscDeviceCalloc(dctx, PETSC_MEMTYPE_HOST, de->unit_message_size * (total + 1), &host_buf));
+    PetscCall(PetscDeviceCalloc(dctx, de->memtype, de->unit_message_size * (total + 1), &dev_buf));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    de->recv_message   = host_buf;
+    de->recv_message_d = dev_buf;
+  } else {
+    PetscCall(PetscMalloc(de->unit_message_size * (total + 1), &de->recv_message));
+    /* initialize memory */
+    PetscCall(PetscMemzero(de->recv_message, de->unit_message_size * (total + 1)));
+  }
   /* set total items to receive */
   de->recv_message_length  = total;
   de->packer_status        = DEOBJECT_FINALIZED;
@@ -559,6 +659,7 @@ PetscErrorCode DMSwarmDataExBegin(DMSwarmDataEx de)
 {
   PetscMPIInt i, np;
   void       *dest;
+  char       *send_base;
 
   PetscFunctionBegin;
   PetscCheck(de->topology_status == DEOBJECT_FINALIZED, de->comm, PETSC_ERR_ORDER, "Topology not finalized");
@@ -567,10 +668,27 @@ PetscErrorCode DMSwarmDataExBegin(DMSwarmDataEx de)
   PetscCheck(de->communication_status != DEOBJECT_FINALIZED, de->comm, PETSC_ERR_ORDER, "Communication has already been finalized. Must call DMSwarmDataExInitialize() first.");
   PetscCheck(de->recv_message, de->comm, PETSC_ERR_ORDER, "recv_message has not been initialized. Must call DMSwarmDataExPackFinalize() first");
   PetscCall(PetscLogEventBegin(DMSWARM_DataExchangerBegin, 0, 0, 0, 0));
+  send_base = (char *)de->send_message;
+  if (de->message_on_device) {
+    PetscDeviceContext dctx;
+
+    /* the whole cycle (send and receive residency) follows this snapshot, taken once so a mid-cycle change of the option cannot split the residency */
+    de->gpu_aware_cycle = use_gpu_aware_mpi;
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    if (de->gpu_aware_cycle) {
+      send_base = (char *)de->send_message_d;
+    } else if (de->send_message_length > 0) {
+      /* stage the packed device buffer to the host in one device-to-host transfer (byte-logged by PetscDeviceMemcpy()) */
+      PetscCall(PetscDeviceMemcpy(dctx, de->send_message, de->send_message_d, de->unit_message_size * de->send_message_length));
+      PetscCall(PetscInfo(NULL, "Staged %" PetscInt_FMT " packed send units (%zu bytes) from the device for the host exchange\n", de->send_message_length, de->unit_message_size * de->send_message_length));
+    }
+    /* the stream-ordered packing kernels (and any staging copy) must complete before MPI touches the buffer */
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+  }
   np = de->n_neighbour_procs;
   /* == NON BLOCKING == */
   for (i = 0; i < np; ++i) {
-    dest = ((char *)de->send_message) + de->unit_message_size * de->message_offsets[i];
+    dest = send_base + de->unit_message_size * de->message_offsets[i];
     PetscCallMPI(MPIU_Isend(dest, de->messages_to_be_sent[i] * de->unit_message_size, MPI_CHAR, de->neighbour_procs[i], de->send_tags[i], de->comm, &de->_requests[i]));
   }
   PetscCall(PetscLogEventEnd(DMSWARM_DataExchangerBegin, 0, 0, 0, 0));
@@ -584,6 +702,7 @@ PetscErrorCode DMSwarmDataExEnd(DMSwarmDataEx de)
   PetscInt    total;
   PetscInt   *message_recv_offsets;
   void       *dest;
+  char       *recv_base;
 
   PetscFunctionBegin;
   PetscCheck(de->communication_status == DEOBJECT_INITIALIZED, de->comm, PETSC_ERR_ORDER, "Communication has not been initialized. Must call DMSwarmDataExInitialize() first.");
@@ -598,11 +717,22 @@ PetscErrorCode DMSwarmDataExEnd(DMSwarmDataEx de)
     total                   = total + de->messages_to_be_recvieved[i];
   }
   /* == NON BLOCKING == */
+  recv_base = (char *)de->recv_message;
+  if (de->message_on_device && de->gpu_aware_cycle) recv_base = (char *)de->recv_message_d;
   for (i = 0; i < np; ++i) {
-    dest = ((char *)de->recv_message) + de->unit_message_size * message_recv_offsets[i];
+    dest = recv_base + de->unit_message_size * message_recv_offsets[i];
     PetscCallMPI(MPIU_Irecv(dest, de->messages_to_be_recvieved[i] * de->unit_message_size, MPI_CHAR, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
   }
   PetscCallMPI(MPI_Waitall(2 * np, de->_requests, de->_stats));
+  if (de->message_on_device && !de->gpu_aware_cycle && de->recv_message_length > 0) {
+    PetscDeviceContext dctx;
+
+    /* lift the staged host receive buffer to the device in one host-to-device transfer (byte-logged by PetscDeviceMemcpy()) */
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall(PetscDeviceMemcpy(dctx, de->recv_message_d, de->recv_message, de->unit_message_size * de->recv_message_length));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    PetscCall(PetscInfo(NULL, "Staged %" PetscInt_FMT " received units (%zu bytes) to the device after the host exchange\n", de->recv_message_length, de->unit_message_size * de->recv_message_length));
+  }
   PetscCall(PetscFree(message_recv_offsets));
   de->communication_status = DEOBJECT_FINALIZED;
   PetscCall(PetscLogEventEnd(DMSWARM_DataExchangerEnd, 0, 0, 0, 0));
@@ -624,6 +754,21 @@ PetscErrorCode DMSwarmDataExGetRecvData(DMSwarmDataEx de, PetscInt *length, void
   PetscCheck(de->communication_status == DEOBJECT_FINALIZED, de->comm, PETSC_ERR_ARG_WRONGSTATE, "Data has not finished being sent.");
   *length = de->recv_message_length;
   *recv   = de->recv_message;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Device-mode counterpart of DMSwarmDataExGetRecvData(): the returned device buffer holds the
+  received records in both device transports, either written directly by gpu-aware MPI or lifted
+  from the host staging buffer at the end of DMSwarmDataExEnd().
+*/
+PetscErrorCode DMSwarmDataExGetRecvDataDevice(DMSwarmDataEx de, PetscInt *length, void **recv)
+{
+  PetscFunctionBegin;
+  PetscCheck(de->communication_status == DEOBJECT_FINALIZED, de->comm, PETSC_ERR_ARG_WRONGSTATE, "Data has not finished being sent.");
+  PetscCheck(de->message_on_device, de->comm, PETSC_ERR_ARG_WRONGSTATE, "The payload buffers reside on the host; use DMSwarmDataExGetRecvData()");
+  *length = de->recv_message_length;
+  *recv   = de->recv_message_d;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

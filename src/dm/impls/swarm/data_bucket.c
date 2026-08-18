@@ -95,6 +95,60 @@ static PetscErrorCode DMSwarmDataFieldAllocDevice_Host(DMSwarmDataField df)
 }
 
 /*
+  Host wire-record pack/unpack: thin loops over the per-point packed-array helpers migration uses
+  today, so the record layout and the insertion semantics are identical by construction. Records
+  are packed in the order of list[] and unpacked to ascending destination indices.
+*/
+static PetscErrorCode DMSwarmDataBucketPackRecords_Host(DMSwarmDataBucket db, PetscInt npoints, const PetscInt list[], void *buf)
+{
+  size_t record_size = 0;
+
+  PetscFunctionBegin;
+  for (PetscInt f = 0; f < db->nfields; ++f) record_size += db->field[f]->atomic_size;
+  for (PetscInt p = 0; p < npoints; ++p) PetscCall(DMSwarmDataBucketFillPackedArray(db, list[p], (void *)((char *)buf + (size_t)p * record_size)));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMSwarmDataBucketUnpackRecords_Host(DMSwarmDataBucket db, PetscInt start, PetscInt npoints, const void *buf)
+{
+  size_t record_size = 0;
+
+  PetscFunctionBegin;
+  for (PetscInt f = 0; f < db->nfields; ++f) record_size += db->field[f]->atomic_size;
+  for (PetscInt p = 0; p < npoints; ++p) PetscCall(DMSwarmDataBucketInsertPackedArray(db, start + p, (void *)((char *)buf + (size_t)p * record_size)));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Host compaction: a thin wrapper around the historical migration removal loop. The loop scans
+  the slots in ascending order and, on a sent slot, swaps the current last point in and re-checks
+  the same slot, so the sent status must be swapped alongside; the mask array mirrors exactly
+  what the removal loops in swarm_migrate.c read from the swapped rank/cellid field entries.
+  The resulting survivor order and the size bookkeeping (one DMSwarmDataBucketRemovePoint()
+  shrink per removed point) are bit-identical to those loops by construction.
+*/
+static PetscErrorCode DMSwarmDataBucketCompact_Host(DMSwarmDataBucket db, PetscInt nsent, const PetscInt sentlist[])
+{
+  PetscBool *mask;
+  PetscInt   npoints = db->L;
+
+  PetscFunctionBegin;
+  if (!nsent) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(PetscCalloc1(npoints, &mask));
+  for (PetscInt i = 0; i < nsent; ++i) mask[sentlist[i]] = PETSC_TRUE;
+  for (PetscInt p = 0; p < npoints; ++p) {
+    if (mask[p]) {
+      PetscCall(DMSwarmDataBucketRemovePointAtIndex(db, p));
+      npoints--;
+      mask[p] = mask[npoints]; /* the swapped-in point's sent status; re-check this slot */
+      p--;
+    }
+  }
+  PetscCall(PetscFree(mask));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
   Make the host array of df valid before its bytes are read or written on the host. Only acts
   when the device copy is the sole valid residence (PETSC_OFFLOAD_GPU); the D2H transfer is
   dispatched through the owning bucket's ops so this file stays device-agnostic. A field
@@ -130,6 +184,9 @@ PetscErrorCode DMSwarmDataBucketCreate(DMSwarmDataBucket *DB)
   db->ops.fieldzerorange   = DMSwarmDataFieldZeroBlock;
   db->ops.fieldfreedevice  = DMSwarmDataFieldFreeDevice_Host;
   db->ops.setsizes         = DMSwarmDataBucketSetSizes_Host;
+  db->ops.packrecords      = DMSwarmDataBucketPackRecords_Host;
+  db->ops.unpackrecords    = DMSwarmDataBucketUnpackRecords_Host;
+  db->ops.compact          = DMSwarmDataBucketCompact_Host;
   *DB                      = db;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -670,6 +727,34 @@ PetscErrorCode DMSwarmDataBucketRemovePointAtIndex(const DMSwarmDataBucket db, c
   /* decrement size */
   /* this will zero out an crap at the end of the list */
   PetscCall(DMSwarmDataBucketRemovePoint(db));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Remove the nsent points listed in sentlist (strictly ascending indices in [0, L)) at once.
+  Every backend reproduces the survivor order of the historical ascending removal loop
+  (swap-with-last and re-check, see DMSwarmDataBucketCompact_Host()) exactly: with
+  m = L - nsent, survivors with original index < m keep their slots, the sent slots < m taken
+  ascending are filled by the survivors with original index >= m taken in descending original
+  order, and points with original index >= m vanish. For a device backend sentlist is a device
+  pointer, so the ascending-order check can only be applied to a host-resident list here.
+*/
+PetscErrorCode DMSwarmDataBucketCompact(DMSwarmDataBucket db, PetscInt nsent, const PetscInt sentlist[])
+{
+  PetscBool any_active_fields;
+
+  PetscFunctionBegin;
+  PetscCheck(db->finalised != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "You must call DMSwarmDataBucketFinalize() before DMSwarmDataBucketCompact()");
+  PetscCall(DMSwarmDataBucketQueryForActiveFields(db, &any_active_fields));
+  PetscCheck(!any_active_fields, PETSC_COMM_SELF, PETSC_ERR_USER, "Cannot safely compact as at least one DMSwarmDataField is currently being accessed");
+  PetscCheck(nsent >= 0 && nsent <= db->L, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of points to remove %" PetscInt_FMT " must lie in [0, %" PetscInt_FMT "]", nsent, db->L);
+  if (PetscMemTypeHost(db->memtype)) {
+    for (PetscInt i = 0; i < nsent; ++i) {
+      PetscCheck(sentlist[i] >= 0 && sentlist[i] < db->L, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "sentlist[%" PetscInt_FMT "] = %" PetscInt_FMT " must lie in [0, %" PetscInt_FMT ")", i, sentlist[i], db->L);
+      PetscCheck(i == 0 || sentlist[i] > sentlist[i - 1], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "sentlist must be strictly ascending, sentlist[%" PetscInt_FMT "] = %" PetscInt_FMT " follows %" PetscInt_FMT, i, sentlist[i], sentlist[i - 1]);
+    }
+  }
+  PetscCall((*db->ops.compact)(db, nsent, sentlist));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
