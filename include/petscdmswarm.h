@@ -179,6 +179,58 @@ S*/
 typedef struct _p_DMSwarmCellDM *DMSwarmCellDM;
 PETSC_EXTERN PetscClassId        DMSWARMCELLDM_CLASSID;
 
+/*MC
+  DMSwarmPID - C integer type of the `DMSwarmField_pid` particle identifier field of a `DMSWARM`
+
+  Level: intermediate
+
+  Notes:
+  The type is selected at configure time with `--with-dmswarm-pid-size=(int|long|long long)`; the default is `long long` so that
+  simulations with billions of particles can label each one uniquely. Its width is independent of `--with-64-bit-indices`. Use
+  `DMSwarmPID_FMT` to print it, `MPIU_DMSWARM_PID` as the MPI datatype, `DMSWARM_PID_DATATYPE` as the `PetscDataType` reported by
+  `DMSwarmGetField()`, and `DMSWARM_PID_MIN`/`DMSWARM_PID_MAX` for its range. `PETSC_DMSWARM_PID_SIZE` is `sizeof(DMSwarmPID)`.
+
+.seealso: `DMSWARM`, `DMSwarmField_pid`, `DMSwarmGetField()`, `PetscInt`, `PetscInt64`
+M*/
+#if PetscDefined(USE_DMSWARM_PID_INT)
+typedef int DMSwarmPID;
+  #define MPIU_DMSWARM_PID MPI_INT
+  #define DMSwarmPID_FMT   "d"
+  #define DMSWARM_PID_MIN  INT_MIN
+  #define DMSWARM_PID_MAX  INT_MAX
+#elif PetscDefined(USE_DMSWARM_PID_LONG)
+typedef long DMSwarmPID;
+  #define MPIU_DMSWARM_PID MPI_LONG
+  #define DMSwarmPID_FMT   "ld"
+  #define DMSWARM_PID_MIN  LONG_MIN
+  #define DMSWARM_PID_MAX  LONG_MAX
+#elif PetscDefined(USE_DMSWARM_PID_LONG_LONG)
+typedef long long DMSwarmPID;
+  #define MPIU_DMSWARM_PID MPI_LONG_LONG_INT
+  #define DMSwarmPID_FMT   "lld"
+  #define DMSWARM_PID_MIN  LLONG_MIN
+  #define DMSWARM_PID_MAX  LLONG_MAX
+#else
+  #error "PETSc was configured without a DMSwarm pid type; exactly one of PETSC_USE_DMSWARM_PID_{INT,LONG,LONG_LONG} must be defined"
+#endif
+
+#if PETSC_DMSWARM_PID_SIZE == 4
+  #define DMSWARM_PID_DATATYPE PETSC_INT32
+#elif PETSC_DMSWARM_PID_SIZE == 8
+  #define DMSWARM_PID_DATATYPE PETSC_INT64
+#else
+  #error "PETSC_DMSWARM_PID_SIZE must be 4 or 8"
+#endif
+/* Compile-time check that the configure-computed size matches the compiler's view of the chosen type */
+typedef char DMSwarmPID_SizeAssert_Private[sizeof(DMSwarmPID) == PETSC_DMSWARM_PID_SIZE ? 1 : -1];
+
+/*MC
+  DMSwarmField_pid - name of the built-in `DMSWARM` field holding the particle identifier of each point, stored as `DMSwarmPID`
+
+  Level: intermediate
+
+.seealso: `DMSWARM`, `DMSwarmPID`, `DMSwarmField_rank`, `DMSwarmGetField()`
+M*/
 PETSC_EXTERN const char DMSwarmField_pid[];
 PETSC_EXTERN const char DMSwarmField_rank[];
 PETSC_EXTERN const char DMSwarmPICField_coor[];

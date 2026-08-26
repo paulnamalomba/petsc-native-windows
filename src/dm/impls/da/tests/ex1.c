@@ -7,7 +7,8 @@ PetscErrorCode DMSwarmPrint(DM sw)
 {
   DMSwarmCellDM celldm;
   PetscReal    *array;
-  PetscInt     *pidArray, *cidArray;
+  DMSwarmPID   *pidArray;
+  PetscInt     *cidArray;
   PetscInt      Np, bs, Nfc;
   PetscMPIInt   rank;
   const char  **coordFields, *cellid;
@@ -25,11 +26,11 @@ PetscErrorCode DMSwarmPrint(DM sw)
   for (PetscInt p = 0; p < Np; ++p) {
     const PetscReal th = PetscAtan2Real(array[2 * p + 1], array[2 * p]) / PETSC_PI;
     const PetscReal r  = PetscSqrtReal(array[2 * p + 1] * array[2 * p + 1] + array[2 * p] * array[2 * p]);
-    PetscCall(PetscPrintf(PETSC_COMM_SELF, "[%d] p %" PetscInt_FMT " (%+1.4f,%+1.4f) r=%1.2f th=%1.3f*pi cellid=%" PetscInt_FMT "\n", rank, pidArray[p], (double)array[2 * p], (double)array[2 * p + 1], (double)r, (double)th, cidArray[p]));
+    PetscCall(PetscPrintf(PETSC_COMM_SELF, "[%d] p %" DMSwarmPID_FMT " (%+1.4f,%+1.4f) r=%1.2f th=%1.3f*pi cellid=%" PetscInt_FMT "\n", rank, pidArray[p], (double)array[2 * p], (double)array[2 * p + 1], (double)r, (double)th, cidArray[p]));
   }
   PetscCall(DMSwarmRestoreField(sw, coordFields[0], &bs, NULL, (void **)&array));
   PetscCall(DMSwarmRestoreField(sw, DMSwarmField_pid, &bs, NULL, (void **)&pidArray));
-  PetscCall(DMSwarmRestoreField(sw, cellid, &bs, NULL, (void **)&pidArray));
+  PetscCall(DMSwarmRestoreField(sw, cellid, &bs, NULL, (void **)&cidArray));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

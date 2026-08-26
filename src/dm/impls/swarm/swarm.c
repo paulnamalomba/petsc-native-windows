@@ -1489,8 +1489,8 @@ PetscErrorCode DMSwarmInitializeFieldRegister(DM dm)
   PetscFunctionBegin;
   if (!swarm->field_registration_initialized) {
     swarm->field_registration_initialized = PETSC_TRUE;
-    PetscCall(DMSwarmRegisterPetscDatatypeField(dm, DMSwarmField_pid, 1, PETSC_INT64)); /* unique identifier */
-    PetscCall(DMSwarmRegisterPetscDatatypeField(dm, DMSwarmField_rank, 1, PETSC_INT));  /* used for communication */
+    PetscCall(DMSwarmRegisterPetscDatatypeField(dm, DMSwarmField_pid, 1, DMSWARM_PID_DATATYPE)); /* unique identifier, see DMSwarmPID */
+    PetscCall(DMSwarmRegisterPetscDatatypeField(dm, DMSwarmField_rank, 1, PETSC_INT));           /* used for communication */
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -1870,7 +1870,8 @@ PetscErrorCode DMSwarmGetSize(DM dm, PetscInt *n)
 + dm        - a `DMSWARM`
 . fieldname - the textual name to identify this field
 . blocksize - the number of each data type
-- type      - a valid PETSc data type (`PETSC_CHAR`, `PETSC_SHORT`, `PETSC_INT`, `PETSC_FLOAT`, `PETSC_REAL`, `PETSC_LONG`)
+- type      - a valid PETSc data type; any `PetscDataType` with a fixed size except `PETSC_OBJECT`, `PETSC_FUNCTION`, `PETSC_STRING`, `PETSC_STRUCT` and `PETSC_DATATYPE_UNKNOWN`,
+              for example `PETSC_CHAR`, `PETSC_SHORT`, `PETSC_INT`, `PETSC_INT32`, `PETSC_INT64`, `PETSC_LONG`, `PETSC_FLOAT`, `PETSC_REAL`, `PETSC_SCALAR`
 
   Level: beginner
 
@@ -1888,11 +1889,11 @@ PetscErrorCode DMSwarmRegisterPetscDatatypeField(DM dm, const char fieldname[], 
   PetscCheck(swarm->field_registration_initialized, PetscObjectComm((PetscObject)dm), PETSC_ERR_USER, "Must call DMSwarmInitializeFieldRegister() first");
   PetscCheck(!swarm->field_registration_finalized, PetscObjectComm((PetscObject)dm), PETSC_ERR_USER, "Cannot register additional fields after calling DMSwarmFinalizeFieldRegister() first");
 
-  PetscCheck(type != PETSC_OBJECT, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Valid for {char,short,int,long,float,double}");
-  PetscCheck(type != PETSC_FUNCTION, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Valid for {char,short,int,long,float,double}");
-  PetscCheck(type != PETSC_STRING, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Valid for {char,short,int,long,float,double}");
-  PetscCheck(type != PETSC_STRUCT, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Valid for {char,short,int,long,float,double}");
-  PetscCheck(type != PETSC_DATATYPE_UNKNOWN, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Valid for {char,short,int,long,float,double}");
+  PetscCheck(type != PETSC_OBJECT, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSC_OBJECT, PETSC_FUNCTION, PETSC_STRING, PETSC_STRUCT and PETSC_DATATYPE_UNKNOWN are not valid field types");
+  PetscCheck(type != PETSC_FUNCTION, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSC_OBJECT, PETSC_FUNCTION, PETSC_STRING, PETSC_STRUCT and PETSC_DATATYPE_UNKNOWN are not valid field types");
+  PetscCheck(type != PETSC_STRING, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSC_OBJECT, PETSC_FUNCTION, PETSC_STRING, PETSC_STRUCT and PETSC_DATATYPE_UNKNOWN are not valid field types");
+  PetscCheck(type != PETSC_STRUCT, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSC_OBJECT, PETSC_FUNCTION, PETSC_STRING, PETSC_STRUCT and PETSC_DATATYPE_UNKNOWN are not valid field types");
+  PetscCheck(type != PETSC_DATATYPE_UNKNOWN, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSC_OBJECT, PETSC_FUNCTION, PETSC_STRING, PETSC_STRUCT and PETSC_DATATYPE_UNKNOWN are not valid field types");
 
   PetscCall(PetscDataTypeGetSize(type, &size));
   /* Load a specific data type into data bucket, specifying textual name and its size in bytes */

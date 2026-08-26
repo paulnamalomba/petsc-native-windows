@@ -25,9 +25,11 @@ static PetscErrorCode FillRange(DM sw, PetscInt pstart, PetscInt pend, PetscInt 
   PetscReal  *phi, *vel;
   PetscInt   *tag;
   PetscInt64 *csum;
+  DMSwarmPID *pid;
   PetscInt    p, seed;
 
   PetscFunctionBeginUser;
+  PetscCall(DMSwarmGetField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pid));
   PetscCall(DMSwarmGetField(sw, "phi", NULL, NULL, (void **)&phi));
   PetscCall(DMSwarmGetField(sw, "vel", NULL, NULL, (void **)&vel));
   PetscCall(DMSwarmGetField(sw, "tag", NULL, NULL, (void **)&tag));
@@ -35,6 +37,7 @@ static PetscErrorCode FillRange(DM sw, PetscInt pstart, PetscInt pend, PetscInt 
   PetscCall(DMSwarmGetField(sw, "csum", NULL, NULL, (void **)&csum));
   for (p = pstart; p < pend; ++p) {
     seed            = base + (p - pstart);
+    pid[p]          = 1000 + seed;
     phi[p]          = seed + 0.5;
     vel[2 * p + 0]  = seed + 0.1;
     vel[2 * p + 1]  = seed + 0.2;
@@ -49,6 +52,7 @@ static PetscErrorCode FillRange(DM sw, PetscInt pstart, PetscInt pend, PetscInt 
   PetscCall(DMSwarmRestoreField(sw, "tag", NULL, NULL, (void **)&tag));
   PetscCall(DMSwarmRestoreField(sw, "payload", NULL, NULL, (void **)&payload));
   PetscCall(DMSwarmRestoreField(sw, "csum", NULL, NULL, (void **)&csum));
+  PetscCall(DMSwarmRestoreField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pid));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -60,6 +64,7 @@ static PetscErrorCode PrintState(DM sw, const char *stage)
   PetscReal  *phi, *vel;
   PetscInt   *tag;
   PetscInt64 *csum;
+  DMSwarmPID *pid;
   PetscInt    p, nlocal, nglobal;
   PetscMPIInt rank;
 
@@ -74,12 +79,14 @@ static PetscErrorCode PrintState(DM sw, const char *stage)
   PetscCall(DMSwarmGetField(sw, "tag", NULL, NULL, (void **)&tag));
   PetscCall(DMSwarmGetField(sw, "payload", NULL, NULL, (void **)&payload));
   PetscCall(DMSwarmGetField(sw, "csum", NULL, NULL, (void **)&csum));
+  PetscCall(DMSwarmGetField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pid));
   PetscCall(PetscSynchronizedPrintf(comm, "  [%d] nlocal %" PetscInt_FMT "\n", rank, nlocal));
   for (p = 0; p < nlocal; ++p) {
-    PetscCall(PetscSynchronizedPrintf(comm, "  [%d] %2" PetscInt_FMT ": phi %7.2f vel (%7.2f, %7.2f) tag %5" PetscInt_FMT " payload (%4" PetscInt_FMT ", %6.2f) csum (%5" PetscInt64_FMT ", %5" PetscInt64_FMT ")\n", rank, p, (double)phi[p], (double)vel[2 * p + 0], (double)vel[2 * p + 1], tag[p],
+    PetscCall(PetscSynchronizedPrintf(comm, "  [%d] %2" PetscInt_FMT ": pid %20" DMSwarmPID_FMT " phi %7.2f vel (%7.2f, %7.2f) tag %5" PetscInt_FMT " payload (%4" PetscInt_FMT ", %6.2f) csum (%5" PetscInt64_FMT ", %5" PetscInt64_FMT ")\n", rank, p, pid[p], (double)phi[p], (double)vel[2 * p + 0], (double)vel[2 * p + 1], tag[p],
                                       payload[p].id, (double)payload[p].w, csum[2 * p + 0], csum[2 * p + 1]));
   }
   PetscCall(PetscSynchronizedFlush(comm, PETSC_STDOUT));
+  PetscCall(DMSwarmRestoreField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pid));
   PetscCall(DMSwarmRestoreField(sw, "phi", NULL, NULL, (void **)&phi));
   PetscCall(DMSwarmRestoreField(sw, "vel", NULL, NULL, (void **)&vel));
   PetscCall(DMSwarmRestoreField(sw, "tag", NULL, NULL, (void **)&tag));
@@ -95,6 +102,7 @@ int main(int argc, char **argv)
   MPI_Comm      comm;
   PetscReal     nrm;
   PetscDataType type;
+  DMSwarmPID   *pid;
   PetscInt      nlocal, bs, f;
   PetscMPIInt   rank;
 
@@ -121,8 +129,16 @@ int main(int argc, char **argv)
     PetscCall(PetscPrintf(comm, "field %-7s blocksize %" PetscInt_FMT " type %s\n", FieldNames[f], bs, TypeLabel(type)));
   }
 
+  /* The particle id field has the configure-selected DMSwarmPID type; give the first two points its extreme values so they travel through the copy/remove/shrink paths below */
   PetscCall(DMSwarmGetLocalSize(sw, &nlocal));
   PetscCall(FillRange(sw, 0, nlocal, rank * 100));
+  PetscCall(DMSwarmGetField(sw, DMSwarmField_pid, &bs, &type, (void **)&pid));
+  PetscCheck(type == DMSWARM_PID_DATATYPE, comm, PETSC_ERR_PLIB, "DMSwarm pid field has datatype %s, expected %s", PetscDataTypes[type], PetscDataTypes[DMSWARM_PID_DATATYPE]);
+  PetscCheck(bs == 1, comm, PETSC_ERR_PLIB, "DMSwarm pid field has blocksize %" PetscInt_FMT ", expected 1", bs);
+  PetscCheck(sizeof(DMSwarmPID) == PETSC_DMSWARM_PID_SIZE, comm, PETSC_ERR_PLIB, "sizeof(DMSwarmPID) = %zu differs from PETSC_DMSWARM_PID_SIZE = %d", sizeof(DMSwarmPID), (int)PETSC_DMSWARM_PID_SIZE);
+  pid[0] = DMSWARM_PID_MAX;
+  pid[1] = DMSWARM_PID_MIN;
+  PetscCall(DMSwarmRestoreField(sw, DMSwarmField_pid, &bs, &type, (void **)&pid));
   PetscCall(PrintState(sw, "After initial fill"));
 
   /* New points must arrive zero-initialized */
