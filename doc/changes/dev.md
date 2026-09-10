@@ -70,6 +70,8 @@
 ```{rubric} PC:
 ```
 
+- Add `PCHPDDMSetDeflationMatScaling()` to share user-supplied partition-of-unity weights between custom coarse spaces and fine-level `PCASM` corrections
+
 ```{rubric} KSP:
 ```
 
