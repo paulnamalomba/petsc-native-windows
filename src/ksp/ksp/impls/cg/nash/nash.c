@@ -1,11 +1,5 @@
 #include <../src/ksp/ksp/impls/cg/nash/nashimpl.h> /*I "petscksp.h" I*/
 
-#define NASH_PRECONDITIONED_DIRECTION   0
-#define NASH_UNPRECONDITIONED_DIRECTION 1
-#define NASH_DIRECTION_TYPES            2
-
-static const char *DType_Table[64] = {"preconditioned", "unpreconditioned"};
-
 static PetscErrorCode KSPCGSolve_NASH(KSP ksp)
 {
 #if PetscDefined(USE_COMPLEX)
@@ -226,7 +220,7 @@ static PetscErrorCode KSPCGSolve_NASH(KSP ksp)
   dMp    = 0.0;
   norm_d = 0.0;
   switch (cg->dtype) {
-  case NASH_PRECONDITIONED_DIRECTION:
+  case KSP_CG_DIRECTION_PRECONDITIONED:
     norm_p = rz;
     break;
 
@@ -355,7 +349,7 @@ static PetscErrorCode KSPCGSolve_NASH(KSP ksp)
     PetscCall(KSP_PCApply(ksp, r, z)); /* z = inv(M) r      */
 
     switch (cg->dtype) {
-    case NASH_PRECONDITIONED_DIRECTION:
+    case KSP_CG_DIRECTION_PRECONDITIONED:
       norm_d = norm_dp1;
       break;
 
@@ -456,7 +450,7 @@ static PetscErrorCode KSPCGSolve_NASH(KSP ksp)
     PetscCall(VecAYPX(p, beta, z)); /* p = z + beta p    */
 
     switch (cg->dtype) {
-    case NASH_PRECONDITIONED_DIRECTION:
+    case KSP_CG_DIRECTION_PRECONDITIONED:
       dMp    = beta * (dMp + alpha * norm_p);
       norm_p = beta * (rzm1 + beta * norm_p);
       break;
@@ -512,6 +506,8 @@ static PetscErrorCode KSPCGDestroy_NASH(KSP ksp)
   /* Clear composed functions                                                */
   /***************************************************************************/
 
+  PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGSetDirectionType_C", NULL));
+  PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetDirectionType_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGSetRadius_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetNormD_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetObjFcn_C", NULL));
@@ -521,6 +517,24 @@ static PetscErrorCode KSPCGDestroy_NASH(KSP ksp)
   /***************************************************************************/
 
   PetscCall(KSPDestroyDefault(ksp));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode KSPCGSetDirectionType_NASH(KSP ksp, KSPCGDirectionType dtype)
+{
+  KSPCG_NASH *cg = (KSPCG_NASH *)ksp->data;
+
+  PetscFunctionBegin;
+  cg->dtype = dtype;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode KSPCGGetDirectionType_NASH(KSP ksp, KSPCGDirectionType *dtype)
+{
+  KSPCG_NASH *cg = (KSPCG_NASH *)ksp->data;
+
+  PetscFunctionBegin;
+  *dtype = cg->dtype;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -553,14 +567,17 @@ static PetscErrorCode KSPCGGetObjFcn_NASH(KSP ksp, PetscReal *o_fcn)
 
 static PetscErrorCode KSPCGSetFromOptions_NASH(KSP ksp, PetscOptionItems PetscOptionsObject)
 {
-  KSPCG_NASH *cg = (KSPCG_NASH *)ksp->data;
+  KSPCG_NASH        *cg    = (KSPCG_NASH *)ksp->data;
+  KSPCGDirectionType dtype = cg->dtype;
+  PetscBool          flg;
 
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "KSPCG NASH options");
 
   PetscCall(PetscOptionsReal("-ksp_cg_radius", "Trust Region Radius", "KSPCGSetRadius", cg->radius, &cg->radius, NULL));
 
-  PetscCall(PetscOptionsEList("-ksp_cg_dtype", "Norm used for direction", "", DType_Table, NASH_DIRECTION_TYPES, DType_Table[cg->dtype], &cg->dtype, NULL));
+  PetscCall(PetscOptionsEnum("-ksp_cg_dtype", "Norm used for direction", "KSPCGSetDirectionType", KSPCGDirectionTypes, (PetscEnum)dtype, (PetscEnum *)&dtype, &flg));
+  if (flg) PetscCall(KSPCGSetDirectionType(ksp, dtype));
 
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -570,7 +587,8 @@ static PetscErrorCode KSPCGSetFromOptions_NASH(KSP ksp, PetscOptionItems PetscOp
    KSPNASH -   Code to run conjugate gradient method subject to a constraint on the solution norm in a trust region method {cite}`nash1984newton`
 
    Options Database Keys:
-.      -ksp_cg_radius radius - Trust Region Radius
++  -ksp_cg_radius radius - Trust Region Radius
+-  -ksp_cg_dtype (preconditioned|unpreconditioned) - Norm used for the trust-region constraint
 
    Level: developer
 
@@ -603,7 +621,7 @@ static PetscErrorCode KSPCGSetFromOptions_NASH(KSP ksp, PetscOptionItems PetscOp
 
    The preconditioner supplied must be symmetric and positive definite.
 
-.seealso: [](ch_ksp), `KSPQCG`, `KSPGLTR`, `KSPSTCG`, `KSPCreate()`, `KSPSetType()`, `KSPType`, `KSP`, `KSPCGSetRadius()`, `KSPCGGetNormD()`, `KSPCGGetObjFcn()`
+.seealso: [](ch_ksp), `KSPQCG`, `KSPGLTR`, `KSPSTCG`, `KSPCreate()`, `KSPSetType()`, `KSPType`, `KSP`, `KSPCGSetRadius()`, `KSPCGSetDirectionType()`, `KSPCGGetNormD()`, `KSPCGGetObjFcn()`
 M*/
 
 PETSC_EXTERN PetscErrorCode KSPCreate_NASH(KSP ksp)
@@ -613,7 +631,7 @@ PETSC_EXTERN PetscErrorCode KSPCreate_NASH(KSP ksp)
   PetscFunctionBegin;
   PetscCall(PetscNew(&cg));
   cg->radius = 0.0;
-  cg->dtype  = NASH_UNPRECONDITIONED_DIRECTION;
+  cg->dtype  = KSP_CG_DIRECTION_UNPRECONDITIONED;
 
   ksp->data = (void *)cg;
   PetscCall(KSPSetSupportedNorm(ksp, KSP_NORM_UNPRECONDITIONED, PC_LEFT, 3));
@@ -635,6 +653,8 @@ PETSC_EXTERN PetscErrorCode KSPCreate_NASH(KSP ksp)
   ksp->ops->buildresidual  = KSPBuildResidualDefault;
   ksp->ops->view           = NULL;
 
+  PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGSetDirectionType_C", KSPCGSetDirectionType_NASH));
+  PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetDirectionType_C", KSPCGGetDirectionType_NASH));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGSetRadius_C", KSPCGSetRadius_NASH));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetNormD_C", KSPCGGetNormD_NASH));
   PetscCall(PetscObjectComposeFunction((PetscObject)ksp, "KSPCGGetObjFcn_C", KSPCGGetObjFcn_NASH));

@@ -1140,6 +1140,25 @@ PETSC_EXTERN const char *const KSPCGTypes[];
 PETSC_EXTERN PetscErrorCode KSPCGSetType(KSP, KSPCGType);
 PETSC_EXTERN PetscErrorCode KSPCGUseSingleReduction(KSP, PetscBool);
 
+/*E
+  KSPCGDirectionType - Norm used for the trust-region constraint in `KSPCG`, `KSPSTCG`, `KSPNASH`, and `KSPGLTR`
+
+  Values:
++ `KSP_CG_DIRECTION_PRECONDITIONED`   - use $\sqrt{s^T M s}$, where the preconditioner applies $M^{-1}$
+- `KSP_CG_DIRECTION_UNPRECONDITIONED` - use the Euclidean norm $\sqrt{s^T s}$ (default)
+
+  Level: advanced
+
+.seealso: [](ch_ksp), `KSP`, `KSPCGSetDirectionType()`, `KSPCGGetDirectionType()`, `KSPCGSetRadius()`, `KSPNormType`
+E*/
+typedef enum {
+  KSP_CG_DIRECTION_PRECONDITIONED,
+  KSP_CG_DIRECTION_UNPRECONDITIONED
+} KSPCGDirectionType;
+PETSC_EXTERN const char *const KSPCGDirectionTypes[];
+
+PETSC_EXTERN PetscErrorCode KSPCGSetDirectionType(KSP, KSPCGDirectionType);
+PETSC_EXTERN PetscErrorCode KSPCGGetDirectionType(KSP, KSPCGDirectionType *);
 PETSC_EXTERN PetscErrorCode KSPCGSetRadius(KSP, PetscReal);
 PETSC_EXTERN PetscErrorCode KSPCGSetObjectiveTarget(KSP, PetscReal);
 PETSC_EXTERN PetscErrorCode KSPCGGetNormD(KSP, PetscReal *);
