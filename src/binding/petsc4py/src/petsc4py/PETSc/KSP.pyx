@@ -228,6 +228,24 @@ class KSPType(object):
     EKSM       = S_(KSPEKSM)
 
 
+class KSPCGDirectionType(object):
+    """`petsc.KSPCG` direction types for the trust-region constraint.
+
+    `PRECONDITIONED`
+        Use the norm induced by the symmetric positive definite matrix whose
+        inverse is applied by the preconditioner.
+    `UNPRECONDITIONED`
+        Use the Euclidean norm (default).
+
+    See Also
+    --------
+    KSP.setCGDirectionType, petsc.KSPCGDirectionType
+
+    """
+    PRECONDITIONED   = KSP_CG_DIRECTION_PRECONDITIONED
+    UNPRECONDITIONED = KSP_CG_DIRECTION_UNPRECONDITIONED
+
+
 class KSPNormType(object):
     """KSP norm type.
 
@@ -410,6 +428,7 @@ cdef class KSP(Object):
     """
 
     Type            = KSPType
+    CGDirectionType = KSPCGDirectionType
     NormType        = KSPNormType
     ConvergedReason = KSPConvergedReason
     HPDDMType       = KSPHPDDMType
@@ -1976,6 +1995,103 @@ cdef class KSP(Object):
         CHKERR(KSPCGGetObjFcn(self.ksp, &cval))
         return cval
 
+    def setCGDirectionType(self, dtype: KSP.CGDirectionType | str) -> None:
+        """Set the `petsc.KSPCG` direction type.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        dtype
+            The direction type, as a `CGDirectionType` value or the string
+            ``'preconditioned'`` or ``'unpreconditioned'``.
+
+        Notes
+        -----
+        The direction type selects the norm used for the trust-region
+        constraint in `petsc.KSPCG`, `petsc.KSPSTCG`, `petsc.KSPNASH`, and
+        `petsc.KSPGLTR`. It does not change the residual norm selected by
+        `setNormType`.
+
+        See Also
+        --------
+        getCGDirectionType, setCGRadius, petsc.KSPCGSetDirectionType
+
+        """
+        cdef PetscKSPCGDirectionType ctype = asCGDirectionType(dtype)
+        CHKERR(KSPCGSetDirectionType(self.ksp, ctype))
+
+    def getCGDirectionType(self) -> KSP.CGDirectionType:
+        """Return the `petsc.KSPCG` direction type.
+
+        Not collective.
+
+        See Also
+        --------
+        setCGDirectionType, petsc.KSPCGGetDirectionType
+
+        """
+        cdef PetscKSPCGDirectionType ctype = KSP_CG_DIRECTION_UNPRECONDITIONED
+        CHKERR(KSPCGGetDirectionType(self.ksp, &ctype))
+        return ctype
+
+    def setCGRadius(self, radius: float) -> None:
+        """Set the `petsc.KSPCG` trust-region radius.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        radius
+            Nonnegative radius. Zero, the default, disables the constraint.
+
+        See Also
+        --------
+        setCGDirectionType, getCGNormD, petsc.KSPCGSetRadius
+
+        """
+        cdef PetscReal rval = asReal(radius)
+        CHKERR(KSPCGSetRadius(self.ksp, rval))
+
+    def setCGObjectiveTarget(self, target: float) -> None:
+        """Set the target value for the `petsc.KSPCG` quadratic objective.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        target
+            Stop when the quadratic objective reaches this value or less.
+            A nonnegative value, including the default zero, disables the test.
+
+        See Also
+        --------
+        getCGObjectiveValue, petsc.KSPCGSetObjectiveTarget
+
+        """
+        cdef PetscReal rval = asReal(target)
+        CHKERR(KSPCGSetObjectiveTarget(self.ksp, rval))
+
+    def getCGNormD(self) -> float:
+        """Return the solution norm in the selected trust-region metric.
+
+        Not collective.
+
+        Notes
+        -----
+        Available after `solve`. `petsc.KSPCG` and `petsc.KSPSTCG` also update
+        it before each monitor call when the radius is active. The
+        single-reduction `petsc.KSPCG` variant does not provide this quantity.
+
+        See Also
+        --------
+        setCGDirectionType, setCGRadius, petsc.KSPCGGetNormD
+
+        """
+        cdef PetscReal rval = 0
+        CHKERR(KSPCGGetNormD(self.ksp, &rval))
+        return toReal(rval)
+
     def setHPDDMType(self, hpddm_type: HPDDMType) -> None:
         """Set the Krylov solver type.
 
@@ -2758,6 +2874,7 @@ cdef class KSP(Object):
 # --------------------------------------------------------------------
 
 del KSPType
+del KSPCGDirectionType
 del KSPNormType
 del KSPConvergedReason
 del KSPHPDDMType
