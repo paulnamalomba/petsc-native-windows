@@ -87,9 +87,16 @@
 
 - Add support for CUTEst unconstrained problems in TAO tutorials and tests
 - Map `TAOSNES` convergence and divergence reasons with the public `TaoConvergedReasonFromSNES()`, and add `TaoSNESGetSNES()` to access the underlying solver
+- Add `TaoSetHessianMult()`, `TaoGetHessianMult()`, and `TaoComputeHessianMult()` to provide the Hessian-vector product as a callback
+- Add `TaoSetHessianMatrices()` to set the Hessian matrices without setting a Hessian routine
+- Add function typedefs `TaoObjectiveFn`, `TaoGradientFn`, `TaoObjectiveAndGradientFn`, `TaoHessianFn`, and `TaoHessianMultFn`
 
 ```{rubric} TaoTerm:
 ```
+
+- Add `TaoTermComputeHessianMult()` and `TaoTermIsHessianMultDefined()`
+- Add `TaoTermShellSetHessianMult()` and the function typedef `TaoTermHessianMultFn` to provide the Hessian-vector product of a `TAOTERMSHELL`
+- Add `TaoTermCreateHessianShell()` and `TaoTermUpdateHessianShell()` for a matrix-free `MATSHELL` Hessian, selected with `-tao_term_hessian_mat_type shell`
 
 ```{rubric} PetscRegressor:
 ```
