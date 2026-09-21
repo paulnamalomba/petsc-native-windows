@@ -2,16 +2,10 @@
 
 typedef struct _n_TaoTerm_HalfL2Squared TaoTerm_HalfL2Squared;
 
-typedef struct {
-  PetscObjectId    id;
-  PetscObjectState state;
-  PetscBool        valid;
-} TaoTermHalfL2SquaredHessianState;
-
 struct _n_TaoTerm_HalfL2Squared {
-  Vec                              pdiff_work;
-  TaoTermHalfL2SquaredHessianState H_state;
-  TaoTermHalfL2SquaredHessianState Hpre_state;
+  Vec      pdiff_work;
+  MatState H_state;
+  MatState Hpre_state;
 };
 
 static PetscErrorCode TaoTermDestroy_Halfl2squared(TaoTerm term)
@@ -63,22 +57,18 @@ static PetscErrorCode TaoTermComputeGradient_Halfl2squared(TaoTerm term, Vec x, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermHalfL2SquaredSetIdentity(Mat H, TaoTermHalfL2SquaredHessianState *cached)
+static PetscErrorCode TaoTermHalfL2SquaredSetIdentity(Mat H, MatState *cached)
 {
-  PetscObjectId    id;
-  PetscObjectState state;
+  PetscBool same;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectGetId((PetscObject)H, &id));
-  PetscCall(PetscObjectStateGet((PetscObject)H, &state));
-  if (cached->valid && cached->id == id && cached->state == state) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(MatStateCompareUpdate(H, cached, &same));
+  if (same) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(MatZeroEntries(H));
   PetscCall(MatAssemblyBegin(H, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(H, MAT_FINAL_ASSEMBLY));
   PetscCall(MatShift(H, 1.0));
-  PetscCall(PetscObjectStateGet((PetscObject)H, &cached->state));
-  cached->id    = id;
-  cached->valid = PETSC_TRUE;
+  PetscCall(MatGetState(H, cached));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -150,6 +140,8 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Halfl2squared(TaoTerm term)
   PetscCall(TaoTermCreate_ElementwiseDivergence_Internal(term));
   PetscCall(PetscNew(&l2));
   term->data = (void *)l2;
+  PetscCall(MatStateInvalidate(l2->H_state));
+  PetscCall(MatStateInvalidate(l2->Hpre_state));
 
   PetscCall(PetscFree(term->H_mattype));
   PetscCall(PetscFree(term->Hpre_mattype));

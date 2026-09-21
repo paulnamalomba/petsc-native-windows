@@ -2,6 +2,7 @@
 
 #include <petsctao.h>
 #include <petsctaolinesearch.h>
+#include <petsc/private/matimpl.h>
 #include <petsc/private/petscimpl.h>
 
 PETSC_EXTERN PetscBool      TaoRegisterAllCalled;
@@ -40,51 +41,44 @@ struct _TaoOps {
 typedef struct _n_TaoTermMapping TaoTermMapping;
 
 typedef struct {
-  PetscObjectId    id;
-  PetscObjectState state;
-  PetscObjectState nonzero_state;
-} TaoTermMatSnapshot;
-
-typedef struct {
-  TaoTermMatSnapshot raw;
-  TaoTermMatSnapshot map;
-  TaoTermMatSnapshot mapped;
-  PetscBool          valid;
+  MatState unmapped;
+  MatState map;
+  MatState mapped;
 } TaoTermMappedHessianState;
 
 /*S
-   TaoTermMapping - Object held by either `Tao` or `TaoTerm` with `TAOTERMSUM` type
-   that contain necessary information regarding mapping matrix
+   TaoTermMapping - A scaled `TaoTerm` and its optional solution-space mapping
 
    Level: developer
 
    Notes:
-   This object is internally handled in `TaoAddTerm()`, which couples `TaoTerm` with
-   appropriately mapped gradients, mapped Hessians, and other necessary information.
+   A `TaoTermMapping` represents the function $F(x) = \alpha f(Ax)$, where `term` is $f$,
+   `scale` is $\alpha$, and `map` is $A$. If `map` is `NULL`, $A$ is the identity.
 
-   This object is also used in `TAOTERMSUM` to handle mapping of summands of `TAOTERMSUM`.
+   $x$ is in the outer solution space, the domain of $A$. $Ax$ is in the term solution space,
+   the range of $A$. Members named `unmapped_` are in the term solution space, and members
+   named `mapped_` are in the outer solution space.
 
-   Users would not need to work directly with the `TaoTermMapping`, rather, they work with
-   `Tao` with added terms via `TaoAddTerm()`, or with `TaoTerm` with type `TAOTERMSUM`.
+   Any parameter vector used to evaluate `term` is managed separately by the `Tao`
+   or `TaoTerm` with type `TAOTERMSUM` and is not stored in `TaoTermMapping`.
 
-   Developer Note:
-   Currently, as `MatPtAP` does not support diagonal matrices, internal work matrices was added
-   for a workaround.
+   `TaoAddTerm()` uses this object to attach a term to a `Tao`. `TAOTERMSUM` uses one for each
+   summand. Users work with those interfaces rather than with `TaoTermMapping` directly.
 
-.seealso: [](ch_tao), `Tao`, `TaoAddTerm()`, `TAOTERMSUM`,
+.seealso: [](ch_tao), `Tao`, `TaoAddTerm()`, `TAOTERMSUM`
 S*/
 struct _n_TaoTermMapping {
   char                     *prefix;
   TaoTerm                   term;
   PetscReal                 scale;
   Mat                       map;
-  Vec                       _map_output;
-  Vec                       _unmapped_vec_work;
-  Vec                       _mapped_vec_work;
-  Mat                       _unmapped_H;
-  Mat                       _unmapped_Hpre;
-  Mat                       _mapped_H;
-  Mat                       _mapped_Hpre;
+  Vec                       map_output;
+  Vec                       unmapped_vec_work;
+  Vec                       mapped_vec_work;
+  Mat                       unmapped_H;
+  Mat                       unmapped_Hpre;
+  Mat                       mapped_H;
+  Mat                       mapped_Hpre;
   TaoTermMappedHessianState mapped_H_state;
   TaoTermMappedHessianState mapped_Hpre_state;
   TaoTermMask               mask;
@@ -265,6 +259,7 @@ static inline PetscErrorCode TaoLogConvergenceHistory(Tao tao, PetscReal obj, Pe
 }
 
 PETSC_INTERN PetscErrorCode TaoTestGradient_Internal(Tao, Vec, Vec, PetscViewer, PetscViewer);
+PETSC_INTERN PetscErrorCode TaoSetHessianStorage_Internal(Tao, Mat, Mat);
 
 typedef struct _TaoTermOps *TaoTermOps;
 
@@ -343,6 +338,8 @@ PETSC_INTERN PetscErrorCode TaoTermMappingComputeObjective(TaoTermMapping *, Vec
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeGradient(TaoTermMapping *, Vec, Vec, InsertMode, Vec);
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeObjectiveAndGradient(TaoTermMapping *, Vec, Vec, InsertMode, PetscReal *, Vec);
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeHessian(TaoTermMapping *, Vec, Vec, InsertMode, Mat, Mat);
+PETSC_INTERN PetscErrorCode TaoTermMappingApplyHessian(TaoTermMapping *, InsertMode, Mat, Mat, Mat, Mat);
+PETSC_INTERN PetscErrorCode TaoTermMappingGetUnmappedHessians(TaoTermMapping *, Mat *, Mat *);
 PETSC_INTERN PetscErrorCode TaoTermMappingComputeHessianMult(TaoTermMapping *, Vec, Vec, Mat, Vec, InsertMode, Vec);
 PETSC_INTERN PetscErrorCode TaoTermMappingSetUp(TaoTermMapping *);
 PETSC_INTERN PetscErrorCode TaoTermMappingCreateSolutionVec(TaoTermMapping *, Vec *);

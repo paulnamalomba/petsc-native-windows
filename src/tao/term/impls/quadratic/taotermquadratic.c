@@ -2,19 +2,14 @@
 
 typedef struct _n_TaoTerm_Quadratic TaoTerm_Quadratic;
 
-typedef struct {
-  PetscObjectId    destination_id;
-  PetscObjectState source_state;
-  PetscObjectState destination_state;
-  PetscBool        valid;
-} TaoTermQuadraticHessianState;
-
 struct _n_TaoTerm_Quadratic {
-  Mat                          A;
-  Vec                          _diff;
-  Vec                          Adiff;
-  TaoTermQuadraticHessianState H_state;
-  TaoTermQuadraticHessianState Hpre_state;
+  Mat      A;
+  Vec      _diff;
+  Vec      Adiff;
+  MatState H_src_state;
+  MatState H_dest_state;
+  MatState Hpre_src_state;
+  MatState Hpre_dest_state;
 };
 
 static PetscErrorCode TaoTermDestroy_Quadratic(TaoTerm term)
@@ -116,23 +111,17 @@ static PetscErrorCode TaoTermComputeObjectiveAndGradient_Quadratic(TaoTerm term,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoTermQuadraticCopyHessian(Mat source, Mat destination, TaoTermQuadraticHessianState *cached)
+static PetscErrorCode TaoTermQuadraticCopyHessian(Mat source, Mat destination, MatState *source_state, MatState *destination_state)
 {
-  PetscObjectId    destination_id;
-  PetscObjectState source_state, destination_state;
+  PetscBool source_same, destination_same;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectGetId((PetscObject)destination, &destination_id));
-  PetscCall(PetscObjectStateGet((PetscObject)source, &source_state));
-  PetscCall(PetscObjectStateGet((PetscObject)destination, &destination_state));
-  if (cached->valid && cached->destination_id == destination_id) {
-    if (cached->source_state == source_state && cached->destination_state == destination_state) PetscFunctionReturn(PETSC_SUCCESS);
-  }
+  PetscCall(MatStateCompareUpdate(source, source_state, &source_same));
+  PetscCall(MatStateCompareUpdate(destination, destination_state, &destination_same));
+  if (source_same && destination_same) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(MatCopy(source, destination, UNKNOWN_NONZERO_PATTERN));
-  PetscCall(PetscObjectStateGet((PetscObject)source, &cached->source_state));
-  PetscCall(PetscObjectStateGet((PetscObject)destination, &cached->destination_state));
-  cached->destination_id = destination_id;
-  cached->valid          = PETSC_TRUE;
+  PetscCall(MatGetState(source, source_state));
+  PetscCall(MatGetState(destination, destination_state));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -142,8 +131,8 @@ static PetscErrorCode TaoTermComputeHessian_Quadratic(TaoTerm term, Vec x, Vec p
 
   PetscFunctionBegin;
   PetscCheck(quad->A, PetscObjectComm((PetscObject)term), PETSC_ERR_ORDER, "Quadratic matrix not set, call TaoTermQuadraticSetMat() first");
-  if (H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, H, &quad->H_state));
-  if (Hpre && Hpre != H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, Hpre, &quad->Hpre_state));
+  if (H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, H, &quad->H_src_state, &quad->H_dest_state));
+  if (Hpre && Hpre != H) PetscCall(TaoTermQuadraticCopyHessian(quad->A, Hpre, &quad->Hpre_src_state, &quad->Hpre_dest_state));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -252,9 +241,11 @@ static PetscErrorCode TaoTermQuadraticSetMat_Quadratic(TaoTerm term, Mat A)
     PetscCall(MatDestroy(&quad->A));
     PetscCall(VecDestroy(&quad->_diff));
     PetscCall(VecDestroy(&quad->Adiff));
-    quad->A                = A;
-    quad->H_state.valid    = PETSC_FALSE;
-    quad->Hpre_state.valid = PETSC_FALSE;
+    quad->A = A;
+    PetscCall(MatStateInvalidate(quad->H_src_state));
+    PetscCall(MatStateInvalidate(quad->H_dest_state));
+    PetscCall(MatStateInvalidate(quad->Hpre_src_state));
+    PetscCall(MatStateInvalidate(quad->Hpre_dest_state));
     PetscCall(MatGetVecType(A, &vec_type));
     PetscCall(TaoTermSetSolutionVecType(term, vec_type));
     PetscCall(TaoTermSetParametersVecType(term, vec_type));
