@@ -329,6 +329,7 @@ PETSC_EXTERN PetscErrorCode TaoSetHessian(Tao, Mat, Mat, PetscErrorCode (*)(Tao,
 PETSC_EXTERN PetscErrorCode TaoGetHessian(Tao, Mat *, Mat *, PetscErrorCode (**)(Tao, Vec, Mat, Mat, PetscCtx), PetscCtxRt);
 PETSC_EXTERN PetscErrorCode TaoSetHessianMult(Tao, PetscErrorCode (*)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtx);
 PETSC_EXTERN PetscErrorCode TaoGetHessianMult(Tao, PetscErrorCode (**)(Tao, Vec, Vec, Vec, PetscCtx), PetscCtxRt);
+PETSC_EXTERN PetscErrorCode TaoSetHessianMatrices(Tao, Mat, Mat);
 PETSC_EXTERN PetscErrorCode TaoGetHessianMatrices(Tao, Mat *, Mat *);
 PETSC_EXTERN PetscErrorCode TaoGetDM(Tao, DM *);
 PETSC_EXTERN PetscErrorCode TaoSetDM(Tao, DM);

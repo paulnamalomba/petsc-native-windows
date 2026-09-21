@@ -288,9 +288,11 @@ PetscErrorCode TaoTermSetFromOptions(TaoTerm term)
   if (term->H_mattype) deft = term->H_mattype;
   PetscCall(PetscOptionsFList("-tao_term_hessian_mat_type", "Hessian mat type", "TaoTermSetCreateHessianMode", MatList, deft, typeName, sizeof(typeName), &opt));
   if (opt) {
-    PetscBool is_mffd, is_shell, is_callbacks;
+    PetscBool is_mffd, is_shell, is_callbacks, is_sum;
     PetscCall(PetscStrcmp(typeName, MATMFFD, &is_mffd));
     if (is_mffd) {
+      PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMSUM, &is_sum));
+      PetscCheck(!is_sum, PetscObjectComm((PetscObject)term), PETSC_ERR_SUP, "TAOTERMSUM does not support MFFD Hessian matrices");
       PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMSHELL, &is_shell));
       PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMCALLBACKS, &is_callbacks));
       if (is_shell || is_callbacks) {
@@ -739,7 +741,6 @@ PetscErrorCode TaoTermComputeHessian(TaoTerm term, Vec x, Vec params, Mat H, Mat
     PetscValidHeaderSpecific(Hpre, MAT_CLASSID, 5);
     PetscCheckSameComm(term, 1, Hpre, 5);
   }
-  if (H && !Hpre) Hpre = H;
   PetscCall(TaoTermPreprocessHessianShells(term, x, params, &H, &Hpre));
   if (H) PetscCall(PetscObjectTypeCompare((PetscObject)H, MATMFFD, &is_mffd));
   PetscCall(TaoTermIsComputeHessianFDPossible(term, &is_fdpossible));

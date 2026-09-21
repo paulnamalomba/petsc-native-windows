@@ -259,7 +259,6 @@ static inline PetscErrorCode TaoLogConvergenceHistory(Tao tao, PetscReal obj, Pe
 }
 
 PETSC_INTERN PetscErrorCode TaoTestGradient_Internal(Tao, Vec, Vec, PetscViewer, PetscViewer);
-PETSC_INTERN PetscErrorCode TaoSetHessianStorage_Internal(Tao, Mat, Mat);
 
 typedef struct _TaoTermOps *TaoTermOps;
 
