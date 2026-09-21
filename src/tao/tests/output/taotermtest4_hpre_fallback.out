@@ -1,0 +1,5 @@
+H-only summand storage fills a distinct outer Hpre
+Mapped-only storage uses separately created raw storage
+No-storage summand evaluates into assembled caller output
+H-only storage with a creator preserves H and creates a distinct Hpre
+Repeated partial-overwrite sum Hessian evaluation is idempotent

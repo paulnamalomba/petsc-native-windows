@@ -221,4 +221,13 @@ int main(int argc, char **argv)
     suffix: extra_info_view
     args: -tao_type nls -tao_add_terms extra_ -extra_tao_term_type halfl2squared -tao_term_sum_extra_scale 1.0 -tao_view
 
+  # Exercises the outer-sum Hessian-shell path: TaoTermComputeHessianMult_Sum
+  # dispatches MatMult on the MATSHELL outer Hessian through the per-summand
+  # cache + MatMult fallback. The L1 epsilon is kept large enough that the
+  # smoothed Hessian is well-conditioned for the unpreconditioned KSP used
+  # when the outer Hessian is a MATSHELL.
+  test:
+    suffix: shell_hessian
+    args: -tao_type nls -tao_term_hessian_mat_type shell -lasso_tao_term_l1_epsilon 0.1 -tao_monitor
+
 TEST*/

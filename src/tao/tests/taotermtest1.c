@@ -1,615 +1,723 @@
-const char help[] = "TaoTerm coverage test comparing TaoTerm interface with traditional callbacks for Rosenbrock problem.\n\
-Tests different TaoTerm configurations for L1, and HALFL2SQUARED types with various matrix and parameter options.\n";
+const char help[] = "Solve a least-squares problem with regularizers added through TaoAddTerm().\n";
 
 #include <petsctao.h>
-#include "../unconstrained/tutorials/rosenbrock4.h"
+#include "taotermtestcommon.h"
 
 typedef struct {
-  AppCtx    user;  /* Note: AppCtx is a pointer type in rosenbrock4.h */
-  AppCtx    user2; /* Second user context for callback version */
-  PetscBool test_print;
-  PetscBool test_print_map;
-  PetscBool use_term1;
-  PetscBool term1_has_A;
-  PetscBool term1_has_params;
-  PetscReal term1_scale;
-  PetscBool use_term2;
-  PetscBool term2_has_A;
-  PetscBool term2_has_params;
-  PetscReal term2_scale;
-  PetscReal term1_scale_callback; /* Callback-only scale options (for testing equivalence with TaoTerm scales) */
-  PetscReal term2_scale_callback;
-  PetscInt  map_row_size;
-  PetscBool print_debug;
-  TaoTerm   term1, term2;
-  Vec       term1_params, term2_params;
-  Vec       X_mapped1, X_mapped2, G_mapped1, G_mapped2, G_work;
-  Mat       term1_A_callback; /* AIJ version for callbacks */
-  Mat       term2_A_callback; /* AIJ version for callbacks */
+  MPI_Comm    comm;
+  PetscInt    n;
+  PetscInt    callback_hessian_evals;
+  PetscInt    callback_hessianmult_evals;
+  PetscInt    term1_hessian_evals;
+  PetscInt    term1_hessianmult_evals;
+  Vec         target;
+  PetscBool   use_term1;
+  PetscBool   term1_shell;
+  ExampleTerm term1;
+  PetscBool   separate_hpre;
+  PetscBool   callback_hessian_mult;
+  PetscBool   repeat_setfromoptions;
 } TestCtx;
 
+typedef struct {
+  TestCtx          ctx;
+  Tao              tao;
+  Vec              x;
+  Mat              H;
+  Mat              Hpre;
+  ExampleCtx       reference_ctx;
+  ExampleReference reference;
+} TestState;
+
 /* Forward declarations */
-static PetscErrorCode TestCtxInitialize(MPI_Comm, TestCtx *);
-static PetscErrorCode TestCtxFinalize(TestCtx *);
-static PetscErrorCode CreateTaoTermWithOptions(TestCtx *, TaoTerm *, Vec *, Mat *, const char *, const char *, PetscBool, PetscBool);
-static PetscErrorCode FormFunctionGradient_TaoTerm(Tao, Vec, PetscReal *, Vec, void *);
-static PetscErrorCode FormHessian_TaoTerm(Tao, Vec, Mat, Mat, void *);
-static PetscErrorCode FormFunctionGradient_Callbacks(Tao, Vec, PetscReal *, Vec, void *);
-static PetscErrorCode FormHessian_Callbacks(Tao, Vec, Mat, Mat, void *);
-static PetscErrorCode CompareSolutions(Tao, Tao, TestCtx *);
+static PetscErrorCode TestCtxProcessOptions(MPI_Comm, TestCtx *);
+static PetscErrorCode TestCreateData(TestState *);
+static PetscErrorCode TestStateDestroy(TestState *);
+static PetscErrorCode CheckRepeatedSetFromOptions(TestState *);
+static PetscErrorCode CreateTaoTermWithOptions(TestCtx *, ExampleTerm *, const char *, const char *);
+static PetscErrorCode FormFunctionGradient_Callback(Tao, Vec, PetscReal *, Vec, void *);
+static PetscErrorCode FormHessian_Callback(Tao, Vec, Mat, Mat, void *);
+static PetscErrorCode FormHessianMult_Callback(Tao, Vec, Vec, Vec, void *);
+static PetscErrorCode Hessian_Term1(TaoTerm, Vec, Vec, Mat, Mat);
+static PetscErrorCode HessianMult_Term1(TaoTerm, Vec, Vec, Vec, Vec);
+static PetscErrorCode CheckReferenceHessianOperators(TestState *);
+static PetscErrorCode CheckMaskedSubtermsUntouched(TestState *);
+static PetscErrorCode CheckReferenceTermType(TaoTerm);
 
 int main(int argc, char **argv)
 {
-  TestCtx  ctx;
-  Tao      tao_term, tao_callback;
-  Vec      x_term, x_callback;
-  Mat      H_term, H_callback;
-  TaoTerm  term1, term2;
-  Vec      term1_params          = NULL;
-  Vec      term2_params          = NULL;
-  Vec      term1_params_callback = NULL;
-  Vec      term2_params_callback = NULL;
-  Mat      term1_A, term2_A;
-  MPI_Comm comm;
+  TestState state;
+  TaoTerm   objective;
+  MPI_Comm  comm;
+  TestCtx  *ctx = &state.ctx;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, NULL, help));
+  PetscCall(PetscMemzero(&state, sizeof(state)));
   comm = PETSC_COMM_WORLD;
 
-  PetscCall(TestCtxInitialize(comm, &ctx));
-  PetscCall(TaoCreate(comm, &tao_term));
-  PetscCall(TaoSetType(tao_term, TAOLMVM));
+  PetscCall(TestCtxProcessOptions(comm, ctx));
+  PetscCall(TaoCreate(comm, &state.tao));
+  PetscCall(TaoSetOptionsPrefix(state.tao, "t_"));
+  PetscCall(TaoSetType(state.tao, TAOLMVM));
 
-  /* Create Rosenbrock objective using traditional TaoSet interface with user context */
-  PetscCall(CreateHessian(ctx.user, &H_term));
-  PetscCall(CreateVectors(ctx.user, H_term, &x_term, NULL));
-  PetscCall(VecZeroEntries(x_term));
-  PetscCall(TaoSetSolution(tao_term, x_term));
-  PetscCall(TaoSetObjectiveAndGradient(tao_term, NULL, FormFunctionGradient_TaoTerm, &ctx));
-  PetscCall(TaoSetHessian(tao_term, H_term, H_term, FormHessian_TaoTerm, &ctx));
+  /* Create a least-squares objective using the traditional TaoSet interface */
+  PetscCall(TestCreateData(&state));
+  PetscCall(TaoSetSolution(state.tao, state.x));
+  PetscCall(TaoSetObjectiveAndGradient(state.tao, NULL, FormFunctionGradient_Callback, ctx));
+  PetscCall(TaoSetHessian(state.tao, state.H, state.Hpre, FormHessian_Callback, ctx));
+  if (ctx->callback_hessian_mult) PetscCall(TaoSetHessianMult(state.tao, FormHessianMult_Callback, ctx));
 
   /* Add term 1 if requested */
-  if (ctx.use_term1) {
-    PetscCall(CreateTaoTermWithOptions(&ctx, &term1, &term1_params, &term1_A, "reg1_", "A1_", ctx.term1_has_A, ctx.term1_has_params));
-    if (ctx.test_print) PetscCall(PetscObjectSetName((PetscObject)term1, "Regularizer TaoTerm"));
-    if (ctx.test_print_map) PetscCall(PetscObjectSetName((PetscObject)term1_A, "Regularizer TaoTerm Map"));
-    PetscCall(TaoAddTerm(tao_term, "reg1_", ctx.term1_scale, term1, term1_params, term1_A));
-    PetscCall(TaoTermDestroy(&term1));
+  if (ctx->use_term1) {
+    PetscCall(CreateTaoTermWithOptions(ctx, &ctx->term1, "reg1_", "A1_"));
+    PetscCall(TaoAddTerm(state.tao, "reg1_", ctx->term1.scale, ctx->term1.term, ctx->term1.parameters, ctx->term1.map));
   }
-  /* Add term 2 if requested */
-  if (ctx.use_term2) {
-    PetscCall(CreateTaoTermWithOptions(&ctx, &term2, &term2_params, &term2_A, "reg2_", "A2_", ctx.term2_has_A, ctx.term2_has_params));
-    PetscCall(TaoAddTerm(tao_term, "reg2_", ctx.term2_scale, term2, term2_params, term2_A));
-    PetscCall(TaoTermDestroy(&term2));
+  PetscCall(TaoSetFromOptions(state.tao));
+
+  state.reference_ctx.nsubterms              = ctx->use_term1 ? 2 : 1;
+  state.reference_ctx.subterms[0].parameters = ctx->target;
+  state.reference_ctx.subterms[0].scale      = 1.0;
+
+  if (ctx->use_term1) {
+    PetscCall(CheckReferenceTermType(ctx->term1.term));
+    PetscCall(ExampleTermSetSubterm(&ctx->term1, &state.reference_ctx.subterms[1]));
   }
-
-  PetscCall(TaoSetFromOptions(tao_term));
-  PetscCall(TaoSolve(tao_term));
-
-  /* Setup Tao with traditional callbacks */
-  PetscCall(TaoCreate(comm, &tao_callback));
-  PetscCall(TaoSetType(tao_callback, TAOLMVM));
-
-  /* Create Rosenbrock objective using callbacks that manually add term evaluations with user2 context */
-  PetscCall(CreateHessian(ctx.user2, &H_callback));
-  PetscCall(CreateVectors(ctx.user2, H_callback, &x_callback, NULL));
-  PetscCall(VecZeroEntries(x_callback));
-  PetscCall(TaoSetSolution(tao_callback, x_callback));
-  PetscCall(TaoSetObjectiveAndGradient(tao_callback, NULL, FormFunctionGradient_Callbacks, &ctx));
-  PetscCall(TaoSetHessian(tao_callback, H_callback, H_callback, FormHessian_Callbacks, &ctx));
-
-  /* creating duplicate term1 for callback if requested */
-  if (ctx.use_term1) {
-    if (term1_params) {
-      PetscCall(VecDuplicate(term1_params, &term1_params_callback));
-      PetscCall(VecCopy(term1_params, term1_params_callback));
-    }
-    PetscCall(TaoTermCreate(comm, &term1));
-    PetscCall(PetscObjectSetOptionsPrefix((PetscObject)term1, "reg1_"));
-    PetscCall(TaoTermSetSolutionSizes(term1, PETSC_DECIDE, ctx.user->n, 1));
-    PetscCall(TaoTermSetFromOptions(term1));
-    /* Store for callback implementation */
-    ctx.term1        = term1;
-    ctx.term1_params = term1_params_callback;
-
-    if (term1_A) PetscCall(MatDuplicate(term1_A, MAT_COPY_VALUES, &ctx.term1_A_callback));
+  if (state.reference_ctx.nsubterms > 1) {
+    PetscCall(TaoGetTerm(state.tao, NULL, &objective, NULL, NULL));
+    for (PetscInt i = 0; i < state.reference_ctx.nsubterms; i++) PetscCall(TaoTermSumGetTermMask(objective, i, &state.reference_ctx.subterms[i].mask));
   }
-  /* creating duplicate term2 for callback if requested */
-  if (ctx.use_term2) {
-    if (term2_params) {
-      PetscCall(VecDuplicate(term2_params, &term2_params_callback));
-      PetscCall(VecCopy(term2_params, term2_params_callback));
-    }
-    PetscCall(TaoTermCreate(comm, &term2));
-    PetscCall(PetscObjectSetOptionsPrefix((PetscObject)term2, "reg2_"));
-    PetscCall(TaoTermSetSolutionSizes(term2, PETSC_DECIDE, ctx.user->n, 1));
-    PetscCall(TaoTermSetFromOptions(term2));
-    /* Store for callback implementation */
-    ctx.term2        = term2;
-    ctx.term2_params = term2_params_callback;
+  PetscCall(ExampleReferenceCreate(comm, state.tao, state.x, &state.reference_ctx, &state.reference));
+  PetscCall(ExampleReferenceSolveAndCompare(state.tao, state.x, &state.reference));
+  PetscCall(CheckReferenceHessianOperators(&state));
 
-    if (term2_A) PetscCall(MatDuplicate(term2_A, MAT_COPY_VALUES, &ctx.term2_A_callback));
-  }
-
-  if (ctx.use_term1) {
-    if (ctx.term1_has_A) PetscCall(MatCreateVecs(ctx.term1_A_callback, NULL, &ctx.X_mapped1));
-    else PetscCall(VecDuplicate(x_callback, &ctx.X_mapped1));
-    PetscCall(VecDuplicate(ctx.X_mapped1, &ctx.G_mapped1));
-  }
-  if (ctx.use_term2) {
-    if (ctx.term2_has_A) PetscCall(MatCreateVecs(ctx.term2_A_callback, NULL, &ctx.X_mapped2));
-    else PetscCall(VecDuplicate(x_callback, &ctx.X_mapped2));
-    PetscCall(VecDuplicate(ctx.X_mapped2, &ctx.G_mapped2));
-  }
-
-  PetscCall(VecDuplicate(x_callback, &ctx.G_work));
-  PetscCall(TaoSetFromOptions(tao_callback));
-  if (ctx.print_debug) PetscCall(PetscPrintf(comm, "Solving Callback version \n"));
-  PetscCall(TaoSolve(tao_callback));
-
-  /* Compare solutions */
-  PetscCall(CompareSolutions(tao_term, tao_callback, &ctx));
-
-  if (ctx.use_term1) {
-    PetscCall(VecDestroy(&term1_params));
-    PetscCall(MatDestroy(&term1_A));
-    PetscCall(MatDestroy(&ctx.term1_A_callback));
-    PetscCall(VecDestroy(&ctx.term1_params));
-    PetscCall(TaoTermDestroy(&term1));
-  }
-  if (ctx.use_term2) {
-    PetscCall(VecDestroy(&term2_params));
-    PetscCall(MatDestroy(&term2_A));
-    PetscCall(MatDestroy(&ctx.term2_A_callback));
-    PetscCall(VecDestroy(&ctx.term2_params));
-    PetscCall(TaoTermDestroy(&term2));
-  }
-  PetscCall(TaoDestroy(&tao_term));
-  PetscCall(TaoDestroy(&tao_callback));
-  PetscCall(VecDestroy(&x_term));
-  PetscCall(VecDestroy(&x_callback));
-  PetscCall(MatDestroy(&H_term));
-  PetscCall(MatDestroy(&H_callback));
-  PetscCall(TestCtxFinalize(&ctx));
+  if (ctx->repeat_setfromoptions) PetscCall(CheckRepeatedSetFromOptions(&state));
+  PetscCall(CheckMaskedSubtermsUntouched(&state));
+  PetscCall(TestStateDestroy(&state));
   PetscCall(PetscFinalize());
   return 0;
 }
 
-static PetscErrorCode TestCtxInitialize(MPI_Comm comm, TestCtx *ctx)
+static PetscErrorCode TestCtxProcessOptions(MPI_Comm comm, TestCtx *ctx)
 {
   PetscFunctionBeginUser;
   PetscCall(PetscMemzero(ctx, sizeof(TestCtx)));
 
-  /* Initialize Rosenbrock contexts */
-  PetscCall(AppCtxCreate(comm, &ctx->user));
-  PetscCall(AppCtxCreate(comm, &ctx->user2));
-
-  /* Default configuration */
-  ctx->test_print           = PETSC_FALSE;
-  ctx->test_print_map       = PETSC_FALSE;
-  ctx->use_term1            = PETSC_FALSE;
-  ctx->use_term2            = PETSC_FALSE;
-  ctx->term1_has_A          = PETSC_FALSE;
-  ctx->term1_has_params     = PETSC_FALSE;
-  ctx->term2_has_A          = PETSC_FALSE;
-  ctx->term2_has_params     = PETSC_FALSE;
-  ctx->term1_scale          = 0.1;
-  ctx->term2_scale          = 0.05;
-  ctx->term1_scale_callback = 0;
-  ctx->term2_scale_callback = 0;
-  ctx->print_debug          = PETSC_FALSE;
-  ctx->map_row_size         = ctx->user->n - 1;
+  ctx->comm                       = comm;
+  ctx->n                          = 10;
+  ctx->use_term1                  = PETSC_FALSE;
+  ctx->term1_shell                = PETSC_FALSE;
+  ctx->term1.size                 = ctx->n - 1;
+  ctx->term1.scale                = 0.1;
+  ctx->term1.provide_hessian_mult = PETSC_TRUE;
+  ctx->separate_hpre              = PETSC_FALSE;
+  ctx->callback_hessian_mult      = PETSC_FALSE;
+  ctx->repeat_setfromoptions      = PETSC_FALSE;
 
   PetscOptionsBegin(comm, "", "TaoTerm Coverage Test Options", "TAO");
-  PetscCall(PetscOptionsBool("-test_print", "Test TaoView of term with name", "", ctx->test_print, &ctx->test_print, NULL));
-  PetscCall(PetscOptionsBool("-test_print_map", "Test TaoView of map of term with name", "", ctx->test_print_map, &ctx->test_print_map, NULL));
   PetscCall(PetscOptionsBool("-use_term1", "Use first additional term", "", ctx->use_term1, &ctx->use_term1, NULL));
-  PetscCall(PetscOptionsBool("-use_term2", "Use second additional term", "", ctx->use_term2, &ctx->use_term2, NULL));
-  PetscCall(PetscOptionsBool("-term1_has_A", "Term 1 has a map matrix A", "", ctx->term1_has_A, &ctx->term1_has_A, NULL));
-  PetscCall(PetscOptionsBool("-term1_has_params", "Term 1 has parameters", "", ctx->term1_has_params, &ctx->term1_has_params, NULL));
-  PetscCall(PetscOptionsBool("-term2_has_A", "Term 2 has a map matrix A", "", ctx->term2_has_A, &ctx->term2_has_A, NULL));
-  PetscCall(PetscOptionsBool("-term2_has_params", "Term 2 has parameters", "", ctx->term2_has_params, &ctx->term2_has_params, NULL));
-  PetscCall(PetscOptionsReal("-term1_scale", "Scaling for term 1", "", ctx->term1_scale, &ctx->term1_scale, NULL));
-  PetscCall(PetscOptionsReal("-term2_scale", "Scaling for term 2", "", ctx->term2_scale, &ctx->term2_scale, NULL));
-  PetscCall(PetscOptionsReal("-term1_scale_callback", "Scaling for term 1 in callback version", "", ctx->term1_scale_callback, &ctx->term1_scale_callback, NULL));
-  PetscCall(PetscOptionsReal("-term2_scale_callback", "Scaling for term 2 in callback version", "", ctx->term2_scale_callback, &ctx->term2_scale_callback, NULL));
-  PetscCall(PetscOptionsInt("-map_row_size", "Row size of mapping matrix", "", ctx->map_row_size, &ctx->map_row_size, NULL));
-  PetscCall(PetscOptionsBool("-print_debug", "Print extra floating point for comparison", "", ctx->print_debug, &ctx->print_debug, NULL));
+  PetscCall(PetscOptionsBool("-term1_has_A", "Term 1 has a map matrix A", "", ctx->term1.use_map, &ctx->term1.use_map, NULL));
+  PetscCall(PetscOptionsBool("-term1_has_params", "Term 1 has parameters", "", ctx->term1.supply_parameters, &ctx->term1.supply_parameters, NULL));
+  PetscCall(PetscOptionsBool("-term1_shell", "Create term 1 as a least-squares shell term", "", ctx->term1_shell, &ctx->term1_shell, NULL));
+  PetscCall(PetscOptionsBool("-term1_hessian_mult", "Register HessianMult on shell term 1", "", ctx->term1.provide_hessian_mult, &ctx->term1.provide_hessian_mult, NULL));
+  PetscCall(PetscOptionsReal("-term1_scale", "Scaling for term 1", "", ctx->term1.scale, &ctx->term1.scale, NULL));
+  PetscCall(PetscOptionsInt("-map_row_size", "Row size of mapping matrix", "", ctx->term1.size, &ctx->term1.size, NULL));
+  PetscCall(PetscOptionsBool("-separate_hpre", "Use a separate preconditioning matrix for the legacy callback term", "", ctx->separate_hpre, &ctx->separate_hpre, NULL));
+  PetscCall(PetscOptionsBool("-callback_hessian_mult", "Register HessianMult on the legacy callback term", "", ctx->callback_hessian_mult, &ctx->callback_hessian_mult, NULL));
+  PetscCall(PetscOptionsBool("-repeat_setfromoptions", "Call TaoSetFromOptions() again after TaoSolve()", "", ctx->repeat_setfromoptions, &ctx->repeat_setfromoptions, NULL));
   PetscOptionsEnd();
-
-  if (ctx->term1_scale_callback == 0) ctx->term1_scale_callback = ctx->term1_scale;
-  if (ctx->term2_scale_callback == 0) ctx->term2_scale_callback = ctx->term2_scale;
-
-  ctx->term1            = NULL;
-  ctx->term2            = NULL;
-  ctx->term1_params     = NULL;
-  ctx->term2_params     = NULL;
-  ctx->term1_A_callback = NULL;
-  ctx->term2_A_callback = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Finalize test context */
-static PetscErrorCode TestCtxFinalize(TestCtx *ctx)
+static PetscErrorCode TestCreateData(TestState *state)
+{
+  TestCtx *ctx = &state->ctx;
+  PetscInt rstart, rend;
+
+  PetscFunctionBeginUser;
+  PetscCall(MatCreateAIJ(ctx->comm, PETSC_DECIDE, PETSC_DECIDE, ctx->n, ctx->n, 1, NULL, 0, NULL, &state->H));
+  if (ctx->separate_hpre) {
+    PetscCall(MatAssemblyBegin(state->H, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatAssemblyEnd(state->H, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatDuplicate(state->H, MAT_COPY_VALUES, &state->Hpre));
+  } else state->Hpre = state->H;
+  PetscCall(MatCreateVecs(state->H, &state->x, NULL));
+  PetscCall(VecCreateMPI(ctx->comm, PETSC_DECIDE, ctx->n, &ctx->target));
+  PetscCall(VecGetOwnershipRange(ctx->target, &rstart, &rend));
+  for (PetscInt i = rstart; i < rend; i++) PetscCall(VecSetValue(ctx->target, i, 1.0 + 0.05 * (i + 1), INSERT_VALUES));
+  PetscCall(VecAssemblyBegin(ctx->target));
+  PetscCall(VecAssemblyEnd(ctx->target));
+  PetscCall(VecZeroEntries(state->x));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode TestStateDestroy(TestState *state)
 {
   PetscFunctionBeginUser;
-  PetscCall(VecDestroy(&ctx->X_mapped1));
-  PetscCall(VecDestroy(&ctx->X_mapped2));
-  PetscCall(VecDestroy(&ctx->G_mapped1));
-  PetscCall(VecDestroy(&ctx->G_mapped2));
-  PetscCall(VecDestroy(&ctx->G_work));
-  PetscCall(AppCtxDestroy(&ctx->user));
-  PetscCall(AppCtxDestroy(&ctx->user2));
+  PetscCall(ExampleReferenceDestroy(&state->reference));
+  PetscCall(ExampleTermDestroy(&state->ctx.term1));
+  PetscCall(TaoDestroy(&state->tao));
+  PetscCall(VecDestroy(&state->x));
+  if (state->Hpre != state->H) PetscCall(MatDestroy(&state->Hpre));
+  PetscCall(MatDestroy(&state->H));
+  PetscCall(VecDestroy(&state->ctx.target));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateTaoTermWithOptions(TestCtx *ctx, TaoTerm *term, Vec *params, Mat *A, const char *term_prefix, const char *A_prefix, PetscBool has_A, PetscBool has_params)
+static PetscErrorCode CheckRepeatedSetFromOptions(TestState *state)
 {
-  MPI_Comm    comm = ctx->user->comm;
+  TaoTerm     objective;
+  TaoTermMask mask_before = TAOTERM_MASK_NONE, mask_after;
+  PetscInt    max_it;
+
+  PetscFunctionBeginUser;
+  if (state->ctx.use_term1) {
+    PetscCall(TaoGetTerm(state->tao, NULL, &objective, NULL, NULL));
+    PetscCall(TaoTermSumGetTermMask(objective, 1, &mask_before));
+    PetscCall(PetscOptionsSetValue(NULL, "-t_tao_term_sum_reg1_mask", "none"));
+  }
+  PetscCall(PetscOptionsSetValue(NULL, "-t_tao_max_it", "7"));
+  PetscCall(TaoSetFromOptions(state->tao));
+  PetscCall(TaoGetMaximumIterations(state->tao, &max_it));
+  PetscCheck(max_it == 7, state->ctx.comm, PETSC_ERR_PLIB, "Repeated TaoSetFromOptions() did not update -t_tao_max_it");
+  if (state->ctx.use_term1) {
+    PetscCall(TaoTermSumGetTermMask(objective, 1, &mask_after));
+    PetscCheck(mask_after == mask_before, state->ctx.comm, PETSC_ERR_PLIB, "Repeated TaoSetFromOptions() changed structural TaoTerm options after setup");
+  }
+  PetscCall(PetscPrintf(state->ctx.comm, "Repeated TaoSetFromOptions() check passed\n"));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CreateTaoTermWithOptions(TestCtx *ctx, ExampleTerm *term, const char *term_prefix, const char *A_prefix)
+{
+  MPI_Comm    comm = ctx->comm;
   PetscMPIInt size;
 
   PetscFunctionBeginUser;
-  *term   = NULL;
-  *params = NULL;
-  *A      = NULL;
-
   PetscCallMPI(MPI_Comm_size(comm, &size));
   /* Create parameters if requested */
-  if (has_params) {
-    PetscCall(VecCreate(comm, params));
-    PetscCall(VecSetSizes(*params, PETSC_DECIDE, has_A ? ctx->map_row_size : ctx->user->n));
-    PetscCall(VecSetFromOptions(*params));
-    PetscCall(VecSetRandom(*params, NULL));
+  if (term->supply_parameters) {
+    PetscCall(VecCreate(comm, &term->parameters));
+    PetscCall(VecSetSizes(term->parameters, PETSC_DECIDE, term->use_map ? term->size : ctx->n));
+    PetscCall(VecSetFromOptions(term->parameters));
+    PetscCall(VecSetRandom(term->parameters, NULL));
   }
 
   /* Create map matrix A if requested */
-  if (has_A) {
-    PetscCall(MatCreate(comm, A));
-    PetscCall(PetscObjectSetOptionsPrefix((PetscObject)*A, A_prefix));
-    PetscCall(MatSetSizes(*A, PETSC_DECIDE, PETSC_DECIDE, ctx->map_row_size, ctx->user->n));
-    PetscCall(MatSetType(*A, MATAIJ)); /* Set default type before SetFromOptions */
-    PetscCall(MatSetFromOptions(*A));
+  if (term->use_map) {
+    PetscCall(MatCreate(comm, &term->map));
+    PetscCall(PetscObjectSetOptionsPrefix((PetscObject)term->map, A_prefix));
+    PetscCall(MatSetSizes(term->map, PETSC_DECIDE, PETSC_DECIDE, term->size, ctx->n));
+    PetscCall(MatSetType(term->map, MATAIJ)); /* Set default type before SetFromOptions */
+    PetscCall(MatSetFromOptions(term->map));
     /* Check matrix type and set up accordingly */
-    if (size == 1) PetscCall(MatSeqAIJSetPreallocation(*A, PETSC_DEFAULT, NULL));
-    else PetscCall(MatMPIAIJSetPreallocation(*A, 5, NULL, 5, NULL));
-    PetscCall(MatSetUp(*A));
-    PetscCall(MatSetRandom(*A, NULL));
-    PetscCall(MatAssemblyBegin(*A, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(*A, MAT_FINAL_ASSEMBLY));
+    if (size == 1) PetscCall(MatSeqAIJSetPreallocation(term->map, PETSC_DEFAULT, NULL));
+    else PetscCall(MatMPIAIJSetPreallocation(term->map, 5, NULL, 5, NULL));
+    PetscCall(MatSetUp(term->map));
+    PetscCall(MatSetRandom(term->map, NULL));
+    PetscCall(MatAssemblyBegin(term->map, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatAssemblyEnd(term->map, MAT_FINAL_ASSEMBLY));
   }
   /* Create TaoTerm, set prefix, and configure from options */
-  PetscCall(TaoTermCreate(comm, term));
-  PetscCall(PetscObjectSetOptionsPrefix((PetscObject)*term, term_prefix));
-  PetscCall(TaoTermSetSolutionSizes(*term, PETSC_DECIDE, has_A ? ctx->map_row_size : ctx->user->n, 1));
-  PetscCall(TaoTermSetFromOptions(*term));
+  PetscCall(TaoTermCreate(comm, &term->term));
+  PetscCall(PetscObjectSetOptionsPrefix((PetscObject)term->term, term_prefix));
+  PetscCall(TaoTermSetSolutionSizes(term->term, PETSC_DECIDE, term->use_map ? term->size : ctx->n, 1));
+  if (ctx->term1_shell) {
+    PetscCall(TaoTermSetType(term->term, TAOTERMSHELL));
+    PetscCall(TaoTermShellSetContext(term->term, ctx));
+    PetscCall(TaoTermSetParametersSizes(term->term, PETSC_DECIDE, term->use_map ? term->size : ctx->n, 1));
+    PetscCall(TaoTermShellSetObjectiveAndGradient(term->term, ExampleIdentityLeastSquaresObjectiveGradient));
+    PetscCall(TaoTermShellSetCreateHessianMatrices(term->term, TaoTermCreateHessianMatricesDefault));
+    PetscCall(TaoTermSetCreateHessianMode(term->term, PETSC_TRUE, MATAIJ, NULL));
+    PetscCall(TaoTermShellSetHessian(term->term, Hessian_Term1));
+    if (term->provide_hessian_mult) PetscCall(TaoTermShellSetHessianMult(term->term, HessianMult_Term1));
+  }
+  PetscCall(TaoTermSetFromOptions(term->term));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FormFunctionGradient_TaoTerm(Tao tao, Vec X, PetscReal *f, Vec G, void *ptr)
+static PetscErrorCode FormFunctionGradient_Callback(Tao tao, Vec X, PetscReal *f, Vec G, void *ptr)
 {
-  TestCtx *ctx = (TestCtx *)ptr;
+  TestCtx    *ctx = (TestCtx *)ptr;
+  Vec         diff;
+  PetscScalar dot;
 
   PetscFunctionBeginUser;
-  PetscCall(FormObjectiveGradient(tao, X, f, G, ctx->user));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode FormHessian_TaoTerm(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
-{
-  TestCtx *ctx = (TestCtx *)ptr;
-
-  PetscFunctionBeginUser;
-  PetscCall(FormHessian(tao, X, H, Hpre, ctx->user));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Form function and gradient for callback version (Rosenbrock + terms manually) */
-static PetscErrorCode FormFunctionGradient_Callbacks(Tao tao, Vec X, PetscReal *f, Vec G, void *ptr)
-{
-  TestCtx  *ctx = (TestCtx *)ptr;
-  PetscReal f_term;
-
-  PetscFunctionBeginUser;
-  /* Compute Rosenbrock part */
-  PetscCall(FormObjectiveGradient(tao, X, f, G, ctx->user2));
-  /* Add term 1 contribution */
-  if (ctx->use_term1 && ctx->term1) {
-    /* Map X if needed */
-    if (ctx->term1_A_callback) PetscCall(MatMult(ctx->term1_A_callback, X, ctx->X_mapped1));
-    else PetscCall(VecCopy(X, ctx->X_mapped1));
-
-    /* Compute term objective and gradient */
-    if (ctx->term1_A_callback) {
-      PetscCall(TaoTermComputeObjectiveAndGradient(ctx->term1, ctx->X_mapped1, ctx->term1_params, &f_term, ctx->G_mapped1));
-      PetscCall(MatMultTranspose(ctx->term1_A_callback, ctx->G_mapped1, ctx->G_work));
-      PetscCall(VecAXPY(G, ctx->term1_scale_callback, ctx->G_work));
-    } else {
-      PetscCall(TaoTermComputeObjectiveAndGradient(ctx->term1, ctx->X_mapped1, ctx->term1_params, &f_term, ctx->G_work));
-      PetscCall(VecAXPY(G, ctx->term1_scale_callback, ctx->G_work));
-    }
-    *f += ctx->term1_scale_callback * f_term;
-  }
-
-  /* Add term 2 contribution */
-  if (ctx->use_term2 && ctx->term2) {
-    /* Map X if needed */
-    if (ctx->term2_A_callback) PetscCall(MatMult(ctx->term2_A_callback, X, ctx->X_mapped2));
-    else PetscCall(VecCopy(X, ctx->X_mapped2));
-
-    /* Compute term objective and gradient */
-    if (ctx->term2_A_callback) {
-      PetscCall(TaoTermComputeObjectiveAndGradient(ctx->term2, ctx->X_mapped2, ctx->term2_params, &f_term, ctx->G_mapped2));
-      /* Map gradient back and add to G */
-      PetscCall(MatMultTranspose(ctx->term2_A_callback, ctx->G_mapped2, ctx->G_work));
-      PetscCall(VecAXPY(G, ctx->term2_scale_callback, ctx->G_work));
-    } else {
-      PetscCall(TaoTermComputeObjectiveAndGradient(ctx->term2, ctx->X_mapped2, ctx->term2_params, &f_term, ctx->G_work));
-      PetscCall(VecAXPY(G, ctx->term2_scale_callback, ctx->G_work));
-    }
-    *f += ctx->term2_scale_callback * f_term;
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Form Hessian for callback version (Rosenbrock + terms manually) */
-static PetscErrorCode FormHessian_Callbacks(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
-{
-  TestCtx  *ctx = (TestCtx *)ptr;
-  Mat       H_term;
-  PetscInt  m, n;
-  PetscBool is_assembled;
-
-  PetscFunctionBeginUser;
-  /* Compute Rosenbrock Hessian */
-  PetscCall(FormHessian(tao, X, H, Hpre, ctx->user2));
-  /* Add term 1 Hessian contribution */
-  if (ctx->use_term1 && ctx->term1) {
-    if (ctx->term1_A_callback) {
-      PetscCall(MatMult(ctx->term1_A_callback, X, ctx->X_mapped1));
-      PetscCall(VecGetSize(ctx->X_mapped1, &m));
-      PetscCall(MatCreate(ctx->user2->comm, &H_term));
-      PetscCall(MatSetSizes(H_term, PETSC_DECIDE, PETSC_DECIDE, m, m));
-      PetscCall(MatSetType(H_term, MATAIJ));
-      PetscCall(MatSetUp(H_term));
-    } else {
-      PetscCall(VecCopy(X, ctx->X_mapped1));
-      PetscCall(VecGetSize(X, &n));
-      PetscCall(MatCreate(ctx->user2->comm, &H_term));
-      PetscCall(MatSetSizes(H_term, PETSC_DECIDE, PETSC_DECIDE, n, n));
-      PetscCall(MatSetType(H_term, MATAIJ));
-      PetscCall(MatSetUp(H_term));
-    }
-    PetscCall(MatAssembled(H_term, &is_assembled));
-    if (!is_assembled) {
-      PetscCall(MatAssemblyBegin(H_term, MAT_FINAL_ASSEMBLY));
-      PetscCall(MatAssemblyEnd(H_term, MAT_FINAL_ASSEMBLY));
-    }
-
-    PetscCall(TaoTermComputeHessian(ctx->term1, ctx->X_mapped1, ctx->term1_params, H_term, NULL));
-    if (ctx->term1_A_callback) {
-      Mat H_mapped;
-      /* H = H + scale * A^T * H_term * A */
-      PetscCall(MatMatMult(H_term, ctx->term1_A_callback, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &H_mapped));
-      PetscCall(MatDestroy(&H_term));
-      PetscCall(MatTransposeMatMult(ctx->term1_A_callback, H_mapped, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &H_term));
-      PetscCall(MatDestroy(&H_mapped));
-      PetscCall(MatScale(H_term, ctx->term1_scale_callback));
-      PetscCall(MatAXPY(H, 1.0, H_term, DIFFERENT_NONZERO_PATTERN));
-      PetscCall(MatDestroy(&H_term));
-    } else {
-      PetscCall(MatScale(H_term, ctx->term1_scale_callback));
-      PetscCall(MatAXPY(H, 1.0, H_term, DIFFERENT_NONZERO_PATTERN));
-      PetscCall(MatDestroy(&H_term));
-    }
-  }
-
-  /* Add term 2 Hessian contribution */
-  if (ctx->use_term2 && ctx->term2) {
-    if (ctx->term2_A_callback) {
-      PetscCall(MatMult(ctx->term2_A_callback, X, ctx->X_mapped2));
-      PetscCall(VecGetSize(ctx->X_mapped2, &m));
-      PetscCall(MatCreate(ctx->user2->comm, &H_term));
-      PetscCall(MatSetSizes(H_term, PETSC_DECIDE, PETSC_DECIDE, m, m));
-      PetscCall(MatSetType(H_term, MATAIJ));
-      PetscCall(MatSetUp(H_term));
-    } else {
-      PetscCall(VecCopy(X, ctx->X_mapped2));
-      PetscCall(VecGetSize(X, &n));
-      PetscCall(MatCreate(ctx->user2->comm, &H_term));
-      PetscCall(MatSetSizes(H_term, PETSC_DECIDE, PETSC_DECIDE, n, n));
-      PetscCall(MatSetType(H_term, MATAIJ));
-      PetscCall(MatSetUp(H_term));
-    }
-    PetscCall(MatAssembled(H_term, &is_assembled));
-    if (!is_assembled) {
-      PetscCall(MatAssemblyBegin(H_term, MAT_FINAL_ASSEMBLY));
-      PetscCall(MatAssemblyEnd(H_term, MAT_FINAL_ASSEMBLY));
-    }
-
-    PetscCall(TaoTermComputeHessian(ctx->term2, ctx->X_mapped2, ctx->term2_params, H_term, NULL));
-
-    if (ctx->term2_A_callback) {
-      Mat H_mapped;
-      /* H = H + scale * A^T * H_term * A */
-      PetscCall(MatMatMult(H_term, ctx->term2_A_callback, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &H_mapped));
-      PetscCall(MatDestroy(&H_term));
-      PetscCall(MatTransposeMatMult(ctx->term2_A_callback, H_mapped, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &H_term));
-      PetscCall(MatDestroy(&H_mapped));
-      PetscCall(MatScale(H_term, ctx->term2_scale_callback));
-      PetscCall(MatAXPY(H, 1.0, H_term, DIFFERENT_NONZERO_PATTERN));
-      PetscCall(MatDestroy(&H_term));
-    } else {
-      PetscCall(MatScale(H_term, ctx->term2_scale_callback));
-      PetscCall(MatAXPY(H, 1.0, H_term, DIFFERENT_NONZERO_PATTERN));
-      PetscCall(MatDestroy(&H_term));
-    }
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Compare solutions from both methods */
-static PetscErrorCode CompareSolutions(Tao tao_term, Tao tao_callback, TestCtx *ctx)
-{
-  Vec                x_term, x_callback, diff;
-  PetscReal          norm_term, norm_callback, norm_diff, rel_diff;
-  PetscReal          f_term, f_callback;
-  TaoConvergedReason reason_term, reason_callback;
-
-  PetscFunctionBeginUser;
-  PetscCall(TaoGetSolution(tao_term, &x_term));
-  PetscCall(TaoGetSolution(tao_callback, &x_callback));
-
-  /* Compute difference */
-  PetscCall(VecDuplicate(x_term, &diff));
-  PetscCall(VecCopy(x_term, diff));
-  PetscCall(VecAXPY(diff, -1.0, x_callback));
-
-  PetscCall(VecNorm(x_term, NORM_2, &norm_term));
-  PetscCall(VecNorm(x_callback, NORM_2, &norm_callback));
-  PetscCall(VecNorm(diff, NORM_2, &norm_diff));
-
-  rel_diff = norm_diff / PetscMax(norm_term, 1.0e-10);
-
-  /* Get objective values */
-  PetscCall(TaoGetSolutionStatus(tao_term, NULL, &f_term, NULL, NULL, NULL, NULL));
-  PetscCall(TaoGetSolutionStatus(tao_callback, NULL, &f_callback, NULL, NULL, NULL, NULL));
-
-  /* Get convergence reasons */
-  PetscCall(TaoGetConvergedReason(tao_term, &reason_term));
-  PetscCall(TaoGetConvergedReason(tao_callback, &reason_callback));
-
-  if (rel_diff < 1.0e-12) {
-    if (ctx->print_debug) PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions match (relative difference < 1e-12), %6.10e\n", (double)rel_diff));
-    else PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions match (relative difference < 1e-12)\n"));
-  } else if (rel_diff < 1.0e-6) {
-    if (ctx->print_debug) PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions approximately match (relative difference < 1e-6), %6.10e\n", (double)rel_diff));
-    else PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions approximately match (relative difference < 1e-6)\n"));
-  } else {
-    if (ctx->print_debug) PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions differ significantly (relative difference >= 1e-6), %6.10e\n", (double)rel_diff));
-    else PetscCall(PetscPrintf(PetscObjectComm((PetscObject)tao_term), "Solutions differ significantly (relative difference >= 1e-6)\n"));
-  }
+  PetscCall(VecDuplicate(X, &diff));
+  PetscCall(VecWAXPY(diff, -1.0, ctx->target, X));
+  PetscCall(VecDot(diff, diff, &dot));
+  *f = 0.5 * PetscRealPart(dot);
+  PetscCall(VecCopy(diff, G));
   PetscCall(VecDestroy(&diff));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FormHessian_Callback(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
+{
+  TestCtx *ctx = (TestCtx *)ptr;
+
+  PetscFunctionBeginUser;
+  ctx->callback_hessian_evals++;
+  if (ctx->separate_hpre) PetscCheck(!Hpre || Hpre != H, PetscObjectComm((PetscObject)tao), PETSC_ERR_PLIB, "Distinct callback Hessian storage was aliased during evaluation");
+  PetscCall(MatZeroEntries(H));
+  PetscCall(MatAssemblyBegin(H, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(H, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatShift(H, 1.0));
+  if (Hpre && Hpre != H) {
+    PetscCall(MatZeroEntries(Hpre));
+    PetscCall(MatAssemblyBegin(Hpre, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatAssemblyEnd(Hpre, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatShift(Hpre, 1.0));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FormHessianMult_Callback(Tao tao, Vec X, Vec V, Vec HV, void *ptr)
+{
+  TestCtx *ctx = (TestCtx *)ptr;
+
+  PetscFunctionBeginUser;
+  ctx->callback_hessianmult_evals++;
+  PetscCall(VecCopy(V, HV));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Counting wrappers used to assert that a Hessian-masked shell term does not invoke
+   its Hessian callbacks. */
+static PetscErrorCode Hessian_Term1(TaoTerm term, Vec x, Vec parameters, Mat H, Mat Hpre)
+{
+  TestCtx *ctx;
+
+  PetscFunctionBeginUser;
+  PetscCall(TaoTermShellGetContext(term, &ctx));
+  ctx->term1_hessian_evals++;
+  PetscCall(ExampleIdentityLeastSquaresHessian(term, x, parameters, H, Hpre));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode HessianMult_Term1(TaoTerm term, Vec x, Vec parameters, Vec v, Vec Hv)
+{
+  TestCtx *ctx;
+
+  PetscFunctionBeginUser;
+  PetscCall(TaoTermShellGetContext(term, &ctx));
+  ctx->term1_hessianmult_evals++;
+  PetscCall(ExampleIdentityLeastSquaresHessianMult(term, x, parameters, v, Hv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CheckReferenceHessianOperators(TestState *state)
+{
+  TestCtx  *ctx = &state->ctx;
+  Mat       cH, cHpre, tH, tHpre;
+  PetscBool equal, c_is_nls, t_is_nls;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscObjectTypeCompare((PetscObject)state->tao, TAONLS, &t_is_nls));
+  PetscCall(PetscObjectTypeCompare((PetscObject)state->reference.tao, TAONLS, &c_is_nls));
+  if (!t_is_nls || !c_is_nls) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(TaoGetHessianMatrices(state->reference.tao, &cH, &cHpre));
+  PetscCall(TaoGetHessianMatrices(state->tao, &tH, &tHpre));
+  PetscCall(TaoComputeHessian(state->reference.tao, state->x, cH, cHpre));
+  PetscCall(TaoComputeHessian(state->tao, state->x, tH, tHpre));
+  PetscCall(MatMultEqual(cH, tH, 5, &equal));
+  PetscCheck(equal, ctx->comm, PETSC_ERR_PLIB, "Reference and TaoTerm Hessians differ");
+  PetscCall(MatMultEqual(cHpre, tHpre, 5, &equal));
+  PetscCheck(equal, ctx->comm, PETSC_ERR_PLIB, "Reference and TaoTerm Hessian preconditioners differ");
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CheckMaskedSubtermsUntouched(TestState *state)
+{
+  TestCtx *ctx = &state->ctx;
+
+  PetscFunctionBeginUser;
+  if (!ctx->use_term1) PetscFunctionReturn(PETSC_SUCCESS);
+  if (state->reference_ctx.subterms[0].mask & TAOTERM_MASK_HESSIAN)
+    PetscCheck(ctx->callback_hessian_evals == 0 && ctx->callback_hessianmult_evals == 0, ctx->comm, PETSC_ERR_PLIB, "Hessian-masked callback term was evaluated (%" PetscInt_FMT " Hessian, %" PetscInt_FMT " HessianMult calls)", ctx->callback_hessian_evals,
+               ctx->callback_hessianmult_evals);
+  if (ctx->term1_shell && (state->reference_ctx.subterms[1].mask & TAOTERM_MASK_HESSIAN))
+    PetscCheck(ctx->term1_hessian_evals == 0 && ctx->term1_hessianmult_evals == 0, ctx->comm, PETSC_ERR_PLIB, "Hessian-masked term 1 was evaluated (%" PetscInt_FMT " Hessian, %" PetscInt_FMT " HessianMult calls)", ctx->term1_hessian_evals, ctx->term1_hessianmult_evals);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CheckReferenceTermType(TaoTerm term)
+{
+  TaoTermType type;
+  PetscBool   supported;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscObjectTypeCompareAny((PetscObject)term, &supported, TAOTERMHALFL2SQUARED, TAOTERMSHELL, ""));
+  PetscCall(TaoTermGetType(term, &type));
+  PetscCheck(supported, PetscObjectComm((PetscObject)term), PETSC_ERR_SUP, "Reference supports only half-L2 and shell least-squares added terms, not %s", type);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 /*TEST
 
-   build:
-      requires: !complex !single !quad !defined(PETSC_USE_64BIT_INDICES) !__float128
+  build:
+    requires: !complex !single !quad !defined(PETSC_USE_64BIT_INDICES) !__float128
 
-   test:
-    suffix: test_print_noparam
-    args: -tao_view -tao_type nls -use_term1 -term1_has_params 0 -term1_has_A
-    args: -reg1_tao_term_type l1 -test_print -test_print_map -reg1_tao_term_parameters_mode none
+  test:
+    suffix: shell
+    args: -t_tao_type nls -use_term1 -term1_shell -t_tao_term_hessian_mat_type shell
 
-   test:
-    suffix: test_print_p_req
-    args: -tao_view -tao_type nls -use_term1 -term1_has_params 1 -term1_has_A
-    args: -reg1_tao_term_type l1 -test_print -test_print_map -reg1_tao_term_parameters_mode required
+  test:
+    suffix: shell_mapped
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -t_tao_term_hessian_mat_type shell
 
-# Single term tests
-   # L1 with A
-   testset:
-      suffix: term1_l1_A
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -term1_has_params {{0 1}} -term1_has_A
-      args: -reg1_tao_term_type l1
-      test:
-         args: -term1_scale 0.012
-      test:
-         args: -tao_term_sum_reg1_scale 0.012 -term1_scale_callback 0.012
+  test:
+    suffix: shell_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell
+    args: -t_tao_term_hessian_mat_type shell -t_tao_term_hessian_pre_is_hessian false
+    args: -t_tao_term_hessian_pre_mat_type aij
 
-   # L1 without A
-   testset:
-      suffix: term1_l1_no_A
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -term1_has_params {{0 1}}
-      args: -term1_has_A 0 -reg1_tao_term_type l1
-      test:
-         args: -term1_scale 0.012
-      test:
-         args: -tao_term_sum_reg1_scale 0.012 -term1_scale_callback 0.012
+  test:
+    suffix: shell_mapped_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A
+    args: -t_tao_term_hessian_mat_type shell -t_tao_term_hessian_pre_is_hessian false
+    args: -t_tao_term_hessian_pre_mat_type aij
 
-   # L2 with A
-   testset:
-      suffix: term1_l2_A
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -term1_has_params {{0 1}} -term1_has_A
-      args: -reg1_tao_term_type halfl2squared
-      test:
-         args: -term1_scale 0.12
-      test:
-         args: -tao_term_sum_reg1_scale 0.12 -term1_scale_callback 0.12
+  test:
+    suffix: masked_hessian
+    args: -t_tao_type nls -use_term1 -reg1_tao_term_type halfl2squared -t_tao_term_sum_reg1_mask hessian
 
-   # L2 without A
-   testset:
-      suffix: term1_l2_no_A
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -term1_has_params {{0 1}}
-      args: -term1_has_A 0
-      args: -reg1_tao_term_type halfl2squared
-      test:
-         args: -term1_scale 0.12
-      test:
-         args: -tao_term_sum_reg1_scale 0.12 -term1_scale_callback 0.12
+  test:
+    suffix: promoted_separate_hpre
+    args: -t_tao_type nls -separate_hpre -use_term1 -reg1_tao_term_type halfl2squared
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
 
-# Two terms, with no mapping
-   testset:
-      suffix: l1_l2_no_A1_no_A2
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -use_term2 -term1_has_params {{0 1}} -term2_has_params {{0 1}}
-      args: -term1_has_A 0 -term2_has_A 0 -reg1_tao_term_type l1 -reg2_tao_term_type halfl2squared
-      test:
-         args: -term1_scale 0.123 -term2_scale 0.098
-      test:
-         args: -term1_scale 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -term2_scale 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
+  test:
+    suffix: promoted_separate_hpre_shell
+    args: -t_tao_type nls -separate_hpre -use_term1 -reg1_tao_term_type halfl2squared -t_tao_term_hessian_mat_type shell
 
-# Two terms, with one mapping
-   testset:
-      suffix: l1_l2_no_A1_A2
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -use_term2 -term1_has_params {{0 1}} -term2_has_params {{0 1}}
-      args: -term1_has_A 0 -term2_has_A 1 -reg1_tao_term_type l1 -reg2_tao_term_type halfl2squared
-      test:
-         args: -term1_scale 0.123 -term2_scale 0.098
-      test:
-         args: -term1_scale 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -term2_scale 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
+  test:
+    suffix: halfl2_parameters
+    args: -t_tao_type nls -use_term1 -term1_has_params -reg1_tao_term_type halfl2squared
 
-   testset:
-      suffix: l2_l1_no_A1_A2
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -use_term2 -term1_has_params {{0 1}} -term2_has_params {{0 1}}
-      args: -term1_has_A 0 -term2_has_A 1 -reg1_tao_term_type halfl2squared -reg2_tao_term_type l1
-      test:
-         args: -term1_scale 0.123 -term2_scale 0.098
-      test:
-         args: -term1_scale 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -term2_scale 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.123 -term1_scale_callback 0.123 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
+  test:
+    suffix: halfl2_mapped_parameters
+    args: -t_tao_type nls -use_term1 -term1_has_params -term1_has_A -reg1_tao_term_type halfl2squared
 
-# Two terms: term1 has A, term2 has A
-   testset:
-      suffix: l1_l2_A1_A2
-      output_file: output/taotermtest1.out
-      args: -tao_type nls -use_term1 -use_term2 -term1_has_params {{0 1}} -term2_has_params {{0 1}}
-      args: -term1_has_A 1 -term2_has_A 1 -reg1_tao_term_type l1 -reg2_tao_term_type halfl2squared
-      test:
-         args: -term1_scale 0.075 -term2_scale 0.098
-      test:
-         args: -term1_scale 0.075 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.075 -term1_scale_callback 0.075 -term2_scale 0.098
-      test:
-         args: -tao_term_sum_reg1_scale 0.075 -term1_scale_callback 0.075 -tao_term_sum_reg2_scale 0.098 -term2_scale_callback 0.098
+  test:
+    suffix: repeat_setfromoptions
+    args: -repeat_setfromoptions -t_tao_fd_gradient
+
+  test:
+    suffix: repeat_setfromoptions_sum
+    args: -t_tao_type nls -use_term1 -repeat_setfromoptions
+    args: -reg1_tao_term_type halfl2squared -t_tao_term_sum_reg1_mask hessian
+
+  test:
+    suffix: promoted_shell_fd_direct
+    args: -t_tao_type nls -use_term1 -term1_shell -t_callbacks_tao_term_hessian_use_fd
+    args: -term1_hessian_mult -t_tao_term_hessian_mat_type shell
+
+  test:
+    suffix: promoted_shell_all_direct
+    args: -t_tao_type nls -use_term1 -term1_shell -callback_hessian_mult
+    args: -term1_hessian_mult -t_tao_term_hessian_mat_type shell
+
+  test:
+    suffix: promoted_shell_mapped_fallback
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A
+    args: -term1_hessian_mult false -t_tao_term_sum_t_callbacks_mask objective,gradient,hessian
+    args: -t_tao_term_hessian_mat_type shell
+
+  test:
+    suffix: callback_fd
+    args: -t_tao_type nls -t_tao_fd_hessian
+
+  test:
+    suffix: callback_fd_separate_hpre
+    args: -t_tao_type nls -t_tao_fd_hessian -separate_hpre
+
+  test:
+    suffix: r021_added_analytic
+    args: -t_tao_type nls -use_term1 -term1_shell -t_tao_term_sum_t_callbacks_mask hessian
+
+  test:
+    suffix: r022_added_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -reg1_tao_term_hessian_use_fd true -t_tao_term_sum_t_callbacks_mask hessian
+
+  test:
+    suffix: r025_callback_analytic
+    args: -t_tao_type nls -use_term1 -term1_shell -t_tao_term_sum_reg1_mask hessian
+
+  test:
+    suffix: r026_callback_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -t_callbacks_tao_term_hessian_use_fd true -t_tao_term_sum_reg1_mask hessian
+
+  test:
+    suffix: r028_analytic_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -reg1_tao_term_hessian_use_fd true
+
+  test:
+    suffix: r029_fd_fd
+    args: -t_tao_type nls -use_term1 -term1_shell
+    args: -t_callbacks_tao_term_hessian_use_fd true -reg1_tao_term_hessian_use_fd true
+
+  test:
+    suffix: r033_added_analytic_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -t_tao_term_sum_t_callbacks_mask hessian
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r034_added_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell
+    args: -t_tao_term_sum_t_callbacks_mask hessian -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r037_callback_analytic_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -separate_hpre -t_tao_term_sum_reg1_mask hessian
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r038_callback_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -separate_hpre
+    args: -t_tao_term_sum_reg1_mask hessian -t_callbacks_tao_term_hessian_use_fd true
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r040_analytic_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -separate_hpre -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r041_fd_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -separate_hpre
+    args: -t_callbacks_tao_term_hessian_use_fd true -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r023_mapped_added_analytic
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10 -t_tao_term_sum_t_callbacks_mask hessian
+
+  test:
+    suffix: r024_mapped_added_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 11 -term1_scale 100
+    args: -reg1_tao_term_hessian_use_fd true -t_tao_term_sum_t_callbacks_mask hessian
+
+  test:
+    suffix: r031_analytic_mapped_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10 -reg1_tao_term_hessian_use_fd true
+
+  test:
+    suffix: r032_fd_mapped_fd
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10
+    args: -t_callbacks_tao_term_hessian_use_fd true -reg1_tao_term_hessian_use_fd true
+
+  test:
+    suffix: r035_mapped_added_analytic_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10
+    args: -t_tao_term_sum_t_callbacks_mask hessian
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r036_mapped_added_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10
+    args: -t_tao_term_sum_t_callbacks_mask hessian -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r042_mapped_analytic_analytic_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10 -separate_hpre
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r043_analytic_mapped_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10 -separate_hpre
+    args: -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  test:
+    suffix: r044_fd_mapped_fd_separate_hpre
+    args: -t_tao_type nls -use_term1 -term1_shell -term1_has_A -map_row_size 10 -separate_hpre
+    args: -t_callbacks_tao_term_hessian_use_fd true -reg1_tao_term_hessian_use_fd true
+    args: -reg1_tao_term_hessian_pre_is_hessian false -reg1_tao_term_hessian_pre_mat_type aij
+    args: -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+  testset:
+    args: -t_tao_type nls -use_term1 -term1_shell -t_tao_term_hessian_mat_type shell
+
+    test:
+      suffix: r045_added_analytic
+      args: -term1_hessian_mult false -term1_scale 100 -t_tao_term_sum_t_callbacks_mask hessian
+
+    test:
+      suffix: r046_added_fd
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true -term1_scale 100
+      args: -t_tao_term_sum_t_callbacks_mask hessian
+
+    test:
+      suffix: r047_added_hessianmult
+      args: -term1_scale 100 -t_tao_term_sum_t_callbacks_mask hessian
+
+    test:
+      suffix: r049_mapped_added_fd
+      args: -term1_has_A -map_row_size 11 -term1_scale 100 -term1_hessian_mult false
+      args: -reg1_tao_term_hessian_use_fd true -t_tao_term_sum_t_callbacks_mask hessian
+
+    test:
+      suffix: r050_mapped_added_hessianmult
+      args: -term1_has_A -map_row_size 11 -term1_scale 100 -t_tao_term_sum_t_callbacks_mask hessian
+
+    test:
+      suffix: r051_callback_analytic
+      args: -t_tao_term_sum_reg1_mask hessian
+
+    test:
+      suffix: r052_callback_fd
+      args: -t_callbacks_tao_term_hessian_use_fd true -t_tao_term_sum_reg1_mask hessian
+
+    test:
+      suffix: r053_callback_hessianmult
+      args: -callback_hessian_mult -t_tao_term_sum_reg1_mask hessian
+
+    test:
+      suffix: r054_analytic_analytic
+      args: -term1_hessian_mult false
+
+    test:
+      suffix: r055_analytic_fd
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true
+
+    test:
+      suffix: r057_fd_fd
+      args: -t_callbacks_tao_term_hessian_use_fd true -term1_hessian_mult false
+      args: -reg1_tao_term_hessian_use_fd true
+
+    test:
+      suffix: r060_mapped_analytic_analytic
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false
+
+    test:
+      suffix: r061_mapped_analytic_fd
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false
+      args: -reg1_tao_term_hessian_use_fd true
+
+    test:
+      suffix: r063_mapped_fd_fd
+      args: -term1_has_A -map_row_size 11 -t_callbacks_tao_term_hessian_use_fd true
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true
+
+    test:
+      suffix: r064_mapped_fd_hessianmult
+      args: -term1_has_A -map_row_size 11 -t_callbacks_tao_term_hessian_use_fd true
+
+    test:
+      suffix: r065_mapped_hessianmult_hessianmult
+      args: -term1_has_A -map_row_size 11 -callback_hessian_mult
+
+    test:
+      suffix: r066_added_analytic_separate_hpre
+      args: -term1_hessian_mult false -term1_scale 100 -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r067_added_fd_separate_hpre
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true -term1_scale 100
+      args: -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r068_added_hessianmult_separate_hpre
+      args: -term1_scale 100 -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r069_mapped_added_analytic_separate_hpre
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false -term1_scale 100
+      args: -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r070_mapped_added_fd_separate_hpre
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false -term1_scale 100
+      args: -reg1_tao_term_hessian_use_fd true -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r071_mapped_added_hessianmult_separate_hpre
+      args: -term1_has_A -map_row_size 11 -term1_scale 100
+      args: -t_tao_term_sum_t_callbacks_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r072_callback_analytic_separate_hpre
+      args: -t_tao_term_sum_reg1_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r073_callback_fd_separate_hpre
+      args: -t_callbacks_tao_term_hessian_use_fd true -t_tao_term_sum_reg1_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r074_callback_hessianmult_separate_hpre
+      args: -callback_hessian_mult -t_tao_term_sum_reg1_mask hessian
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r075_analytic_analytic_separate_hpre
+      args: -term1_hessian_mult false
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r076_analytic_fd_separate_hpre
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r078_fd_fd_separate_hpre
+      args: -t_callbacks_tao_term_hessian_use_fd true -term1_hessian_mult false
+      args: -reg1_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r079_fd_hessianmult_separate_hpre
+      args: -t_callbacks_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r080_hessianmult_hessianmult_separate_hpre
+      args: -callback_hessian_mult
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r081_mapped_analytic_analytic_separate_hpre
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r082_mapped_analytic_fd_separate_hpre
+      args: -term1_has_A -map_row_size 11 -term1_hessian_mult false
+      args: -reg1_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r084_mapped_fd_fd_separate_hpre
+      args: -term1_has_A -map_row_size 11 -t_callbacks_tao_term_hessian_use_fd true
+      args: -term1_hessian_mult false -reg1_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r085_mapped_fd_hessianmult_separate_hpre
+      args: -term1_has_A -map_row_size 11 -t_callbacks_tao_term_hessian_use_fd true
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
+
+    test:
+      suffix: r086_mapped_hessianmult_hessianmult_separate_hpre
+      args: -term1_has_A -map_row_size 11 -callback_hessian_mult
+      args: -separate_hpre -t_tao_term_hessian_pre_is_hessian false -t_tao_term_hessian_pre_mat_type aij
 
 TEST*/

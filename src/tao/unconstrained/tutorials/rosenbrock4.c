@@ -23,6 +23,19 @@ int main(int argc, char **argv)
     output_file: output/rosenbrock1_1.out
 
   test:
+    suffix: hessian_mult
+    nsize: {{1 2 3}}
+    args: -tao_type nls -tao_gatol 1.e-4 -test_hessian_mult
+
+  test:
+    suffix: hessian_mult_fallback
+    nsize: {{1 2 3}}
+    args: -tao_type nls -tao_add_terms reg1_,reg2_ -reg1_tao_term_type halfl2squared -reg2_tao_term_type halfl2squared
+    args: -tao_term_sum_reg1_scale 1.0 -tao_term_sum_reg2_scale -1.0 -tao_term_hessian_mat_type shell
+    args: -tao_gatol 1.e-4 -tao_monitor
+    output_file: output/rosenbrock4_hessian_mult_fallback.out
+
+  test:
     suffix: 2
     args: -tao_monitor -tao_type lmvm -tao_gatol 1.e-3
     output_file: output/rosenbrock1_2.out

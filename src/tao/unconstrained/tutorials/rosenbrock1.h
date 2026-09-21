@@ -219,3 +219,55 @@ static PetscErrorCode AppCtxFormHessian(AppCtx *user, Vec X, Mat H)
   PetscCall(PetscLogFlops(9.0 * user->n / 2.0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/*
+  AppCtxFormHessianMult - Evaluates the Hessian-vector product HV = H(X) V without assembling H.
+
+  Input Parameters:
++ user - the context
+. X    - input vector
+- V    - vector to multiply by the Hessian
+
+  Output Parameter:
+. HV - the Hessian-vector product
+
+  Note:
+  This mirrors the 2x2 block structure of `AppCtxFormHessian()` but applies it matrix-free, so that
+  it can be compared against the assembled Hessian to test `TaoSetHessianMult()`.
+*/
+static PETSC_UNUSED PetscErrorCode AppCtxFormHessianMult(AppCtx *user, Vec X, Vec V, Vec HV)
+{
+  PetscReal          alpha = user->alpha;
+  const PetscScalar *x, *v;
+  PetscScalar       *hv;
+
+  PetscFunctionBeginUser;
+  PetscCall(VecGetArrayRead(X, &x));
+  PetscCall(VecGetArrayRead(V, &v));
+  PetscCall(VecGetArray(HV, &hv));
+  if (user->chained) {
+    for (PetscInt i = 0; i < user->n; i++) hv[i] = 0.0;
+    for (PetscInt i = 0; i < user->n - 1; i++) {
+      PetscScalar t1  = x[i + 1] - x[i] * x[i];
+      PetscScalar h00 = 2 + 2 * alpha * (t1 * (-2) + 4 * x[i] * x[i]);
+      PetscScalar h01 = 2 * alpha * (-2 * x[i]);
+      PetscScalar h11 = 2 * alpha;
+
+      hv[i] += h00 * v[i] + h01 * v[i + 1];
+      hv[i + 1] += h01 * v[i] + h11 * v[i + 1];
+    }
+  } else {
+    for (PetscInt i = 0; i < user->n / 2; i++) {
+      PetscScalar h11 = 2 * alpha;
+      PetscScalar h00 = -4 * alpha * (x[2 * i + 1] - 3 * x[2 * i] * x[2 * i]) + 2;
+      PetscScalar h01 = -4.0 * alpha * x[2 * i];
+
+      hv[2 * i]     = h00 * v[2 * i] + h01 * v[2 * i + 1];
+      hv[2 * i + 1] = h01 * v[2 * i] + h11 * v[2 * i + 1];
+    }
+  }
+  PetscCall(VecRestoreArrayRead(X, &x));
+  PetscCall(VecRestoreArrayRead(V, &v));
+  PetscCall(VecRestoreArray(HV, &hv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

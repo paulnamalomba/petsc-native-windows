@@ -1,6 +1,6 @@
 /*  Include "petsctao.h" so we can use TAO solvers.  */
 #include <petsctao.h>
-#include "rosenbrock1.h" // defines AppCtx, AppCtxFormFunctionGradient(), and AppCtxFormHessian()
+#include "rosenbrock1.h" // defines AppCtx, AppCtxFormFunctionGradient(), AppCtxFormHessian(), and AppCtxFormHessianMult()
 
 static char help[] = "This example demonstrates use of the TaoTerm\n\
 interface for defining problems in the Tao library.  This example\n\
@@ -9,6 +9,7 @@ to define the Rosenbrock function.\n";
 
 static PetscErrorCode FormFunctionGradient(TaoTerm, Vec, Vec, PetscReal *, Vec);
 static PetscErrorCode FormHessian(TaoTerm, Vec, Vec, Mat, Mat);
+static PetscErrorCode FormHessianMult(TaoTerm, Vec, Vec, Vec, Vec);
 static PetscErrorCode CreateSolutionVec(TaoTerm, Vec *);
 
 static PetscErrorCode CtxDestroy(PetscCtxRt ctx)
@@ -25,6 +26,7 @@ int main(int argc, char **argv)
   AppCtx      user; /* user-defined application context */
   MPI_Comm    comm;
   PetscBool   test_gradient_fd_check = PETSC_FALSE; /* test that FD delta is preserved */
+  PetscBool   set_hessian_mult       = PETSC_FALSE; /* register the matrix-free Hessian-vector product (for shell Hessian tests) */
   PetscReal   fd_delta_set           = 1.e-6;
 
   /* Initialize TAO and PETSc */
@@ -36,6 +38,7 @@ int main(int argc, char **argv)
 
   PetscOptionsBegin(comm, "", help, "none");
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-test_gradient_fd_check", &test_gradient_fd_check, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-set_hessian_mult", &set_hessian_mult, NULL));
   PetscOptionsEnd();
   /* Initialize problem parameters */
   PetscCall(AppCtxInitialize(comm, &user));
@@ -49,6 +52,7 @@ int main(int argc, char **argv)
   if (user.jacobi_pc) PetscCall(TaoTermSetCreateHessianMode(objective, PETSC_FALSE, MATBAIJ, MATBAIJ));
   else PetscCall(TaoTermSetCreateHessianMode(objective, PETSC_TRUE /* H == Hpre */, MATBAIJ, NULL));
   PetscCall(TaoTermShellSetHessian(objective, FormHessian));
+  if (set_hessian_mult) PetscCall(TaoTermShellSetHessianMult(objective, FormHessianMult));
 
   /* Create TAO solver with desired solution method */
   PetscCall(TaoCreate(PETSC_COMM_SELF, &tao));
@@ -157,6 +161,33 @@ static PetscErrorCode FormHessian(TaoTerm term, Vec X, Vec params, Mat H, Mat Hp
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  FormHessianMult - Evaluates the Hessian-vector product H(X) V without assembling H.
+
+  Input Parameters:
++ term   - the `TaoTerm` for the objective function
+. X      - input vector
+. params - optional vector of parameters that this rosenbrock function does not use
+- V      - variation vector
+
+  Output Parameter:
+. HV - the Hessian-vector product H(X) V
+
+  Note: This is the callback registered with `TaoTermShellSetHessianMult()`. It is
+  invoked when the solver wraps the Hessian as a `MATSHELL` via the option
+  `-tao_term_hessian_mat_type shell`.
+*/
+static PetscErrorCode FormHessianMult(TaoTerm term, Vec X, Vec params, Vec V, Vec HV)
+{
+  AppCtx *user;
+
+  PetscFunctionBeginUser;
+  PetscCheck(params == NULL, PetscObjectComm((PetscObject)term), PETSC_ERR_ARG_WRONG, "Rosenbrock function does not take a parameter vector");
+  PetscCall(TaoTermShellGetContext(term, &user));
+  PetscCall(AppCtxFormHessianMult(user, X, V, HV));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode CreateSolutionVec(TaoTerm term, Vec *solution)
 {
   AppCtx *user;
@@ -208,6 +239,18 @@ static PetscErrorCode CreateSolutionVec(TaoTerm term, Vec *solution)
    test:
      suffix: test_mf_hessian
      args: -tao_type nls -tao_term_hessian_mat_type mffd -tao_monitor -tao_view
+
+   test:
+     suffix: hessianmult
+     args: -tao_type nls -tao_term_hessian_mat_type shell -set_hessian_mult -tao_monitor -tao_view
+
+   test:
+     suffix: hessianmult_pert
+     args: -tao_type nls -tao_term_hessian_mat_type shell -set_hessian_mult -tao_nls_sval 1e-1 -tao_monitor
+
+   test:
+     suffix: snes_mf_operator
+     args: -tao_type snes -snes_mf_operator -pc_type none -tao_converged_reason
 
    test:
      suffix: add_term
