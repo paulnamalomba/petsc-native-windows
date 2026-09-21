@@ -21,13 +21,8 @@ const char *const TaoTermParametersModes[] = {"optional", "none", "required", "T
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreate()`,
-          `TaoTermSetType()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermSetUp()`,
-          `TaoTermView()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreate()`, `TaoTermSetType()`, `TaoTermSetFromOptions()`,
+          `TaoTermSetUp()`, `TaoTermView()`
 @*/
 PetscErrorCode TaoTermDestroy(TaoTerm *term)
 {
@@ -60,14 +55,8 @@ PetscErrorCode TaoTermDestroy(TaoTerm *term)
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreate()`,
-          `TaoTermSetType()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermSetUp()`,
-          `TaoTermDestroy()`,
-          `PetscViewer`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreate()`, `TaoTermSetType()`, `TaoTermSetFromOptions()`,
+          `TaoTermSetUp()`, `TaoTermDestroy()`, `PetscViewer`
 @*/
 PetscErrorCode TaoTermView(TaoTerm term, PetscViewer viewer)
 {
@@ -166,18 +155,11 @@ PetscErrorCode TaoTermView(TaoTerm term, PetscViewer viewer)
   Level: intermediate
 
   Notes:
-  Structural configuration of `term`, including its type, vector spaces, derivative strategy,
-  and Hessian creation mode, cannot be changed after this function returns successfully.
-  Numerical data explicitly documented as mutable, such as `TaoTermSetFDDelta()` and
-  `TaoTermL1SetEpsilon()`, may still be changed.
+  The type, vector spaces, use of finite differences, and Hessian creation mode of `term` must be set
+  before this routine.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreate()`,
-          `TaoTermSetType()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermView()`,
-          `TaoTermDestroy()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreate()`, `TaoTermSetType()`, `TaoTermSetFromOptions()`,
+          `TaoTermView()`, `TaoTermDestroy()`
 @*/
 PetscErrorCode TaoTermSetUp(TaoTerm term)
 {
@@ -249,12 +231,7 @@ PetscErrorCode TaoTermSetUp(TaoTerm term)
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreate()`,
-          `TaoTermSetType()`,
-          `TaoTermSetUp()`,
-          `TaoTermView()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreate()`, `TaoTermSetType()`, `TaoTermSetUp()`, `TaoTermView()`,
           `TaoTermDestroy()`
 @*/
 PetscErrorCode TaoTermSetFromOptions(TaoTerm term)
@@ -291,10 +268,10 @@ PetscErrorCode TaoTermSetFromOptions(TaoTerm term)
     PetscBool is_mffd, is_shell, is_callbacks, is_sum;
     PetscCall(PetscStrcmp(typeName, MATMFFD, &is_mffd));
     if (is_mffd) {
-      PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMSUM, &is_sum));
-      PetscCheck(!is_sum, PetscObjectComm((PetscObject)term), PETSC_ERR_SUP, "TAOTERMSUM does not support MFFD Hessian matrices");
       PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMSHELL, &is_shell));
       PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMCALLBACKS, &is_callbacks));
+      PetscCall(PetscObjectTypeCompare((PetscObject)term, TAOTERMSUM, &is_sum));
+      PetscCheck(!is_sum, PetscObjectComm((PetscObject)term), PETSC_ERR_SUP, "TAOTERMSUM does not support MFFD Hessian matrices");
       if (is_shell || is_callbacks) {
         PetscCall(PetscFree(term->H_mattype));
         PetscCall(PetscStrallocpy(typeName, (char **)&term->H_mattype));
@@ -361,15 +338,8 @@ PetscErrorCode TaoTermSetFromOptions(TaoTerm term)
 
   New types of `TaoTerm` can be created with `TaoTermRegister()`
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermType`,
-          `TaoTermCreate()`,
-          `TaoTermGetType()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermSetUp()`,
-          `TaoTermView()`,
-          `TaoTermDestroy()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermType`, `TaoTermCreate()`, `TaoTermGetType()`, `TaoTermSetFromOptions()`,
+          `TaoTermSetUp()`, `TaoTermView()`, `TaoTermDestroy()`
 @*/
 PetscErrorCode TaoTermSetType(TaoTerm term, TaoTermType type)
 {
@@ -409,15 +379,8 @@ PetscErrorCode TaoTermSetType(TaoTerm term, TaoTermType type)
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermType`,
-          `TaoTermCreate()`,
-          `TaoTermSetType()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermSetUp()`,
-          `TaoTermView()`,
-          `TaoTermDestroy()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermType`, `TaoTermCreate()`, `TaoTermSetType()`, `TaoTermSetFromOptions()`,
+          `TaoTermSetUp()`, `TaoTermView()`, `TaoTermDestroy()`
 @*/
 PetscErrorCode TaoTermGetType(TaoTerm term, TaoTermType *type)
 {
@@ -441,14 +404,8 @@ PetscErrorCode TaoTermGetType(TaoTerm term, TaoTermType *type)
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetType()`,
-          `TaoAddTerm()`,
-          `TaoTermSetFromOptions()`,
-          `TaoTermSetUp()`,
-          `TaoTermView()`,
-          `TaoTermDestroy()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetType()`, `TaoAddTerm()`, `TaoTermSetFromOptions()`, `TaoTermSetUp()`,
+          `TaoTermView()`, `TaoTermDestroy()`
 @*/
 PetscErrorCode TaoTermCreate(MPI_Comm comm, TaoTerm *term)
 {
@@ -500,12 +457,8 @@ PetscErrorCode TaoTermCreate(MPI_Comm comm, TaoTerm *term)
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeGradient()`,
-          `TaoTermComputeObjectiveAndGradient()`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetObjective()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeGradient()`, `TaoTermComputeObjectiveAndGradient()`,
+          `TaoTermComputeHessian()`, `TaoTermShellSetObjective()`
 @*/
 PetscErrorCode TaoTermComputeObjective(TaoTerm term, Vec x, Vec params, PetscReal *value)
 {
@@ -563,12 +516,8 @@ PetscErrorCode TaoTermComputeObjective(TaoTerm term, Vec x, Vec params, PetscRea
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjective()`,
-          `TaoTermComputeObjectiveAndGradient()`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetGradient()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjective()`, `TaoTermComputeObjectiveAndGradient()`,
+          `TaoTermComputeHessian()`, `TaoTermShellSetGradient()`
 @*/
 PetscErrorCode TaoTermComputeGradient(TaoTerm term, Vec x, Vec params, Vec g)
 {
@@ -631,12 +580,8 @@ PetscErrorCode TaoTermComputeGradient(TaoTerm term, Vec x, Vec params, Vec g)
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjective()`,
-          `TaoTermComputeGradient()`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetObjectiveAndGradient()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjective()`, `TaoTermComputeGradient()`,
+          `TaoTermComputeHessian()`, `TaoTermShellSetObjectiveAndGradient()`
 @*/
 PetscErrorCode TaoTermComputeObjectiveAndGradient(TaoTerm term, Vec x, Vec params, PetscReal *value, Vec g)
 {
@@ -709,12 +654,8 @@ PetscErrorCode TaoTermComputeObjectiveAndGradient(TaoTerm term, Vec x, Vec param
   If there is no separate matrix from which to construct the preconditioner, then `TaoTermComputeHessian(term, x, params, H, NULL)`
   and `TaoTermComputeHessian(term, x, params, H, H)` are equivalent.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjective()`,
-          `TaoTermComputeGradient()`,
-          `TaoTermComputeObjectiveAndGradient()`,
-          `TaoTermShellSetHessian()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjective()`, `TaoTermComputeGradient()`,
+          `TaoTermComputeObjectiveAndGradient()`, `TaoTermShellSetHessian()`
 @*/
 PetscErrorCode TaoTermComputeHessian(TaoTerm term, Vec x, Vec params, Mat H, Mat Hpre)
 {
@@ -787,11 +728,8 @@ PetscErrorCode TaoTermComputeHessian(TaoTerm term, Vec x, Vec params, Mat H, Mat
   This is the matrix-free analog of `TaoTermComputeHessian()`. Instead of assembling the full
   Hessian matrix, it computes only the product of the Hessian with a given vector `v`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetHessianMult()`,
-          `TaoTermCreateHessianShell()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermShellSetHessianMult()`,
+          `TaoTermCreateHessianShell()`, `TaoComputeHessianMult()`
 @*/
 PetscErrorCode TaoTermComputeHessianMult(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
 {
@@ -837,13 +775,8 @@ PetscErrorCode TaoTermComputeHessianMult(TaoTerm term, Vec x, Vec params, Vec v,
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjective()`,
-          `TaoTermShellSetObjective()`,
-          `TaoTermIsGradientDefined()`,
-          `TaoTermIsObjectiveAndGradientDefined()`,
-          `TaoTermIsHessianDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjective()`, `TaoTermShellSetObjective()`,
+          `TaoTermIsGradientDefined()`, `TaoTermIsObjectiveAndGradientDefined()`, `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsComputeHessianFDPossible(TaoTerm term, PetscBool3 *is_fdpossible)
 {
@@ -873,13 +806,8 @@ PetscErrorCode TaoTermIsComputeHessianFDPossible(TaoTerm term, PetscBool3 *is_fd
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjective()`,
-          `TaoTermShellSetObjective()`,
-          `TaoTermIsGradientDefined()`,
-          `TaoTermIsObjectiveAndGradientDefined()`,
-          `TaoTermIsHessianDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjective()`, `TaoTermShellSetObjective()`,
+          `TaoTermIsGradientDefined()`, `TaoTermIsObjectiveAndGradientDefined()`, `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsObjectiveDefined(TaoTerm term, PetscBool *is_defined)
 {
@@ -910,13 +838,8 @@ PetscErrorCode TaoTermIsObjectiveDefined(TaoTerm term, PetscBool *is_defined)
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeGradient()`,
-          `TaoTermShellSetGradient()`,
-          `TaoTermIsObjectiveDefined()`,
-          `TaoTermIsObjectiveAndGradientDefined()`,
-          `TaoTermIsHessianDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeGradient()`, `TaoTermShellSetGradient()`,
+          `TaoTermIsObjectiveDefined()`, `TaoTermIsObjectiveAndGradientDefined()`, `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsGradientDefined(TaoTerm term, PetscBool *is_defined)
 {
@@ -947,13 +870,8 @@ PetscErrorCode TaoTermIsGradientDefined(TaoTerm term, PetscBool *is_defined)
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeObjectiveAndGradient()`,
-          `TaoTermShellSetObjectiveAndGradient()`,
-          `TaoTermIsObjectiveDefined()`,
-          `TaoTermIsGradientDefined()`,
-          `TaoTermIsHessianDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeObjectiveAndGradient()`, `TaoTermShellSetObjectiveAndGradient()`,
+          `TaoTermIsObjectiveDefined()`, `TaoTermIsGradientDefined()`, `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsObjectiveAndGradientDefined(TaoTerm term, PetscBool *is_defined)
 {
@@ -983,13 +901,8 @@ PetscErrorCode TaoTermIsObjectiveAndGradientDefined(TaoTerm term, PetscBool *is_
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetHessian()`,
-          `TaoTermIsObjectiveDefined()`,
-          `TaoTermIsGradientDefined()`,
-          `TaoTermIsObjectiveAndGradientDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermShellSetHessian()`,
+          `TaoTermIsObjectiveDefined()`, `TaoTermIsGradientDefined()`, `TaoTermIsObjectiveAndGradientDefined()`
 @*/
 PetscErrorCode TaoTermIsHessianDefined(TaoTerm term, PetscBool *is_defined)
 {
@@ -1012,17 +925,14 @@ PetscErrorCode TaoTermIsHessianDefined(TaoTerm term, PetscBool *is_defined)
   Output Parameter:
 . is_defined - whether the Hessian-vector product is defined
 
+  Level: developer
+
   Note:
   This checks whether a dedicated Hessian-vector product operation (see `TaoTermComputeHessianMult()`) is defined.
   For a `TAOTERMSHELL` this reflects whether `TaoTermShellSetHessianMult()` has been called; for a `TAOTERMCALLBACKS`
   it reflects whether `TaoSetHessianMult()` has been called.
 
-  Level: developer
-
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessianMult()`,
-          `TaoTermShellSetHessianMult()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessianMult()`, `TaoTermShellSetHessianMult()`,
           `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsHessianMultDefined(TaoTerm term, PetscBool *is_defined)
@@ -1048,13 +958,8 @@ PetscErrorCode TaoTermIsHessianMultDefined(TaoTerm term, PetscBool *is_defined)
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermCreateHessianMatrices()`,
-          `TaoTermShellSetCreateHessianMatrices()`,
-          `TaoTermIsObjectiveDefined()`,
-          `TaoTermIsGradientDefined()`,
-          `TaoTermIsObjectiveAndGradientDefined()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermCreateHessianMatrices()`, `TaoTermShellSetCreateHessianMatrices()`,
+          `TaoTermIsObjectiveDefined()`, `TaoTermIsGradientDefined()`, `TaoTermIsObjectiveAndGradientDefined()`,
           `TaoTermIsHessianDefined()`
 @*/
 PetscErrorCode TaoTermIsCreateHessianMatricesDefined(TaoTerm term, PetscBool *is_defined)
@@ -1094,15 +999,9 @@ PetscErrorCode TaoTermIsCreateHessianMatricesDefined(TaoTerm term, PetscBool *is
 
   Alternatively, one may use `TaoTermSetSolutionLayout()` or `TaoTermSetSolutionTemplate()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetSolutionSizes()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionLayout()`,
-          `TaoTermCreateSolutionVec()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetSolutionSizes()`, `TaoTermSetSolutionTemplate()`,
+          `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionVecType()`, `TaoTermGetSolutionLayout()`,
+          `TaoTermSetSolutionLayout()`, `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermSetSolutionSizes(TaoTerm term, PetscInt n, PetscInt N, PetscInt bs)
 {
@@ -1133,15 +1032,9 @@ PetscErrorCode TaoTermSetSolutionSizes(TaoTerm term, PetscInt n, PetscInt N, Pet
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetSolutionSizes()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionLayout()`,
-          `TaoTermCreateSolutionVec()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetSolutionSizes()`, `TaoTermSetSolutionTemplate()`,
+          `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionVecType()`, `TaoTermGetSolutionLayout()`,
+          `TaoTermSetSolutionLayout()`, `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermGetSolutionSizes(TaoTerm term, PetscInt *n, PetscInt *N, PetscInt *bs)
 {
@@ -1175,15 +1068,9 @@ PetscErrorCode TaoTermGetSolutionSizes(TaoTerm term, PetscInt *n, PetscInt *N, P
 
   Alternatively, one may use `TaoTermSetParametersLayout()` or `TaoTermSetParametersTemplate()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetParametersSizes()`,
-          `TaoTermSetParametersTemplate()`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersLayout()`,
-          `TaoTermCreateParametersVec()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetParametersSizes()`, `TaoTermSetParametersTemplate()`,
+          `TaoTermGetParametersVecType()`, `TaoTermSetParametersVecType()`, `TaoTermGetParametersLayout()`,
+          `TaoTermSetParametersLayout()`, `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermSetParametersSizes(TaoTerm term, PetscInt k, PetscInt K, PetscInt bs)
 {
@@ -1214,15 +1101,9 @@ PetscErrorCode TaoTermSetParametersSizes(TaoTerm term, PetscInt k, PetscInt K, P
 
   Level: beginner
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetParametersSizes()`,
-          `TaoTermSetParametersTemplate()`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersLayout()`,
-          `TaoTermCreateParametersVec()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetParametersSizes()`, `TaoTermSetParametersTemplate()`,
+          `TaoTermGetParametersVecType()`, `TaoTermSetParametersVecType()`, `TaoTermGetParametersLayout()`,
+          `TaoTermSetParametersLayout()`, `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermGetParametersSizes(TaoTerm term, PetscInt *k, PetscInt *K, PetscInt *bs)
 {
@@ -1254,13 +1135,8 @@ PetscErrorCode TaoTermGetParametersSizes(TaoTerm term, PetscInt *k, PetscInt *K,
 
   Alternatively, one may use `TaoTermSetParametersSizes()` or `TaoTermSetParametersTemplate()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetParametersVecType()`, `TaoTermSetParametersVecType()`,
+          `TaoTermGetParametersLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermSetParametersLayout(TaoTerm term, PetscLayout parameters_layout)
@@ -1288,13 +1164,8 @@ PetscErrorCode TaoTermSetParametersLayout(TaoTerm term, PetscLayout parameters_l
 
   Level: intermediate
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermSetParametersLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetParametersVecType()`, `TaoTermSetParametersVecType()`,
+          `TaoTermSetParametersLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermGetParametersLayout(TaoTerm term, PetscLayout *parameters_layout)
@@ -1331,13 +1202,8 @@ PetscErrorCode TaoTermGetParametersLayout(TaoTerm term, PetscLayout *parameters_
 
   Alternatively, one may use `TaoTermSetSolutionSizes()` or `TaoTermSetSolutionTemplate()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionVecType()`,
+          `TaoTermGetSolutionLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermSetSolutionLayout(TaoTerm term, PetscLayout solution_layout)
@@ -1365,13 +1231,8 @@ PetscErrorCode TaoTermSetSolutionLayout(TaoTerm term, PetscLayout solution_layou
 
   Level: intermediate
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermSetSolutionLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionVecType()`,
+          `TaoTermSetSolutionLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermGetSolutionLayout(TaoTerm term, PetscLayout *solution_layout)
@@ -1408,13 +1269,8 @@ PetscErrorCode TaoTermGetSolutionLayout(TaoTerm term, PetscLayout *solution_layo
 
   Alternatively, one may use `TaoTermSetSolutionSizes()` or `TaoTermSetSolutionLayout()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermSetParametersTemplate()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionLayout()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionVecType()`,
+          `TaoTermSetParametersTemplate()`, `TaoTermGetSolutionLayout()`, `TaoTermSetSolutionLayout()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermSetSolutionTemplate(TaoTerm term, Vec sol_template)
@@ -1455,13 +1311,8 @@ PetscErrorCode TaoTermSetSolutionTemplate(TaoTerm term, Vec sol_template)
 
   Alternatively, one may use `TaoTermSetParametersSizes()` or `TaoTermSetParametersLayout()` to define the vector sizes.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersLayout()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetParametersVecType()`, `TaoTermSetParametersVecType()`,
+          `TaoTermSetSolutionTemplate()`, `TaoTermGetParametersLayout()`, `TaoTermSetParametersLayout()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermSetParametersTemplate(TaoTerm term, Vec params_template)
@@ -1496,13 +1347,8 @@ PetscErrorCode TaoTermSetParametersTemplate(TaoTerm term, Vec params_template)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionLayout()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetSolutionVecType()`, `TaoTermSetSolutionLayout()`,
+          `TaoTermGetSolutionLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermSetSolutionVecType(TaoTerm term, VecType solution_type)
@@ -1528,13 +1374,8 @@ PetscErrorCode TaoTermSetSolutionVecType(TaoTerm term, VecType solution_type)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersLayout()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersTemplate()`,
-          `TaoTermCreateParametersVec()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetParametersVecType()`, `TaoTermSetParametersLayout()`,
+          `TaoTermGetParametersLayout()`, `TaoTermSetParametersTemplate()`, `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermSetParametersVecType(TaoTerm term, VecType parameters_type)
 {
@@ -1558,13 +1399,8 @@ PetscErrorCode TaoTermSetParametersVecType(TaoTerm term, VecType parameters_type
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetSolutionVecType()`, `TaoTermGetSolutionLayout()`,
+          `TaoTermSetSolutionLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateSolutionVec()`
 @*/
 PetscErrorCode TaoTermGetSolutionVecType(TaoTerm term, VecType *solution_type)
@@ -1589,13 +1425,8 @@ PetscErrorCode TaoTermGetSolutionVecType(TaoTerm term, VecType *solution_type)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersLayout()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermSetParametersTemplate()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetParametersVecType()`, `TaoTermGetParametersLayout()`,
+          `TaoTermSetParametersLayout()`, `TaoTermSetSolutionTemplate()`, `TaoTermSetParametersTemplate()`,
           `TaoTermCreateParametersVec()`
 @*/
 PetscErrorCode TaoTermGetParametersVecType(TaoTerm term, VecType *parameters_type)
@@ -1631,16 +1462,9 @@ PetscErrorCode TaoTermGetParametersVecType(TaoTerm term, VecType *parameters_typ
 
   You can also call `TaoTermSetSolutionVecType()` to set the type of vector created (e.g. `VECCUDA`).
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermShellSetCreateSolutionVec()`,
-          `TaoTermGetSolutionSizes()`,
-          `TaoTermSetSolutionSizes()`,
-          `TaoTermSetSolutionTemplate()`,
-          `TaoTermGetSolutionVecType()`,
-          `TaoTermSetSolutionVecType()`,
-          `TaoTermGetSolutionLayout()`,
-          `TaoTermSetSolutionLayout()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermShellSetCreateSolutionVec()`, `TaoTermGetSolutionSizes()`,
+          `TaoTermSetSolutionSizes()`, `TaoTermSetSolutionTemplate()`, `TaoTermGetSolutionVecType()`,
+          `TaoTermSetSolutionVecType()`, `TaoTermGetSolutionLayout()`, `TaoTermSetSolutionLayout()`,
           `TaoTermCreateHessianMatrices()`
 @*/
 PetscErrorCode TaoTermCreateSolutionVec(TaoTerm term, Vec *solution)
@@ -1680,16 +1504,9 @@ PetscErrorCode TaoTermCreateSolutionVec(TaoTerm term, Vec *solution)
 
   You can also call `TaoTermSetParametersVecType()` to set the type of vector created (e.g. `VECCUDA`).
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermShellSetCreateParametersVec()`,
-          `TaoTermGetParametersSizes()`,
-          `TaoTermSetParametersSizes()`,
-          `TaoTermSetParametersTemplate()`,
-          `TaoTermGetParametersVecType()`,
-          `TaoTermSetParametersVecType()`,
-          `TaoTermGetParametersLayout()`,
-          `TaoTermSetParametersLayout()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermShellSetCreateParametersVec()`, `TaoTermGetParametersSizes()`,
+          `TaoTermSetParametersSizes()`, `TaoTermSetParametersTemplate()`, `TaoTermGetParametersVecType()`,
+          `TaoTermSetParametersVecType()`, `TaoTermGetParametersLayout()`, `TaoTermSetParametersLayout()`,
           `TaoTermCreateHessianMatrices()`
 @*/
 PetscErrorCode TaoTermCreateParametersVec(TaoTerm term, Vec *parameters)
@@ -1727,15 +1544,9 @@ PetscErrorCode TaoTermCreateParametersVec(TaoTerm term, Vec *parameters)
   their Hessian matrices: the behavior of that function can be controlled by
   `TaoTermSetCreateHessianMode()`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermShellSetCreateHessianMatrices()`,
-          `TaoTermCreateSolutionVec()`,
-          `TaoTermCreateHessianMatricesDefault()`,
-          `TaoTermGetCreateHessianMode()`,
-          `TaoTermSetCreateHessianMode()`,
-          `TaoTermIsCreateHessianMatricesDefined()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermShellSetCreateHessianMatrices()`,
+          `TaoTermCreateSolutionVec()`, `TaoTermCreateHessianMatricesDefault()`, `TaoTermGetCreateHessianMode()`,
+          `TaoTermSetCreateHessianMode()`, `TaoTermIsCreateHessianMatricesDefined()`
 @*/
 PetscErrorCode TaoTermCreateHessianMatrices(TaoTerm term, Mat *H, Mat *Hpre)
 {
@@ -1767,12 +1578,8 @@ PetscErrorCode TaoTermCreateHessianMatrices(TaoTerm term, Mat *H, Mat *Hpre)
   otherwise they will be separate matrices, with the matrix types `H_mattype` and `Hpre_mattype`.
   If either type is `MATMFFD`, then it will create a shell matrix with `TaoTermCreateHessianMFFD()`.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermCreateHessianMatrices()`,
-          `TaoTermGetCreateHessianMode()`,
-          `TaoTermSetCreateHessianMode()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermCreateHessianMatrices()`,
+          `TaoTermGetCreateHessianMode()`, `TaoTermSetCreateHessianMode()`
 @*/
 PetscErrorCode TaoTermCreateHessianMatricesDefault(TaoTerm term, Mat *H, Mat *Hpre)
 {
@@ -1807,12 +1614,8 @@ PetscErrorCode TaoTermCreateHessianMatricesDefault(TaoTerm term, Mat *H, Mat *Hp
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermCreateHessianMatrices()`,
-          `TaoTermCreateHessianMatricesDefault()`,
-          `TaoTermGetCreateHessianMode()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermCreateHessianMatrices()`,
+          `TaoTermCreateHessianMatricesDefault()`, `TaoTermGetCreateHessianMode()`
 @*/
 PetscErrorCode TaoTermSetCreateHessianMode(TaoTerm term, PetscBool Hpre_is_H, MatType H_mattype, MatType Hpre_mattype)
 {
@@ -1850,12 +1653,8 @@ PetscErrorCode TaoTermSetCreateHessianMode(TaoTerm term, PetscBool Hpre_is_H, Ma
 
   Level: developer
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermComputeHessian()`,
-          `TaoTermCreateHessianMatrices()`,
-          `TaoTermCreateHessianMatricesDefault()`,
-          `TaoTermSetCreateHessianMode()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermComputeHessian()`, `TaoTermCreateHessianMatrices()`,
+          `TaoTermCreateHessianMatricesDefault()`, `TaoTermSetCreateHessianMode()`
 @*/
 PetscErrorCode TaoTermGetCreateHessianMode(TaoTerm term, PetscBool *Hpre_is_H, MatType *H_mattype, MatType *Hpre_mattype)
 {
@@ -1890,9 +1689,7 @@ PetscErrorCode TaoTermGetCreateHessianMode(TaoTerm term, PetscBool *Hpre_is_H, M
 
   Level: intermediate
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermDuplicateOption`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermDuplicateOption`
 @*/
 PetscErrorCode TaoTermDuplicate(TaoTerm term, TaoTermDuplicateOption opt, TaoTerm *newterm)
 {
@@ -1941,10 +1738,7 @@ PetscErrorCode TaoTermDuplicate(TaoTerm term, TaoTermDuplicateOption opt, TaoTer
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermParametersMode`,
-          `TaoTermGetParametersMode()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermParametersMode`, `TaoTermGetParametersMode()`
 @*/
 PetscErrorCode TaoTermSetParametersMode(TaoTerm term, TaoTermParametersMode parameters_mode)
 {
@@ -1969,10 +1763,7 @@ PetscErrorCode TaoTermSetParametersMode(TaoTerm term, TaoTermParametersMode para
 
   Level: intermediate
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermParametersMode`,
-          `TaoTermSetParametersMode()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermParametersMode`, `TaoTermSetParametersMode()`
 @*/
 PetscErrorCode TaoTermGetParametersMode(TaoTerm term, TaoTermParametersMode *parameters_mode)
 {
@@ -1999,12 +1790,8 @@ PetscErrorCode TaoTermGetParametersMode(TaoTerm term, TaoTermParametersMode *par
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeGradientGetUseFD()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientSetUseFD()`, `TaoTermComputeGradientGetUseFD()`
 @*/
 PetscErrorCode TaoTermGetFDDelta(TaoTerm term, PetscReal *delta)
 {
@@ -2029,15 +1816,9 @@ PetscErrorCode TaoTermGetFDDelta(TaoTerm term, PetscReal *delta)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeGradientGetUseFD()`,
-          `TaoTermComputeHessianFD()`,
-          `TaoTermComputeHessianSetUseFD()`,
-          `TaoTermComputeHessianGetUseFD()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientSetUseFD()`, `TaoTermComputeGradientGetUseFD()`, `TaoTermComputeHessianFD()`,
+          `TaoTermComputeHessianSetUseFD()`, `TaoTermComputeHessianGetUseFD()`
 @*/
 PetscErrorCode TaoTermSetFDDelta(TaoTerm term, PetscReal delta)
 {
@@ -2063,14 +1844,8 @@ PetscErrorCode TaoTermSetFDDelta(TaoTerm term, PetscReal delta)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientGetUseFD()`,
-          `TaoTermComputeHessianFD()`,
-          `TaoTermComputeHessianSetUseFD()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientGetUseFD()`, `TaoTermComputeHessianFD()`, `TaoTermComputeHessianSetUseFD()`,
           `TaoTermComputeHessianGetUseFD()`
 @*/
 PetscErrorCode TaoTermComputeGradientSetUseFD(TaoTerm term, PetscBool use_fd)
@@ -2096,14 +1871,8 @@ PetscErrorCode TaoTermComputeGradientSetUseFD(TaoTerm term, PetscBool use_fd)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeHessianFD()`,
-          `TaoTermComputeHessianSetUseFD()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientSetUseFD()`, `TaoTermComputeHessianFD()`, `TaoTermComputeHessianSetUseFD()`,
           `TaoTermComputeHessianGetUseFD()`
 @*/
 PetscErrorCode TaoTermComputeGradientGetUseFD(TaoTerm term, PetscBool *use_fd)
@@ -2129,14 +1898,8 @@ PetscErrorCode TaoTermComputeGradientGetUseFD(TaoTerm term, PetscBool *use_fd)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeGradientGetUseFD()`,
-          `TaoTermComputeHessianFD()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientSetUseFD()`, `TaoTermComputeGradientGetUseFD()`, `TaoTermComputeHessianFD()`,
           `TaoTermComputeHessianGetUseFD()`
 @*/
 PetscErrorCode TaoTermComputeHessianSetUseFD(TaoTerm term, PetscBool use_fd)
@@ -2162,14 +1925,8 @@ PetscErrorCode TaoTermComputeHessianSetUseFD(TaoTerm term, PetscBool use_fd)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermGetFDDelta()`,
-          `TaoTermSetFDDelta()`,
-          `TaoTermComputeGradientFD()`,
-          `TaoTermComputeGradientSetUseFD()`,
-          `TaoTermComputeGradientGetUseFD()`,
-          `TaoTermComputeHessianFD()`,
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermGetFDDelta()`, `TaoTermSetFDDelta()`, `TaoTermComputeGradientFD()`,
+          `TaoTermComputeGradientSetUseFD()`, `TaoTermComputeGradientGetUseFD()`, `TaoTermComputeHessianFD()`,
           `TaoTermComputeHessianSetUseFD()`
 @*/
 PetscErrorCode TaoTermComputeHessianGetUseFD(TaoTerm term, PetscBool *use_fd)
