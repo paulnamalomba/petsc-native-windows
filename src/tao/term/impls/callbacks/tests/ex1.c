@@ -59,6 +59,13 @@ static PetscErrorCode hessian(Tao tao, Vec x, Mat H, Mat Hpre, void *ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode hessianmult(Tao tao, Vec x, Vec v, Vec Hv, void *ctx)
+{
+  PetscFunctionBeginUser;
+  PetscCall(VecZeroEntries(Hv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode testCallbacks(PetscBool separate)
 {
   Tao         tao;
@@ -117,6 +124,7 @@ static PetscErrorCode testCallbacks(PetscBool separate)
   }
   PetscCall(TaoGetHessian(tao, NULL, NULL, &_hessian, NULL));
   PetscCheck(_hessian == hessian, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong hessian callback");
+  if (separate) PetscCall(TaoSetHessianMult(tao, hessianmult, NULL));
 
   PetscCall(TaoComputeObjective(tao, sol, &value));
   (void)value;

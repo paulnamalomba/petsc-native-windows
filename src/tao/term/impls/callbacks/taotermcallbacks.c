@@ -138,6 +138,7 @@ static PetscErrorCode TaoTermComputeHessianMult_Callbacks(TaoTerm term, Vec x, V
 static PetscErrorCode TaoTermView_Callbacks(TaoTerm term, PetscViewer viewer)
 {
   TaoTerm_Callbacks *tt = (TaoTerm_Callbacks *)term->data;
+  PetscViewerFormat  format;
   PetscBool          iascii;
 
   PetscFunctionBegin;
@@ -154,6 +155,36 @@ static PetscErrorCode TaoTermView_Callbacks(TaoTerm term, PetscViewer viewer)
       PetscCall(PetscObjectGetOptionsPrefix((PetscObject)tt->tao, &prefix));
       if (prefix) PetscCall(PetscViewerASCIIPrintf(viewer, "attached to Tao %s (%s)\n", name, prefix));
       else PetscCall(PetscViewerASCIIPrintf(viewer, "attached to Tao %s\n", name));
+    }
+    PetscCall(PetscViewerGetFormat(viewer, &format));
+    if (format == PETSC_VIEWER_ASCII_INFO_DETAIL) {
+      PetscBool any = PETSC_FALSE;
+
+      PetscCall(PetscViewerASCIIPrintf(viewer, "The following methods have been set:"));
+      PetscCall(PetscViewerASCIIUseTabs(viewer, PETSC_FALSE));
+      if (tt->objective) {
+        PetscCall(PetscViewerASCIIPrintf(viewer, "%sobjective", any ? ", " : " "));
+        any = PETSC_TRUE;
+      }
+      if (tt->gradient) {
+        PetscCall(PetscViewerASCIIPrintf(viewer, "%sgradient", any ? ", " : " "));
+        any = PETSC_TRUE;
+      }
+      if (tt->objectiveandgradient) {
+        PetscCall(PetscViewerASCIIPrintf(viewer, "%sobjectiveandgradient", any ? ", " : " "));
+        any = PETSC_TRUE;
+      }
+      if (tt->hessian) {
+        PetscCall(PetscViewerASCIIPrintf(viewer, "%shessian", any ? ", " : " "));
+        any = PETSC_TRUE;
+      }
+      if (tt->hessianmult) {
+        PetscCall(PetscViewerASCIIPrintf(viewer, "%shessianmult", any ? ", " : " "));
+        any = PETSC_TRUE;
+      }
+      if (!any) PetscCall(PetscViewerASCIIPrintf(viewer, " (none)"));
+      PetscCall(PetscViewerASCIIPrintf(viewer, "\n"));
+      PetscCall(PetscViewerASCIIUseTabs(viewer, PETSC_TRUE));
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);

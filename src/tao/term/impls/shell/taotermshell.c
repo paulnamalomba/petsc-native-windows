@@ -131,24 +131,24 @@ static PetscErrorCode TaoTermView_Shell(TaoTerm term, PetscViewer viewer)
     PetscCall(PetscViewerASCIIUseTabs(viewer, PETSC_FALSE));
     any = PETSC_FALSE;
     if (term->ops->objective) {
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%sobjective", any ? ", " : " "));
       any = PETSC_TRUE;
-      PetscCall(PetscViewerASCIIPrintf(viewer, " objective,"));
     }
     if (term->ops->gradient) {
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%sgradient", any ? ", " : " "));
       any = PETSC_TRUE;
-      PetscCall(PetscViewerASCIIPrintf(viewer, " gradient,"));
     }
     if (term->ops->objectiveandgradient) {
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%sobjectiveandgradient", any ? ", " : " "));
       any = PETSC_TRUE;
-      PetscCall(PetscViewerASCIIPrintf(viewer, " objectiveandgradient,"));
     }
     if (term->ops->hessian) {
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%shessian", any ? ", " : " "));
       any = PETSC_TRUE;
-      PetscCall(PetscViewerASCIIPrintf(viewer, " hessian,"));
     }
     if (term->ops->hessianmult) {
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%shessianmult", any ? ", " : " "));
       any = PETSC_TRUE;
-      PetscCall(PetscViewerASCIIPrintf(viewer, " hessianmult,"));
     }
     if (any == PETSC_FALSE) PetscCall(PetscViewerASCIIPrintf(viewer, " (none)"));
     PetscCall(PetscViewerASCIIPrintf(viewer, "\n"));
