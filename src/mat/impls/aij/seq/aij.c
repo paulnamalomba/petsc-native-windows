@@ -4549,6 +4549,12 @@ PetscErrorCode MatSetPreallocationCOO_SeqAIJ(Mat mat, PetscCount coo_n, PetscInt
   PetscBool            hypre;
 
   PetscFunctionBegin;
+  if (mat->hash_active) {
+    mat->ops[0] = seqaij->cops;
+    PetscCall(PetscHMapIJVDestroy(&seqaij->ht));
+    PetscCall(PetscFree(seqaij->dnz));
+    mat->hash_active = PETSC_FALSE;
+  }
   PetscCall(PetscObjectGetComm((PetscObject)mat, &comm));
   PetscCall(MatGetSize(mat, &M, &N));
   i = coo_i;
