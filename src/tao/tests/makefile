@@ -1,6 +1,6 @@
 -include ../../../petscdir.mk
 
-CLEANFILES  = taoboundtest taotermtest1 taotermtest2 taosnes cutest
+CLEANFILES  = taobnktest taoboundtest taotermtest1 taotermtest2 taosnes cutest
 
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules
