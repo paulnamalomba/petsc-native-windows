@@ -4,9 +4,9 @@
   2 TAO,  Function value: 0.853749,  Residual: 0.0215901
   3 TAO,  Function value: 0.852106,  Residual: 0.0319342
   4 TAO,  Function value: 0.849969,  Residual: 0.00138967
-  5 TAO,  Function value: 0.849937,  Residual: 9.77977e-05
-  6 TAO,  Function value: 0.849937,  Residual: 3.47414e-08
-  7 TAO,  Function value: 0.849937,  Residual: 4.34207e-14
+  5 TAO,  Function value: 0.849937,  Residual: 9.77976e-05
+  6 TAO,  Function value: 0.849937,  Residual: 3.47539e-08
+  7 TAO,  Function value: 0.849937,  Residual: 4.63917e-14
 Tao Object: 1 MPI process
   type: bntr
     Tao Object: (tao_bnk_cg_) 1 MPI process
@@ -39,7 +39,7 @@ Tao Object: 1 MPI process
     KSP termination reasons:
       atol: 0
       rtol: 4
-      ctol: 3
+      ctol: 5
       negc: 0
       dtol: 0
       iter: 0
@@ -67,13 +67,13 @@ Tao Object: 1 MPI process
       rows=10, cols=10
       total: nonzeros=100, allocated nonzeros=100
       total number of mallocs used during MatSetValues calls=0
-  total KSP iterations: 48
+  total KSP iterations: 65
   Active Set subset type: subvec
   convergence tolerances: gatol=1e-08,   grtol=1e-08,steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=4.34207e-14
+  Residual in Function/Gradient:=4.63917e-14
   Objective value=0.849937
   total number of iterations=7,                          (max: 50)
-  total number of function/gradient evaluations=21,      (max: unlimited)
+  total number of function/gradient evaluations=23,      (max: unlimited)
   total number of Hessian evaluations=8
   Solution converged:    ||g(X)|| <= gatol
 Vec Object: 1 MPI process
