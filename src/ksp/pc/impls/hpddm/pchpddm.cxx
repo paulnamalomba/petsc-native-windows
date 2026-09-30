@@ -600,20 +600,7 @@ static PetscErrorCode PCView_HPDDM(PC pc, PetscViewer viewer)
       if (!data->deflation) {
         PetscCall(PetscViewerASCIIPrintf(viewer, "Neumann matrix attached? %s\n", PetscBools[PetscBool3ToBool(data->Neumann)]));
         PetscCall(PetscViewerASCIIPrintf(viewer, "shared subdomain KSP between SLEPc and PETSc? %s\n", PetscBools[data->share]));
-      } else PetscCall(PetscViewerASCIIPrintf(viewer, "user-supplied deflation matrix\n"));
-      if (data->scaling) {
-        PC        fine = data->levels[0]->pc;
-        PCASMType type;
-        PetscBool isasm = PETSC_FALSE;
-
-        PetscCall(PetscViewerASCIIPrintf(viewer, "user-supplied partition of unity for deflation"));
-        if (fine) PetscCall(PetscObjectTypeCompare((PetscObject)fine, PCASM, &isasm));
-        if (isasm) {
-          PetscCall(PCASMGetType(fine, &type));
-          PetscCall(PetscViewerASCIIPrintf(viewer, " with %s ASM fine correction", PCASMTypes[type]));
-        }
-        PetscCall(PetscViewerASCIIPrintf(viewer, "\n"));
-      }
+      } else PetscCall(PetscViewerASCIIPrintf(viewer, "user-supplied deflation matrix%s\n", data->scaling ? " and partition of unity" : ""));
       PetscCall(PetscViewerASCIIPrintf(viewer, "coarse correction: %s\n", PCHPDDMCoarseCorrectionTypes[data->correction]));
       PetscCall(PetscViewerASCIIPrintf(viewer, "on process #0, value%s (+ threshold%s if available) for selecting deflation vectors:", data->N > 2 ? "s" : "", data->N > 2 ? "s" : ""));
       PetscCall(PetscViewerASCIIGetTab(viewer, &tabs));
