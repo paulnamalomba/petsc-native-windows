@@ -1824,13 +1824,13 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
   PetscCall(PCGetOptionsPrefix(pc, &pcpre));
   PetscCall(PCGetOperators(pc, &A, &P));
   if (data->scaling) {
-    PetscInt extra_overlap = 0, local_columns, max_columns;
+    PetscInt extra_overlap = 0, columns;
 
     PetscCheck(data->deflation && data->is, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "PCHPDDMSetDeflationMatScaling() requires PCHPDDMSetDeflationMat()");
     PetscCheck(data->N == 2, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Custom deflation scaling requires exactly two levels");
-    PetscCall(MatGetSize(data->aux, nullptr, &local_columns));
-    PetscCallMPI(MPIU_Allreduce(&local_columns, &max_columns, 1, MPIU_INT, MPI_MAX, PetscObjectComm((PetscObject)pc)));
-    PetscCheck(max_columns > 0, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Custom deflation scaling requires at least one deflation vector globally");
+    PetscCall(MatGetSize(data->aux, nullptr, &columns));
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &columns, 1, MPIU_INT, MPI_MAX, PetscObjectComm((PetscObject)pc)));
+    PetscCheck(columns > 0, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Custom deflation scaling requires at least one deflation vector globally");
     PetscCall(PetscObjectBaseTypeCompareAny((PetscObject)P, &flg, MATSEQAIJ, MATMPIAIJ, MATSEQBAIJ, MATMPIBAIJ, MATSEQSBAIJ, MATMPISBAIJ, ""));
     PetscCheck(flg, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Custom deflation scaling requires an assembled AIJ, BAIJ, or SBAIJ operator");
     PetscCall(PetscOptionsGetBool(((PetscObject)pc)->options, pcpre, "-pc_hpddm_define_subdomains", &subdomains, nullptr));
