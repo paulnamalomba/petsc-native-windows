@@ -2,6 +2,7 @@
     Defines the basic matrix operations for the ADJ adjacency list matrix data-structure.
 */
 #include <../src/mat/impls/adj/mpi/mpiadj.h> /*I "petscmat.h" I*/
+#include <petscviewer.h>
 #include <petscsf.h>
 
 /*

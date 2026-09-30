@@ -1,5 +1,6 @@
 static char help[] = "Test PetscSFCreateByMatchingIndices\n\n";
 
+#include <petscoptions.h>
 #include <petsc.h>
 #include <petscsf.h>
 

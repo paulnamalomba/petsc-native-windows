@@ -7,6 +7,8 @@ static char help[] = "Test sequential FFTW interface \n\n";
 
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 int main(int argc, char **args)
 {

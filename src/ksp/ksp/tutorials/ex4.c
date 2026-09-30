@@ -8,6 +8,8 @@ Input parameters include:\n\
 /*
   Simple example is used to test PCHMG
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

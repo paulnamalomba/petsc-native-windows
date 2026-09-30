@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/dmdaimpl.h> /*I   "petscdmda.h"   I*/
 
 /*@

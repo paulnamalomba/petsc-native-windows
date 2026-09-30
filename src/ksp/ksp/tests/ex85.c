@@ -6,6 +6,7 @@ static char help[] = "Estimate eigenvalues with KSP.\n\n";
     Contributed by: Pablo Brubeck <brubeck@protonmail.com>
 */
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

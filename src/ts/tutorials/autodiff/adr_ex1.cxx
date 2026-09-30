@@ -9,6 +9,8 @@ static char help[] = "Demonstrates automatic Jacobian generation using ADOL-C fo
 /* ------------------------------------------------------------------------
   See ../advection-diffusion-reaction/ex1 for a description of the problem
   ------------------------------------------------------------------------- */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include "adolc-utils/drivers.cxx"
 #include <adolc/adolc.h>

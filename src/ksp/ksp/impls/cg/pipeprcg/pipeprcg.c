@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/kspimpl.h>
 
 typedef struct KSP_CG_PIPE_PR_s KSP_CG_PIPE_PR;

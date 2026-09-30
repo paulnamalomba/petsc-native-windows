@@ -2,7 +2,8 @@
    This file contains routines for section object operations on Vecs
 */
 #include <petsc/private/sectionimpl.h> /*I  "petscsection.h"   I*/
-#include <petsc/private/vecimpl.h>     /*I  "petscvec.h"   I*/
+#include <petscviewer.h>
+#include <petsc/private/vecimpl.h> /*I  "petscvec.h"   I*/
 
 /*@
   PetscSectionVecView - View a vector, using the section to structure the values

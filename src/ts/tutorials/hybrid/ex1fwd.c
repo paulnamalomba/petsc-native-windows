@@ -17,6 +17,7 @@ static char help[] = "Trajectory sensitivity of a hybrid system with state-depen
 - * - I. A. Hiskens, M.A. Pai, Trajectory Sensitivity Analysis of Hybrid Systems, IEEE Transactions on Circuits and Systems, Vol 47, No 2, February 2000
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

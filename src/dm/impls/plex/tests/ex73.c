@@ -6,6 +6,7 @@ static char help[] = "Tests for Gauss' Law\n\n";
 
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

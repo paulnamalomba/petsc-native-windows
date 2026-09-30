@@ -1,6 +1,7 @@
 const char help[] = "Construct and set a Lagrange dual space from options, then view it to\n"
                     "understand the effects of different parameters.";
 
+#include <petscoptions.h>
 #include <petscfe.h>
 #include <petscdmplex.h>
 

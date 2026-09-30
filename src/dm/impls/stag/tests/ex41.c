@@ -1,5 +1,7 @@
 static char help[] = "Test -dm_preallocate_only with DMStag\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 

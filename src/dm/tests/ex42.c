@@ -3,6 +3,7 @@
 static char help[] = "Test VTK Rectilinear grid (.vtr) viewer support\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 
 /*

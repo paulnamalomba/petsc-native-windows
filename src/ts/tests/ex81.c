@@ -1,5 +1,6 @@
 static char help[] = "Constant velocity check with 1st-order generalized-alpha.\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

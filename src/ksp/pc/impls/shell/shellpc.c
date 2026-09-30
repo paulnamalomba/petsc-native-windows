@@ -4,6 +4,7 @@
 */
 
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
+#include <petscviewer.h>
 
 typedef struct {
   PetscCtx ctx; /* user provided contexts for preconditioner */

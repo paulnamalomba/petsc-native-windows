@@ -1,5 +1,6 @@
 static const char help[] = "Tests MatDenseGetColumnVec() and friends on dense matrices created from a VecType, and on the Mats a MatProduct and MatDenseGetSubMatrix() derive from them\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /* The Mat a product creates only keeps the VecType when it is the same kind of Mat as the one it is built from */

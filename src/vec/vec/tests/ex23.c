@@ -9,6 +9,7 @@ static char help[] = "Scatters from a parallel vector to a sequential vector.\n\
 */
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

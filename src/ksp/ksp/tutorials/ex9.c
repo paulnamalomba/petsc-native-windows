@@ -11,6 +11,8 @@ structures throughout the process.  Note the various stages of event logging.\n\
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 /*

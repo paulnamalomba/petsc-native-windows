@@ -11,6 +11,7 @@ static char help[] = "Demonstrates adjoint sensitivity analysis for Reaction-Dif
     -implicitform - provide IFunction and IJacobian to TS, if not set, RHSFunction and RHSJacobian will be used
     -aijpc        - set the matrix used to compute the preconditioner to be aij (the Jacobian matrix can be of a different type such as ELL)
 */
+#include <petscoptions.h>
 #include "reaction_diffusion.h"
 #include <petscdm.h>
 #include <petscdmda.h>

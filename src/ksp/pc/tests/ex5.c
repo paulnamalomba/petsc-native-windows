@@ -12,6 +12,7 @@ This example also demonstrates matrix-free methods\n\n";
   This is not a good example to understand the use of multigrid with PETSc.
 */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 PetscErrorCode residual(Mat, Vec, Vec, Vec);

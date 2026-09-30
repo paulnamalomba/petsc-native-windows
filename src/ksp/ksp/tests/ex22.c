@@ -1,6 +1,7 @@
 static const char help[] = "Test MatNest solving a linear system\n\n";
 
 #include <petscksp.h>
+#include <petscviewer.h>
 
 PetscErrorCode test_solve(void)
 {

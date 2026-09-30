@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/mat/impls/maij/maij.h> /*I "petscmat.h" I*/
 #include <../src/mat/utils/freespace.h>
 

@@ -1,4 +1,5 @@
 #include <../src/snes/impls/fas/fasimpls.h> /*I  "petscsnes.h"  I*/
+#include <petscviewer.h>
 
 /*@
   SNESFASSetType - Sets the update and correction type used for `SNESFAS`.

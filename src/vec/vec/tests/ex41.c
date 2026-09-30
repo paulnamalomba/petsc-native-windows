@@ -1,6 +1,7 @@
 static char help[] = "Nest vector set subvector functionality.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 PetscErrorCode test_vec_ops(void)
 {

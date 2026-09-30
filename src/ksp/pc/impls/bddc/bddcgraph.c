@@ -1,4 +1,5 @@
 #include <petsc/private/petscimpl.h>
+#include <petscviewer.h>
 #include <petsc/private/pcbddcprivateimpl.h>
 #include <petsc/private/pcbddcstructsimpl.h>
 #include <petsc/private/hashmapi.h>

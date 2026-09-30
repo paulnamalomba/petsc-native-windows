@@ -1,5 +1,6 @@
 const char help[] = "Test correctness of MatLMVM implementations";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 static PetscErrorCode MatSolveHermitianTranspose(Mat B, Vec x, Vec y)

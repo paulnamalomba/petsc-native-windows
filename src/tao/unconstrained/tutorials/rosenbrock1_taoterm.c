@@ -1,4 +1,5 @@
 /*  Include "petsctao.h" so we can use TAO solvers.  */
+#include <petscoptions.h>
 #include <petsctao.h>
 #include "rosenbrock1.h" // defines AppCtx, AppCtxFormFunctionGradient(), and AppCtxFormHessian()
 

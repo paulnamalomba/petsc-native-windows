@@ -2,6 +2,8 @@
   Code for timestepping with implicit generalized-\alpha method
   for second order systems.
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/tsimpl.h> /*I   "petscts.h"   I*/
 
 static PetscBool  cited      = PETSC_FALSE;

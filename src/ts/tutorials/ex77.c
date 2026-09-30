@@ -25,6 +25,7 @@ The particles can be visualized using
 
 F*/
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
 #include <petscts.h>

@@ -10,6 +10,7 @@
     Restarts:  Restarts are basically solves with x0 not equal to zero.
 */
 
+#include <petscoptions.h>
 #include <../src/ksp/ksp/impls/gmres/fgmres/fgmresimpl.h> /*I  "petscksp.h"  I*/
 #define FGMRES_DELTA_DIRECTIONS 10
 #define FGMRES_DEFAULT_MAXK     30

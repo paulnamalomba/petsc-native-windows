@@ -26,6 +26,8 @@
     of an unsuccessful gmres iteration always be the solution x.
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/ksp/impls/gmres/gmresimpl.h> /*I  "petscksp.h"  I*/
 #define GMRES_DELTA_DIRECTIONS 10
 #define GMRES_DEFAULT_MAXK     30

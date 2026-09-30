@@ -3,6 +3,7 @@ matrix assembly,the matrix is intentionally laid out across processors\n\
 differently from the way it is assembled.  Input arguments are:\n\
   -m <size> : problem size\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 PetscErrorCode FormElementStiffness(PetscReal H, PetscScalar *Ke)

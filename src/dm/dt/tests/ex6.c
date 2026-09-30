@@ -1,7 +1,8 @@
 static char help[] = "Tests 1D Gauss-Lobatto-Legendre discretization on [-1, 1].\n\n";
 
-#include <petscdt.h>
+#include <petscoptions.h>
 #include <petscviewer.h>
+#include <petscdt.h>
 
 int main(int argc, char **argv)
 {

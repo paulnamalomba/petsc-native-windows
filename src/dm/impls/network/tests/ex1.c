@@ -1,5 +1,7 @@
 static char help[] = "Check if DMClone for DMNetwork Correctly Shallow Clones Topology Only \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmnetwork.h>
 
 /*

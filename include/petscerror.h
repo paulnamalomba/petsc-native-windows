@@ -4,7 +4,6 @@
 #pragma once
 // IWYU pragma: private, include "petscsys.h"
 
-#include <petscmacros.h>
 #include <petscsystypes.h>
 
 #if defined(__cplusplus)
@@ -1439,24 +1438,14 @@ typedef struct {
 PETSC_EXTERN PetscStack petscstack;
 #endif
 
-#if PetscDefined(SERIALIZE_FUNCTIONS)
-  #include <petsc/private/petscfptimpl.h>
-  /*
-   Registers the current function into the global function pointer to function name table
-
-   Have to fix this to handle errors but cannot return error since used in PETSC_VIEWER_DRAW_() etc
-*/
-  #define PetscRegister__FUNCT__() \
-    do { \
-      static PetscBool __chked = PETSC_FALSE; \
-      if (!__chked) { \
-        void *ptr; \
-        PetscCallAbort(PETSC_COMM_SELF, PetscDLSym(NULL, PETSC_FUNCTION_NAME, &ptr)); \
-        __chked = PETSC_TRUE; \
-      } \
-    } while (0)
+/* These are used by the PetscStackPushNoCheck() machinery below; their full SAWs counterparts
+   (PetscObjectSAWs*(), PetscStackViewSAWs(), etc.) live in petscsys.h */
+#if PetscDefined(HAVE_SAWS)
+PETSC_EXTERN void PetscStackSAWsGrantAccess(void);
+PETSC_EXTERN void PetscStackSAWsTakeAccess(void);
 #else
-  #define PetscRegister__FUNCT__()
+  #define PetscStackSAWsTakeAccess()
+  #define PetscStackSAWsGrantAccess()
 #endif
 
 #if PetscDefined(CLANG_STATIC_ANALYZER) || defined(__clang_analyzer__)
@@ -1508,7 +1497,7 @@ PETSC_EXTERN PetscStack petscstack;
         (stack__).line[(stack__).currentsize]         = 0; \
         (stack__).petscroutine[(stack__).currentsize] = 0; \
       } \
-      (stack__).hotdepth = PetscMax((stack__).hotdepth - 1, 0); \
+      (stack__).hotdepth = (stack__).hotdepth > 0 ? (stack__).hotdepth - 1 : 0; \
     } while (0)
 
   /*MC
@@ -1663,7 +1652,7 @@ M*/
         petscstack.line[petscstack.currentsize]         = 0; \
         petscstack.petscroutine[petscstack.currentsize] = 0; \
       } \
-      petscstack.hotdepth = PetscMax(petscstack.hotdepth - 1, 0); \
+      petscstack.hotdepth = petscstack.hotdepth > 0 ? petscstack.hotdepth - 1 : 0; \
       PetscStackSAWsGrantAccess(); \
     } while (0)
 
@@ -1695,7 +1684,6 @@ M*/
   #define PetscFunctionBegin \
     do { \
       PetscStackPushNoCheck(PETSC_FUNCTION_NAME, 1, PETSC_FALSE); \
-      PetscRegister__FUNCT__(); \
     } while (0)
 
   /*MC
@@ -1723,7 +1711,6 @@ M*/
   #define PetscFunctionBeginHot \
     do { \
       PetscStackPushNoCheck(PETSC_FUNCTION_NAME, 1, PETSC_TRUE); \
-      PetscRegister__FUNCT__(); \
     } while (0)
 
   /*MC
@@ -1757,7 +1744,6 @@ M*/
   #define PetscFunctionBeginUser \
     do { \
       PetscStackPushNoCheck(PETSC_FUNCTION_NAME, 2, PETSC_FALSE); \
-      PetscRegister__FUNCT__(); \
     } while (0)
 
   /*MC

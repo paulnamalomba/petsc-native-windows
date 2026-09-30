@@ -1,6 +1,8 @@
 static char help[] = "Solves a linear system with KSP.  This problem is\n\
 intended to test the complex numbers version of various solvers.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 typedef enum {

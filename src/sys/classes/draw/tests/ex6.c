@@ -1,6 +1,7 @@
 static char help[] = "Demonstrates named colormaps\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 #include <petscdraw.h>
 
 typedef PetscReal (*Function)(PetscReal, PetscReal);

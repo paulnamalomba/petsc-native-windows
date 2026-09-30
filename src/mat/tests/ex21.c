@@ -2,6 +2,7 @@ static char help[] = "Tests converting a parallel AIJ formatted matrix to the pa
  This also tests MatGetRow() and MatRestoreRow() for the parallel case.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

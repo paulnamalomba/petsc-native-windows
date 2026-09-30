@@ -1,7 +1,8 @@
 /*
       Code for opening and closing files.
 */
-#include <petscsys.h>
+#include <petsc/private/petscimpl.h>
+#include <petscoptions.h>
 #if PetscDefined(HAVE_PWD_H)
   #include <pwd.h>
 #endif
@@ -18,7 +19,6 @@
 #if PetscDefined(HAVE_SYS_SYSTEMINFO_H)
   #include <sys/systeminfo.h>
 #endif
-#include <petsc/private/petscimpl.h>
 
 /*
    Private routine to delete tmp/shared storage

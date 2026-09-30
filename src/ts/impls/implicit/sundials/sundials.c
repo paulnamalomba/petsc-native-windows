@@ -5,6 +5,8 @@
 
     Reference: sundials-2.4.0/examples/cvode/parallel/cvDiurnal_kry_p.c
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ts/impls/implicit/sundials/sundials.h> /*I "petscts.h" I*/
 
 /*

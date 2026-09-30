@@ -1,5 +1,7 @@
 static char help[] = "Test DMCreateCoordinateDM_Network, and related functions \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmnetwork.h>
 
 /*

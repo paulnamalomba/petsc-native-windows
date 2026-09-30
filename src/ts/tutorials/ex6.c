@@ -47,6 +47,8 @@ Input parameters include:\n\
      snes.h - nonlinear solvers
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdraw.h>
 

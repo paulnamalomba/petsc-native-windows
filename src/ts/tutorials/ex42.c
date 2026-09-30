@@ -9,6 +9,7 @@ static char help[] = "Meinhard't activator-inhibitor model to test TS domain err
    The PDE part will be solve by finite-difference on the line of cells.
  */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

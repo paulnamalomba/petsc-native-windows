@@ -6,6 +6,7 @@ static char help[] = "Demonstrates various vector routines for DMDA.\n\n";
 */
 
 #include <petscpf.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

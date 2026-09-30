@@ -1,5 +1,6 @@
 static char help[] = "Tests MATFACTORHTOOL\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static PetscErrorCode GenEntries(PetscInt sdim, PetscInt M, PetscInt N, const PetscInt *J, const PetscInt *K, PetscScalar *ptr, PetscCtx ctx)

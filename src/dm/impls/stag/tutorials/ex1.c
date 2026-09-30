@@ -70,6 +70,8 @@ static char help[] = "Solve a toy 1D problem on a staggered grid.\n\
       -stag_boundary_type_x periodic
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscksp.h>
 #include <petscdmstag.h>

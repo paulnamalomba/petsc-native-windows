@@ -3,6 +3,7 @@
 #include <petsc/private/viewerimpl.h> /*I   "petscviewer.h" I*/
 #include <petsc/private/petscimpl.h>  /*I   "petscsys.h"    I*/
 #include <petsc/private/glvisviewerimpl.h>
+#include <petscoptions.h>
 
 /* we may eventually make this function public */
 static PetscErrorCode PetscViewerASCIISocketOpen(MPI_Comm, const char *, PetscInt, PetscViewer *);

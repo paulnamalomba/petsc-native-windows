@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/viewerimpl.h> /*I   "petscsys.h"   I*/
 #include <adios.h>
 #include <adios_read.h>

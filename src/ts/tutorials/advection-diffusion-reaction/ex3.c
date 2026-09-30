@@ -25,6 +25,7 @@ static char help[] = "Model Equations for Advection-Diffusion\n";
      petscksp.h   - linear solvers        petscsnes.h - nonlinear solvers
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdm.h>
 #include <petscdmda.h>

@@ -1,5 +1,6 @@
 static char help[] = "Test adaptive interpolation of functions of a given polynomial order\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 

@@ -1,5 +1,6 @@
 static char help[] = "Tests that the assembled views of a MATIS follow a change made through MatISGetLocalMat().\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 // Prints the diagonal of A, one line per process.

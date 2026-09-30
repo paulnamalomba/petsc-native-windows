@@ -1,5 +1,6 @@
 static char help[] = "Tests multifield and multicomponent L2 projection.\n";
 
+#include <petscoptions.h>
 #include <petscdmswarm.h>
 #include <petscksp.h>
 #include <petscdmplex.h>

@@ -1,5 +1,6 @@
 static const char help[] = "Integrate chemistry using TChem.\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdmda.h>
 

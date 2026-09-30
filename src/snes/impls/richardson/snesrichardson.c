@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/snes/impls/richardson/snesrichardsonimpl.h>
 
 static PetscErrorCode SNESDestroy_NRichardson(SNES snes)

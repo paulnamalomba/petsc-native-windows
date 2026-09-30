@@ -1,5 +1,6 @@
 #include <petsc/private/petscimpl.h>
 #include <petscviewerhdf5.h>
+#include <petscoptions.h>
 
 /*@
   PetscViewerHDF5GetGroup - Get the current HDF5 group name (full path), set with `PetscViewerHDF5PushGroup()`/`PetscViewerHDF5PopGroup()`.

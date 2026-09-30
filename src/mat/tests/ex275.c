@@ -5,6 +5,7 @@ static char help[] = "Tests MatNormApproximate() on the Brusselator matrix.\n\n"
                      "  -alpha <alpha>, -beta <beta>, -delta1 <delta1>,  -delta2 <delta2>,\n"
                      "       where <alpha> <beta> <delta1> <delta2> = model parameters.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /*

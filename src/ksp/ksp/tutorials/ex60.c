@@ -26,6 +26,7 @@ Accepts an option -diagfunc [1,2,3] to select from different eigenvalue distribu
   Contributed by Patrick Sanan
 */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /* Context to use with our noise PC */

@@ -1,5 +1,6 @@
 static const char help[] = "Tests for mesh extrusion";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmforest.h>
 

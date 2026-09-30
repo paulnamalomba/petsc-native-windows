@@ -1,6 +1,7 @@
 static char help[] = "Tests MatLoad() for dense matrix with uneven dimensions set in program\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

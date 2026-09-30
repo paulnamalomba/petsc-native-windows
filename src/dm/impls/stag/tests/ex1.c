@@ -1,5 +1,6 @@
 static char help[] = "Demonstrate standard DMStag operations.\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 

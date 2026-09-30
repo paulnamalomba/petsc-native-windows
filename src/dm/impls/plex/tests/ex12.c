@@ -1,5 +1,6 @@
 static char help[] = "Partition a mesh in parallel, perhaps with overlap\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsf.h>
 

@@ -1,5 +1,7 @@
 static char help[] = "Benchmark for MatMatMult() of AIJ matrices using different 2d finite-difference stencils.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 /* Converts 3d grid coordinates (i,j,k) for a grid of size m \times n to global indexing. Pass k = 0 for a 2d grid. */

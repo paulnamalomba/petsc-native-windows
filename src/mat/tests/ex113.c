@@ -3,6 +3,8 @@ Input arguments are:\n\
   -f <input_file>  : file to load\n\n";
 /* e.g., mpiexec -n 3 ./ex113 -f <file> */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

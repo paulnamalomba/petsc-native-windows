@@ -1,5 +1,6 @@
 static const char help[] = "Tests for Plex transforms, including regular refinement";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsf.h>
 

@@ -1,5 +1,7 @@
 static char help[] = "Mixed element discretization of the Poisson equation.\n\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
 #include <petscds.h>

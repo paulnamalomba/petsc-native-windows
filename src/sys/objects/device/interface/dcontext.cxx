@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "petscdevice_interface_internal.hpp" /*I <petscdevice.h> I*/
 #include <petsc/private/viewerimpl.h>         // _p_PetscViewer for PetscObjectCast()
 

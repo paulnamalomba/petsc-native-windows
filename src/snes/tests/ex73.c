@@ -1,5 +1,6 @@
 static char help[] = "Tests DMAdaptor pure refinement with no PetscDS fields.\n\n";
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 #include <petscdmadaptor.h>
 #include <petscdmplex.h>

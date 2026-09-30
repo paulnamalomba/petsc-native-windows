@@ -1,5 +1,7 @@
 static char help[] = "Tests matrix ordering routines.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 extern PetscErrorCode MatGetOrdering_myordering(Mat, MatOrderingType, IS *, IS *);
 

@@ -5,6 +5,8 @@ static char help[] = "Deterministic LETKF example for the Lorenz-96 model. See "
                      "  Expected result: Similar to ETKF with full localization\n\n";
 
 /* Data assimilation framework header (provides PetscDA) */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscda.h>
 /* PETSc DMDA header (provides DM, DMDA functionality) */
 #include <petscdmda.h>

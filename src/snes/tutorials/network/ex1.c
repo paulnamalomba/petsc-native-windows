@@ -10,6 +10,8 @@ static char help[] = "This example demonstrates the use of DMNetwork with subnet
     mpiexec -n <n> ./ex1 -monitorIteration -monitorColor -power_snes_max_it 0 -water_snes_max_it 0 -coupled_snes_max_it 10 -draw_pause 5.0
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include "power/power.h"
 #include "water/water.h"
 

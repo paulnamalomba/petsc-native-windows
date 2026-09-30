@@ -1,6 +1,7 @@
 /*
    This file contains routines for Parallel vector operations.
  */
+#include <petscoptions.h>
 #include <petsc_kokkos.hpp>
 #include <petscvec_kokkos.hpp>
 #include <petsc/private/deviceimpl.h>

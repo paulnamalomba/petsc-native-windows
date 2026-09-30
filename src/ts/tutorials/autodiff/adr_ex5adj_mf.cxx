@@ -10,6 +10,7 @@ static char help[] = "Demonstrates automatic, matrix-free Jacobian generation us
   See ../advection-diffusion-reaction/ex5 for a description of the problem
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
 #include <petscdmda.h>
 #include <petscts.h>
 #include "adolc-utils/init.cxx"

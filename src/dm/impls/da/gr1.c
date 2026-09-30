@@ -2,6 +2,8 @@
    Plots vectors obtained with DMDACreate1d()
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/dmdaimpl.h> /*I  "petscdmda.h"   I*/
 
 /*@

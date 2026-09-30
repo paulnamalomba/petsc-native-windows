@@ -1,6 +1,7 @@
 static char help[] = "Test PetscSFSetGraphFromCoordinates()\n\n";
 
 #include <petscsf.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

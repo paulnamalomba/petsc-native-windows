@@ -13,6 +13,7 @@ it does not iterate on dirichlet nodes by default: if -usezerorows is passed in,
 Pure Neumann case can be requested by passing in -pureneumann.\n\
 In the latter case, in order to avoid runtime errors during factorization, please specify also -coarse_redundant_pc_factor_zeropivot 0\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscpc.h>
 #include <petscdm.h>

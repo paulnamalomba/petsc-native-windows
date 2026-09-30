@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/snes/impls/ngmres/snesngmres.h> /*I "petscsnes.h" I*/
 #include <petscblaslapack.h>
 #include <petscdm.h>

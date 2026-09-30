@@ -1,8 +1,8 @@
 #pragma once
 
+#include <petscoptions.h>
 #include <petsctao.h>
 #include <petscsf.h>
-#include <petscdevice.h>
 #include <petscdevice_cupm.h>
 
 /*

@@ -4,6 +4,7 @@
 */
 
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
+#include <petscviewer.h>
 #include <petsc/private/matimpl.h>
 
 typedef struct {

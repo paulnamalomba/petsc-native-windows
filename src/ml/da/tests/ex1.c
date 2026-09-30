@@ -1,5 +1,6 @@
 static char help[] = "Tests basic creation and destruction of PetscDA objects, and a simple LETKF (NONE-localization) analysis step.\n\n";
 #include <petscda.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

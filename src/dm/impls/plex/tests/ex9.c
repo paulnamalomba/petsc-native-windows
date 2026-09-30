@@ -1,5 +1,6 @@
 static char help[] = "Performance tests for DMPlex query operations\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

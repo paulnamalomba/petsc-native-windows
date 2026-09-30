@@ -80,6 +80,8 @@ static char help[] = "Two-level system for Landau Damping using Vlasov-Poisson e
 
     -ts_monitor_sp_swarm -ts_monitor_sp_swarm_retain 0 -ts_monitor_sp_swarm_phase 1 -draw_size 500,500
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscts.h>
 #include <petscdmplex.h>

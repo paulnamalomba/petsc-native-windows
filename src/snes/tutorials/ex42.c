@@ -9,6 +9,7 @@ static char help[] = "Newton's method to solve a two-variable system that comes 
      petscviewer.h - viewers               petscpc.h  - preconditioners
      petscksp.h   - linear solvers
 */
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 extern PetscErrorCode FormJacobian1(SNES, Vec, Mat, Mat, void *);

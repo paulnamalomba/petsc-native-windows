@@ -3,6 +3,7 @@
           C = R * A * R^T
 */
 
+#include <petscoptions.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/mat/utils/freespace.h>
 #include <../src/mat/impls/dense/seq/dense.h> /*I "petscmat.h" I*/

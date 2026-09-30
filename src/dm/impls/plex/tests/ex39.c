@@ -1,5 +1,6 @@
 const char help[] = "A test of H-div conforming discretizations on different cell types.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 #include <petscsnes.h>

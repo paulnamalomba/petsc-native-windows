@@ -1,5 +1,6 @@
 static char help[] = "Tests ISToGeneral().\n\n";
 
+#include <petscoptions.h>
 #include <petscis.h>
 
 int main(int argc, char **argv)

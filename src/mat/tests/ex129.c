@@ -11,6 +11,7 @@
 static char help[] = "This example is for testing different MatSolve routines :MatSolve(), MatSolveAdd(), MatSolveTranspose(), MatSolveTransposeAdd(), MatMatSolve(), and MatMatSolveTranspose(), including how they flag a solution they could not compute.\n\
 Example usage: ./ex129 -mat_type aij -dof 2\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

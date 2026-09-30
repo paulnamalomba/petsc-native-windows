@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/tao/unconstrained/impls/neldermead/neldermead.h>
 #include <petscvec.h>
 

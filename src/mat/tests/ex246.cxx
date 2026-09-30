@@ -1,5 +1,6 @@
 static char help[] = "Tests MATHTOOL with a derived htool::IMatrix<PetscScalar> class\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <htool/hmatrix/interfaces/virtual_generator.hpp>
 

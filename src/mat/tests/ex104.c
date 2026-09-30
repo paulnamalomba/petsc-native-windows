@@ -4,6 +4,7 @@ static char help[] = "Test MatMatMult(), MatTranspose(), MatTransposeMatMult() f
    mpiexec -n <np> ./ex104 -mat_type elemental
 */
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

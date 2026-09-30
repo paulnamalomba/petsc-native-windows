@@ -32,6 +32,7 @@ The command line options include:\n\
      petscviewer.h - viewers               petscpc.h  - preconditioners
      petscksp.h   - linear solvers
 */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscsnes.h>

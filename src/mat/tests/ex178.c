@@ -1,6 +1,7 @@
 static char help[] = "Tests MatInvertVariableBlockEnvelope()\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 extern PetscErrorCode MatIsDiagonal(Mat);
 extern PetscErrorCode BuildMatrix(const PetscInt *, PetscInt, const PetscInt *, Mat *);
 

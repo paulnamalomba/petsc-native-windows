@@ -1,5 +1,6 @@
 #pragma once
 
+#include <petscsys.h>
 #include <petscviewer.h>
 
 /* MANSEC = Sys */

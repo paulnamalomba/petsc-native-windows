@@ -1,6 +1,7 @@
 static char help[] = "Solves a tridiagonal linear system with KSP. \n\
 It illustrates how to do one symbolic factorization and multiple numeric factorizations using same matrix nonzero structure. \n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 int main(int argc, char **args)
 {

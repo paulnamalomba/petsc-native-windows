@@ -3,6 +3,7 @@ static const char
 
 // Contributed by: Steven Dargaville
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /*

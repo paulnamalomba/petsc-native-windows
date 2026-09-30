@@ -1,5 +1,6 @@
 static char help[] = "Tests setup-time weighted ASM scaling callbacks.\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 typedef struct {

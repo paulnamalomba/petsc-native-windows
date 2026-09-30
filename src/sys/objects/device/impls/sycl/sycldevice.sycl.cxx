@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "sycldevice.hpp"
 #include <limits>  // for std::numeric_limits
 #include <csetjmp> // for MPI sycl device awareness

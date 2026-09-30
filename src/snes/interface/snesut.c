@@ -1,4 +1,5 @@
 #include <petsc/private/snesimpl.h> /*I   "petsc/private/snesimpl.h"   I*/
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmshell.h>
 #include <petscsection.h>

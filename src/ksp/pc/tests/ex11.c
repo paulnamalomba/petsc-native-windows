@@ -1,5 +1,6 @@
 static const char help[] = "Tests PCMG setup with DMKSP{Create|Compute}Operators.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdmda.h>
 

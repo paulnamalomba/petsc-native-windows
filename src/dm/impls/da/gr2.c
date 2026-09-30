@@ -2,6 +2,7 @@
    Plots vectors obtained with DMDACreate2d()
 */
 
+#include <petscoptions.h>
 #include <petsc/private/dmdaimpl.h> /*I  "petscdmda.h"   I*/
 #include <petsc/private/glvisvecimpl.h>
 #include <petsc/private/viewerhdf5impl.h>

@@ -1,5 +1,6 @@
 static const char help[] = "Tests DMCreateMassMatrix and DMCreateMassMatrixLumped";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscfe.h>
 #include <petscds.h>

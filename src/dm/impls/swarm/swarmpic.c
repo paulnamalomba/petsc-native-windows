@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/dmswarmimpl.h> /*I   "petscdmswarm.h"   I*/
 #include <petscsf.h>
 #include <petscdmda.h>

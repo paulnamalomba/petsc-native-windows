@@ -1,5 +1,6 @@
 static char help[] = "Tests MATPYTHON from C\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 /* MATPYTHON has support for wrapping these operations
    MatHasOperation_Python inspects the user's Python class and checks

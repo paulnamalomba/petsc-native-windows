@@ -1,6 +1,7 @@
 static char help[] = "Tests PetscRandom functions.\n\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 #define PETSC_MAXBSIZE 40
 #define DATAFILENAME   "ex2_stock.txt"

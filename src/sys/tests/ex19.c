@@ -1,6 +1,7 @@
 static char help[] = "Tests string options with spaces";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

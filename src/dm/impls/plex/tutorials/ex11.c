@@ -1,5 +1,6 @@
 static char help[] = "Mesh Orientation Tutorial\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmplextransform.h>
 

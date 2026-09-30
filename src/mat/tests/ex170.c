@@ -1,6 +1,8 @@
 static char help[] = "Scalable algorithm for Connected Components problem.\n\
 Entails changing the MatMult() for this matrix.\n\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 PETSC_EXTERN PetscErrorCode MatMultMax_SeqAIJ(Mat, Vec, Vec);

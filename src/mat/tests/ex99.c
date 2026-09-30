@@ -1,5 +1,7 @@
 static const char help[] = "Tests MatCreateSubMatrix with MatSubMatrix versus MatAIJ, square, shifted (copied from ex97)\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 static PetscErrorCode AssembleMatrix(MPI_Comm comm, Mat *A)

@@ -19,6 +19,7 @@ F*/
      petscksp.h   - linear solvers
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

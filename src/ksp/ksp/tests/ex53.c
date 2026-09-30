@@ -2,6 +2,7 @@ static char help[] = "Tests setup PCFIELDSPLIT with blocked IS.\n\n";
 /*
  Contributed by Hoang Giang Bui, June 2017.
  */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char *argv[])

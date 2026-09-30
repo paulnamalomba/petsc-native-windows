@@ -1,9 +1,9 @@
 static char help[] = "Create a mesh, refine and coarsen simultaneously, and transfer a field\n\n";
 
+#include <petscoptions.h>
 #include <petscds.h>
 #include <petscdmplex.h>
 #include <petscdmforest.h>
-#include <petscoptions.h>
 
 static PetscErrorCode AddIdentityLabel(DM dm)
 {

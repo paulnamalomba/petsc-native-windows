@@ -1,6 +1,7 @@
 static char help[] = "Tests VecCUDAGetArray() and friends along with OpenMP target offload\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 #include <petscdevice.h>
 
 int main(int argc, char **argv)

@@ -2,6 +2,7 @@ static char help[] = "Creates a matrix using 9 pt stencil, and uses it to test M
   -m <size>       : problem size\n\
   -x1, -x2 <size> : no of subdomains in x and y directions\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 static PetscErrorCode FormElementStiffness(PetscReal H, PetscScalar *Ke)

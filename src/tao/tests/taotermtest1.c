@@ -1,6 +1,7 @@
 const char help[] = "TaoTerm coverage test comparing TaoTerm interface with traditional callbacks for Rosenbrock problem.\n\
 Tests different TaoTerm configurations for L1, and HALFL2SQUARED types with various matrix and parameter options.\n";
 
+#include <petscoptions.h>
 #include <petsctao.h>
 #include "../unconstrained/tutorials/rosenbrock4.h"
 

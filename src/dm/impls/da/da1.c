@@ -3,6 +3,8 @@
    This file was created by Peter Mell   6/30/95
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/dmdaimpl.h> /*I  "petscdmda.h"   I*/
 
 #include <petscdraw.h>

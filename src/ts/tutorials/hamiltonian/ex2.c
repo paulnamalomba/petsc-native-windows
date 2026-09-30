@@ -59,6 +59,8 @@ For a Landau Damping verification run, we use
     -ftop_ksp_lsqr_monitor -ftop_ksp_converged_reason
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>

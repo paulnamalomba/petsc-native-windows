@@ -1,5 +1,6 @@
 static char help[] = "Tests MatCopy() from MATDENSE into a matrix of another type.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

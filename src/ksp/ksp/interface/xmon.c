@@ -1,4 +1,5 @@
 #include <petsc/private/kspimpl.h> /*I  "petscksp.h"   I*/
+#include <petscviewer.h>
 #include <petscdraw.h>
 
 /*@

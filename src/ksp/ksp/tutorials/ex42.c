@@ -9,6 +9,8 @@ all boundaries are free-slip, i.e. zero normal flow and zero tangential stress \
 
 /* Contributed by Dave May */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 #include <petscdmda.h>
 

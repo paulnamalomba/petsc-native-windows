@@ -1,6 +1,7 @@
 static char help[] = "Tests that MatView() and MatLoad() work for MPIAIJ matrix with total nz > PETSC_INT_MAX\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

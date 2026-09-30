@@ -46,6 +46,8 @@ F*/
      petscksp.h   - linear solvers
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscsnes.h>

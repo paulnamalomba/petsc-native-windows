@@ -1,5 +1,6 @@
 static char help[] = "Load and save the mesh and fields to HDF5 and ExodusII\n\n";
 
+#include <petscoptions.h>
 #include <petsc/private/dmpleximpl.h>
 #include <petscviewerhdf5.h>
 #include <petscsf.h>

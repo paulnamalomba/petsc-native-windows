@@ -5,6 +5,8 @@ static char help[] = "Shallow water test cases with data assimilation.\n"
                      "  ./ex3 -ex3_test wave -steps 500\n\n";
 
 /* Data assimilation framework header (provides PetscDA) */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscda.h>
 /* PETSc DMDA header (provides DM, DMDA functionality) */
 #include <petscdmda.h>

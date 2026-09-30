@@ -1,5 +1,6 @@
 static char help[] = "Tests HDF5 attribute I/O.\n\n";
 
+#include <petscoptions.h>
 #include <petscviewerhdf5.h>
 #include <petscvec.h>
 

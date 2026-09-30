@@ -2,6 +2,7 @@ static char help[] = "Block-structured Nest matrix involving a HermitianTranspos
                      "The command line options are:\n"
                      "  -n <n>, where <n> = dimension of the blocks.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /*

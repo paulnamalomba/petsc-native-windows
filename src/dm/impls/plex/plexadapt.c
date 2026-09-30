@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/dmpleximpl.h> /*I      "petscdmplex.h"   I*/
 
 static PetscErrorCode DMPlexLabelToVolumeConstraint(DM dm, DMLabel adaptLabel, PetscInt cStart, PetscInt cEnd, PetscReal refRatio, PetscReal maxVolumes[])

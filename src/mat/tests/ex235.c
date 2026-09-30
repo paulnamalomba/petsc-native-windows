@@ -1,5 +1,6 @@
 static char help[] = "Test combinations of scalings, shifts and get diagonal of MATSHELL\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static PetscErrorCode myMult(Mat S, Vec x, Vec y)

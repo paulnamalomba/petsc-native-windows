@@ -5,6 +5,7 @@ static char help[] = "Solve multiple shifted linear systems.\n\nInput arguments 
   -explicitmat (true|false) - build the nested matrix explicitly\n\
   -cmplx (true|false)       - test with complex shifts\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /* element stiffness for Laplacian */

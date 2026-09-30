@@ -7,6 +7,8 @@ static char help[] = "A toy example for testing forward and adjoint sensitivity 
 
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 typedef struct _n_User *User;

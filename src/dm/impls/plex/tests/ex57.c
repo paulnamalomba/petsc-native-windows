@@ -1,5 +1,6 @@
 static char help[] = "Tests for ephemeral meshes.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmplextransform.h>
 #include <petscdmlabelephemeral.h>

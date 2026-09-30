@@ -2,6 +2,7 @@
     Routines to set PC methods and options.
 */
 
+#include <petscoptions.h>
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
 #include <petscdm.h>
 

@@ -1,5 +1,6 @@
 static char help[] = "Test problems for Schur complement solvers.\n\n\n";
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 /*

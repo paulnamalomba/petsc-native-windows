@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/viewercgnsimpl.h> /*I "petscviewer.h" I*/
 #include <petsc/private/dmpleximpl.h>     /*I   "petscdmplex.h"   I*/
 #if PetscDefined(HDF5_HAVE_PARALLEL)

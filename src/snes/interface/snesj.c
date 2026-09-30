@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/snesimpl.h> /*I  "petscsnes.h"  I*/
 #include <petsc/private/vecimpl.h>  /* for Vec->ops->setvalues */
 #include <petscdm.h>

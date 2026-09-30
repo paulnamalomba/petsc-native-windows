@@ -1,5 +1,6 @@
 static char help[] = "Tests dof numberings for external integrators such as LibCEED.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 

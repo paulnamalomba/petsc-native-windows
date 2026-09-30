@@ -1,6 +1,7 @@
 static char help[] = "Tests timing PetscSortInt().\n\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

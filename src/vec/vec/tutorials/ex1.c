@@ -7,6 +7,7 @@ static char help[] = "Basic vector routines.\n\n";
      petscviewer.h - viewers
 */
 
+#include <petscoptions.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

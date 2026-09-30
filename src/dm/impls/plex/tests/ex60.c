@@ -1,5 +1,6 @@
 static char help[] = "Test metric utils in the uniform, isotropic case.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 static PetscErrorCode bowl(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nc, PetscScalar *u, PetscCtx ctx)

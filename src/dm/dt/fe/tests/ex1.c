@@ -1,5 +1,6 @@
 static const char help[] = "Performance Tests for FE Integration";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscfe.h>
 #include <petscds.h>

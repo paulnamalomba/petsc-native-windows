@@ -2,6 +2,7 @@ static char help[] = "Demonstrates the use of fast Richardson for SOR. And tests
 the MatSOR() routines.\n\n";
 
 #include <petscpc.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

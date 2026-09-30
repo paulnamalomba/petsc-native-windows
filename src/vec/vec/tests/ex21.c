@@ -1,6 +1,8 @@
 static char help[] = "Tests VecMax() with index and VecSetStdBasis()\n\
   -n <length> : vector length\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

@@ -1,5 +1,6 @@
 static char help[] = "Tests PetscOptionsCreateViewer() via checking output of PetscViewerASCIIPrintf().\n\n";
 
+#include <petscsys.h>
 #include <petscviewer.h>
 
 int main(int argc, char **args)

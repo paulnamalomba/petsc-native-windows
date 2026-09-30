@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 #include <../src/tao/quadratic/impls/gpcg/gpcg.h> /*I "gpcg.h" I*/
 

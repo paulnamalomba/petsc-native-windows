@@ -57,6 +57,8 @@ Input parameters include:\n";
 
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 typedef struct _n_User *User;

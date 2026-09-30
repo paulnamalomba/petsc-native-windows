@@ -1,4 +1,5 @@
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petsc/private/dmlabelimpl.h> /*I      "petscdmlabel.h"   I*/
 #include <petsc/private/sectionimpl.h> /*I      "petscsection.h"   I*/
 #include <petscsf.h>

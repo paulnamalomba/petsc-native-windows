@@ -12,6 +12,8 @@ Input parameters include:\n";
    2) Consider the initial values to be parameters as well. Then there are three parameters in total. The JacobianP matrix will be combined matrix of the Jacobian matrix and JacobianP matrix in the previous case. This choice can be selected by using command line option '-combined'
 
   ------------------------------------------------------------------------- */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petsctao.h>
 

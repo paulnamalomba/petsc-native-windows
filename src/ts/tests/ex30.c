@@ -10,6 +10,7 @@ static char help[] = "Grid based Landau collision operator with PIC interface wi
 
  */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 #include <petscdmswarm.h>

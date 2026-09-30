@@ -2,6 +2,7 @@
     This file implements PGMRES (a Pipelined Generalized Minimal Residual method)
 */
 
+#include <petscoptions.h>
 #include <../src/ksp/ksp/impls/gmres/pgmres/pgmresimpl.h> /*I  "petscksp.h"  I*/
 
 static PetscErrorCode KSPPGMRESUpdateHessenberg(KSP, PetscInt, PetscBool *, PetscReal *);

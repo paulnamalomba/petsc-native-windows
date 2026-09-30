@@ -2,7 +2,6 @@
    Provides an interface to the LLNL package hypre
 */
 
-#include <petscpkg_version.h>
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
 /* this include is needed ONLY to allow access to the private data inside the Mat object specific to hypre */
 #include <petsc/private/matimpl.h>
@@ -10,6 +9,8 @@
 #include <../src/vec/vec/impls/hypre/vhyp.h>
 #include <../src/mat/impls/hypre/mhypre.h>
 #include <../src/dm/impls/da/hypre/mhyp.h>
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <_hypre_parcsr_ls.h>
 #include <petscmathypre.h>
 

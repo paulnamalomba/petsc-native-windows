@@ -1,5 +1,6 @@
 static char help[] = "Tests I/O of vectors for different data formats (binary,HDF5)\n\n";
 
+#include <petscoptions.h>
 #include <petscvec.h>
 #include <petscdevice_cuda.h>
 #include <petscviewerhdf5.h>

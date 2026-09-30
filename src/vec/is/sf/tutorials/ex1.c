@@ -11,8 +11,9 @@ static const char help[] = "Test star forest communication (PetscSF)\n\n";
   Include petscsf.h so we can use PetscSF objects. Note that this automatically
   includes petscsys.h.
 */
-#include <petscsf.h>
+#include <petscoptions.h>
 #include <petscviewer.h>
+#include <petscsf.h>
 
 /* like PetscSFView() but with alternative array of local indices */
 static PetscErrorCode PetscSFViewCustomLocals_Private(PetscSF sf, const PetscInt locals[], PetscViewer viewer)

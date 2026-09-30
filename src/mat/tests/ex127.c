@@ -1,5 +1,6 @@
 static char help[] = "Test MatMult() for Hermitian matrix.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

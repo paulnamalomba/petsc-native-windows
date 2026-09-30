@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/ksp/impls/fcg/pipefcg/pipefcgimpl.h> /*I  "petscksp.h"  I*/
 
 static PetscBool  cited      = PETSC_FALSE;

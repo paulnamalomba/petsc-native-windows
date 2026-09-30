@@ -1,6 +1,7 @@
 static char help[] = "Tests various DMComposite routines.\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 #include <petscdmcomposite.h>
 

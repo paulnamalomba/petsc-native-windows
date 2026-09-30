@@ -12,6 +12,7 @@ static char help[] = "Parallel bouncing ball example to test TS event feature.\n
   a factor of 0.9 and its height set to 1.0*rank.
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 PetscErrorCode EventFunction(TS ts, PetscReal t, Vec U, PetscReal *fvalue, PetscCtx ctx)

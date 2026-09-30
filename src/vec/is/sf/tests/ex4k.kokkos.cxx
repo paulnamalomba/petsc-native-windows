@@ -20,6 +20,7 @@ static const char help[] = "Benchmarking PetscSF Ping-pong latency (similar to o
   On Crusher at OLCF:
     srun -n2 -c32 --cpu-bind=map_cpu:0,1 --gpus-per-node=8 --gpu-bind=map_gpu:0,1 ./ex4k -mtype kokkos
 */
+#include <petscoptions.h>
 #include <petscsf.h>
 #include <Kokkos_Core.hpp>
 

@@ -1,6 +1,7 @@
 const char help[] = "Test construction of a mixed form degree dual space";
 
 #include <petscdualspace.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 
 int main(int argc, char **argv)

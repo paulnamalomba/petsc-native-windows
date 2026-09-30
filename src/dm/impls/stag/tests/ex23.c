@@ -1,6 +1,7 @@
 static char help[] = "Test modifying DMStag coordinates, when represented as a product of 1d coordinate arrays\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmstag.h>
 
 int main(int argc, char **argv)

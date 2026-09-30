@@ -1,5 +1,6 @@
 static char help[] = "Demonstrates constructing an application ordering.\n\n";
 
+#include <petscoptions.h>
 #include <petscao.h>
 #include <petscviewer.h>
 

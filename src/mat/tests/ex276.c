@@ -1,6 +1,7 @@
 static char help[] = "Tests MatGetValues() with and without MAT_ROW_ORIENTED\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

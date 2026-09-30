@@ -5,6 +5,8 @@ static char help[] = "Test sequential FFTW convolution\n\n";
     This code uses the complex numbers, so configure must be given --with-scalar-type=complex to enable this
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

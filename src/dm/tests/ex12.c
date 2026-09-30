@@ -5,6 +5,8 @@
 
 static char help[] = "Solves the one dimensional heat equation.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

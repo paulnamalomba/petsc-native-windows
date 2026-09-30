@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
 
 static PetscErrorCode PetscSpaceSetFromOptions_Ptrimmed(PetscSpace sp, PetscOptionItems PetscOptionsObject)

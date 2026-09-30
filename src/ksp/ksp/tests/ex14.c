@@ -48,6 +48,7 @@ The command line options include:\n\
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscksp.h>

@@ -3,6 +3,7 @@
 */
 
 #include <petsc/private/dmdaimpl.h> /*I   "petscdmda.h"   I*/
+#include <petscviewer.h>
 
 #if PetscDefined(HAVE_MATLAB)
   #include <mat.h> /* MATLAB include file */

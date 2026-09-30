@@ -1,4 +1,5 @@
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
+#include <petscviewer.h>
 #include <petscblaslapack.h>
 
 static PetscErrorCode PetscFEDestroy_Basic(PetscFE fem)

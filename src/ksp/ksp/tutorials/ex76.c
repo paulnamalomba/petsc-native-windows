@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 #include <petsc/private/petscimpl.h>
 

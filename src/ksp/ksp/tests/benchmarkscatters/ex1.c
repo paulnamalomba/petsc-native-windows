@@ -1,4 +1,6 @@
 static char help[] = "Used to benchmark changes to the PETSc VecScatter routines\n\n";
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 extern PetscErrorCode PetscLogView_VecScatter(PetscViewer);
 
@@ -9,13 +11,11 @@ int main(int argc, char **args)
   Vec         x, b;
   PetscViewer fd;
   char        file[PETSC_MAX_PATH_LEN];
-  PetscBool   flg, preload = PETSC_TRUE;
+  PetscBool   flg;
 
   PetscCall(PetscInitialize(&argc, &args, NULL, help));
   PetscCall(PetscLogDefaultBegin());
   PetscCall(PetscOptionsGetString(NULL, NULL, "-f", file, sizeof(file), &flg));
-
-  PetscPreLoadBegin(preload, "Load system");
 
   /*
      Load the matrix and vector; then destroy the viewer.
@@ -36,21 +36,18 @@ int main(int argc, char **args)
   PetscCall(KSPSetUp(ksp));
   PetscCall(KSPSetUpOnBlocks(ksp));
 
-  PetscPreLoadStage("KSPSolve");
   PetscCall(KSPSolve(ksp, b, x));
 
   PetscCall(MatDestroy(&A));
   PetscCall(VecDestroy(&b));
   PetscCall(VecDestroy(&x));
   PetscCall(KSPDestroy(&ksp));
-  PetscPreLoadEnd();
   PetscCall(PetscLogView_VecScatter(PETSC_VIEWER_STDOUT_WORLD));
 
   PetscCall(PetscFinalize());
   return 0;
 }
 
-#include <petsctime.h>
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/vecimpl.h>
 #include <petsc/private/kspimpl.h>

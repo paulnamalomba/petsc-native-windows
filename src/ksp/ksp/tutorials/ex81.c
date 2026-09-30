@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc.h>
 
 static char help[] = "Solves a linear system with a MatNest and nested fields.\n\n";

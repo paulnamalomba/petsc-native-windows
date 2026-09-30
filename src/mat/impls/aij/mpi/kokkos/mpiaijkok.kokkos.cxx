@@ -1,7 +1,7 @@
+#include <petscoptions.h>
 #include <petsc_kokkos.hpp>
 #include <petscvec_kokkos.hpp>
 #include <petscmat_kokkos.hpp>
-#include <petscpkg_version.h>
 #include <petsc/private/sfimpl.h>
 #include <petsc/private/kokkosimpl.hpp>
 #include <../src/mat/impls/aij/seq/kokkos/aijkok.hpp>

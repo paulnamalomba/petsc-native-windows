@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ts/impls/implicit/glle/glle.h> /*I  "petscts.h" I*/
 
 static PetscFunctionList TSGLLEAdaptList;

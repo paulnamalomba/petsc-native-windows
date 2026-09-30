@@ -1,4 +1,5 @@
-#include "petscsystypes.h"
+#include <petscoptions.h>
+#include <petscviewer.h>
 static char help[] = "Test PetscViewer_ExodusII\n\n";
 
 #include <petsc.h>

@@ -9,6 +9,7 @@ static char help[] = "Tests basic creation and destruction of PetscRegressor obj
 */
 
 #include <petscregressor.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

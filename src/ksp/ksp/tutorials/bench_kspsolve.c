@@ -25,6 +25,7 @@ Example usage:
 */
 static char help[] = "Solves 3D Laplacian with 27-point finite difference stencil.\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 typedef struct {

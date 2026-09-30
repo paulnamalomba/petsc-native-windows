@@ -1,6 +1,7 @@
 /* Program usage: mpiexec -n 1 rosenbrock2 [-help] [all TAO options] */
 
 /*  Include "petsctao.h" so we can use TAO solvers.  */
+#include <petscoptions.h>
 #include <petsctao.h>
 
 static char help[] = "This example demonstrates use of the TAO package to \n\

@@ -4,6 +4,7 @@ static char help[] = "Solves a tridiagonal linear system with KSP.\n\n";
   Modified from ex1.c for testing matrix operations when the matrix nonzero structure is changed.
   Contributed by Jose E. Roman, Feb. 2012.
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

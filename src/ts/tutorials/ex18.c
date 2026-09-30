@@ -8,6 +8,7 @@ a forcing function $f$:
 \end{align}
 F*/
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 #include <petscts.h>

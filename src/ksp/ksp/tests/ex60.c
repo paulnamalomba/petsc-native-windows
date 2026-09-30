@@ -1,5 +1,6 @@
 static char help[] = "Working out corner cases of the ASM preconditioner.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

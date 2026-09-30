@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/tsimpl.h> /*I "petscts.h"  I*/
 #include <petscdm.h>
 static PetscErrorCode TSRHSSplitGetRHSSplit(TS ts, const char splitname[], TS_RHSSplitLink *isplit)

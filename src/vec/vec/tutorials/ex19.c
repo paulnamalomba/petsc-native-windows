@@ -1,5 +1,6 @@
 static char help[] = "Parallel HDF5 Vec Viewing.\n\n";
 
+#include <petscoptions.h>
 #include <petscvec.h>
 #include <petscviewerhdf5.h>
 

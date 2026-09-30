@@ -1,5 +1,6 @@
 static char help[] = "Tests 1D nested mesh refinement.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 

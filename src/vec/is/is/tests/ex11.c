@@ -1,5 +1,6 @@
 static char help[] = "Tests ISSortGlobal().\n\n";
 
+#include <petscoptions.h>
 #include <petscis.h>
 
 int main(int argc, char **argv)

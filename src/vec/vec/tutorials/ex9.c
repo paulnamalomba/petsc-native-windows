@@ -14,6 +14,8 @@ static char help[] = "Demonstrates use of VecCreateGhost().\n\n";
      petscsys.h       - base PETSc routines   petscis.h     - index sets
      petscviewer.h - viewers
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

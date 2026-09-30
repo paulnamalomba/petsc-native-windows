@@ -1,5 +1,6 @@
 static char help[] = "Tests DMPlexCreateColoring() and DMPlexCreateColoringLabel().\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petsc/private/hashseti.h>
 

@@ -6,6 +6,7 @@
 
 */
 #include <../src/sys/classes/draw/impls/x/ximpl.h>
+#include <petscoptions.h>
 #include <X11/Xatom.h>
 
 static const char *colornames[PETSC_DRAW_BASIC_COLORS] = {"white",   "black",     "red",      "green",      "cyan",      "blue",       "magenta",   "aquamarine",      "forestgreen", "orange",        "violet",

@@ -1,5 +1,6 @@
 static char help[] = "Tests MatISFixLocalEmpty() with a blocked local to global mapping.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

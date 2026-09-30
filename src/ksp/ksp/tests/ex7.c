@@ -3,6 +3,7 @@ static char help[] = "Illustrate how to solves a matrix-free linear system with 
 /*
   Note: modified from ~src/ksp/ksp/tutorials/ex1.c
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /*

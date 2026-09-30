@@ -15,6 +15,8 @@ static char help[] = "Demonstrates adjoint sensitivity analysis for Reaction-Dif
      -implicitform - provide IFunction and IJacobian to TS, if not set, RHSFunction and RHSJacobian will be used
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include "reaction_diffusion.h"
 #include <petscdm.h>
 #include <petscdmda.h>

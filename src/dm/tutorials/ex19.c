@@ -3,6 +3,7 @@
  */
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 
 static char help[] = "Test for DMDA with overlap.\n\n";

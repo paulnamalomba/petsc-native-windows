@@ -1,6 +1,7 @@
 static char help[] = "Saves a rectangular sparse matrix to disk.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

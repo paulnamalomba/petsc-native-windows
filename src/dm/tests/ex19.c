@@ -4,6 +4,7 @@ static char help[] = "Tests DMDA with variable multiple degrees of freedom per n
    This code only compiles with gcc, since it is not ANSI C
 */
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

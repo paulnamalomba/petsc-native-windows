@@ -1,6 +1,7 @@
 static char help[] = "Tests the different MatColoring implementations and ISColoringTestValid() \n\
                       Modified from the code contributed by Ali Berk Kahraman. \n\n";
 #include <petscmat.h>
+#include <petscviewer.h>
 
 PetscErrorCode FormJacobian(Mat A)
 {

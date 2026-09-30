@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/sfimpl.h> /*I "petscsf.h" I*/
 
 typedef struct _n_PetscSFDataLink *PetscSFDataLink;

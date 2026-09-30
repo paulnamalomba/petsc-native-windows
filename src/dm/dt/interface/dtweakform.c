@@ -1,4 +1,5 @@
 #include <petsc/private/petscdsimpl.h> /*I "petscds.h" I*/
+#include <petscviewer.h>
 
 PetscClassId PETSCWEAKFORM_CLASSID = 0;
 

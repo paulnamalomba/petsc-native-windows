@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/taoimpl.h> /*I "petsctao.h" I*/
 
 typedef struct _n_TaoTerm_L1 TaoTerm_L1;

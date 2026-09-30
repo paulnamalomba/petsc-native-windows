@@ -1,6 +1,7 @@
 static char help[] = "Tests copying and ordering uniprocessor row-based sparse matrices.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

@@ -1,5 +1,6 @@
 static char help[] = "Test coloring for finite difference Jacobians with DMStag\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 #include <petscsnes.h>

@@ -1,6 +1,7 @@
 static char help[] = "Tests MatShift(), MatScale(), and MatDiagonalScale() for SHELL and NEST matrices\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 typedef struct _n_User *User;
 struct _n_User {

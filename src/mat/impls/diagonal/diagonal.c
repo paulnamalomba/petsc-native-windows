@@ -1,4 +1,5 @@
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
+#include <petscviewer.h>
 #include <petsc/private/vecimpl.h> /*I "petscvec.h" I*/
 
 static PetscErrorCode MatDiagonalSetUpDiagonal(Mat A)

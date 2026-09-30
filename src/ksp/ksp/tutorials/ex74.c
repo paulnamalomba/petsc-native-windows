@@ -54,6 +54,7 @@ Available IRK Methods:                                              \n\
   petscviewer.h   - viewers
   petscpc.h       - preconditioners
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdt.h>
 

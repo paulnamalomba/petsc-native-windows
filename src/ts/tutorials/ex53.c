@@ -3,6 +3,8 @@ We solve three field, quasi-static poroelasticity in a rectangular\n\
 domain, using a parallel unstructured mesh (DMPLEX) to discretize it.\n\
 Contributed by: Robert Walker <rwalker6@buffalo.edu>\n\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscts.h>

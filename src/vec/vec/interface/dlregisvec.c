@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/vecimpl.h> /*I "petscvec.h" */
 #include <petsc/private/isimpl.h>
 #include <petscpf.h>

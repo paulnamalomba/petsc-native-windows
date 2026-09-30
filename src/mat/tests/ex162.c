@@ -1,6 +1,7 @@
 static char help[] = "Tests MatShift for SeqAIJ matrices with some missing diagonal entries\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

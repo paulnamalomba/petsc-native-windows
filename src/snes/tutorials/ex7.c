@@ -1,5 +1,6 @@
 static char help[] = "Fermions on a hypercubic lattice.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 

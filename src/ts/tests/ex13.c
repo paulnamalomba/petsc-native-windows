@@ -4,6 +4,7 @@ static char help[] = "Tests TSTrajectoryGetVecs. \n\n";
   to reconstructs states and derivatives via interpolation (if necessary).
   It also tests TSTrajectory{Get|Restore}UpdatedHistoryVecs
 */
+#include <petscoptions.h>
 #include <petscts.h>
 
 PetscScalar func(PetscInt p, PetscReal t)

@@ -1,5 +1,7 @@
 static char help[] = "Test MatCreateSubMatrices\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscis.h>
 #include <petscmat.h>
 

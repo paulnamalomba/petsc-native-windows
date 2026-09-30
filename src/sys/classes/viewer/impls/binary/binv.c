@@ -1,4 +1,5 @@
 #include <petsc/private/viewerimpl.h> /*I   "petscviewer.h"   I*/
+#include <petscoptions.h>
 
 /*
    This needs to start the same as PetscViewer_Socket.

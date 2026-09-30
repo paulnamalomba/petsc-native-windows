@@ -1,6 +1,7 @@
 static const char help[] = "Tests env: directive in test harness language.\n\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char *argv[])
 {

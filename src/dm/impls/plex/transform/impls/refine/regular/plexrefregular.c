@@ -1,4 +1,5 @@
 #include <petsc/private/dmplextransformimpl.h> /*I "petscdmplextransform.h" I*/
+#include <petscviewer.h>
 
 /*
    Regular Refinement of Hybrid Meshes

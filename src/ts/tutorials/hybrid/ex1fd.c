@@ -15,6 +15,7 @@ static char help[] = "An example of hybrid system using TS event.\n";
   I. A. Hiskens, M.A. Pai, Trajectory Sensitivity Analysis of Hybrid Systems, IEEE Transactions on Circuits and Systems, Vol 47, No 2, February 2000
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

@@ -1,5 +1,6 @@
 static char help[] = "Test DMStag default MG components, on a Stokes-like system.\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 #include <petscksp.h>

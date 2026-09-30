@@ -1,6 +1,7 @@
 #pragma once
 // Common data structures for rosenbrock1.c and rosenbrock1_taoterm.c
 
+#include <petscoptions.h>
 #include <petsctao.h>
 
 /* User-defined application context

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc.h>
 
 static char help[] = "Tests for MatEliminateZeros().\n\n";

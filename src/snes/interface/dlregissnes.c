@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/snesimpl.h>
 #include <petsc/private/linesearchimpl.h>
 #include <petsc/private/dmadaptorimpl.h>

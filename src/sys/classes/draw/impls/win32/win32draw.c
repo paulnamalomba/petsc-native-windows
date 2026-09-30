@@ -1,4 +1,4 @@
-#include <petscsys.h>
+#include <petscoptions.h>
 #include <petsc/private/drawimpl.h>
 #include <../src/sys/classes/draw/impls/win32/win32draw.h>
 

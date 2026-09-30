@@ -5,6 +5,7 @@ static char help[] = "This example demonstrates the use of DMNetwork interface w
                       Run this program: mpiexec -n <n> ./pf2\n\
                       mpiexec -n <n> ./pf2 \n";
 
+#include <petscoptions.h>
 #include "power.h"
 #include <petscdmnetwork.h>
 

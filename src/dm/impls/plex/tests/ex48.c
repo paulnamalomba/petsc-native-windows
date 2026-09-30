@@ -1,6 +1,7 @@
 static char help[] = "Tests for VecGetValuesSection / VecSetValuesSection \n\n";
 
 #include <petscdmplex.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

@@ -34,6 +34,7 @@ This example also illustrates the use of matrix coloring.  Runtime options inclu
      petscksp.h   - linear solvers
 */
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 /*

@@ -1,5 +1,5 @@
+#include <petscoptions.h>
 #include <petscvec.h>
-#include <petsctime.h>
 
 int main(int argc, char **argv)
 {
@@ -15,7 +15,6 @@ int main(int argc, char **argv)
   PetscCall(VecSetSizes(x, n, n));
   PetscCall(VecSetFromOptions(x));
 
-  PetscPreLoadBegin(PETSC_TRUE, "VecNorm");
   PetscCall(PetscTime(&t1));
   PetscCall(VecNorm(x, NORM_2, &norm));
   PetscCall(VecNorm(x, NORM_2, &norm));
@@ -27,7 +26,6 @@ int main(int argc, char **argv)
   PetscCall(VecNorm(x, NORM_2, &norm));
   PetscCall(VecNorm(x, NORM_2, &norm));
   PetscCall(VecNorm(x, NORM_2, &norm));
-  PetscPreLoadEnd();
   PetscCall(PetscTime(&t2));
   fprintf(stdout, "%s : \n", "VecNorm");
   fprintf(stdout, " Time %g\n", t2 - t1);

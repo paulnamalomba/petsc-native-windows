@@ -1,6 +1,7 @@
 static const char help[] = "Demonstrates PetscMatlabEngineXXX()\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 #include <petscmatlab.h>
 
 int main(int argc, char **argv)

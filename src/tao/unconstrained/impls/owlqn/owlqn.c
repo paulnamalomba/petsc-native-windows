@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctaolinesearch.h>
 #include <../src/tao/unconstrained/impls/owlqn/owlqn.h>
 

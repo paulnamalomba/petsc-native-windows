@@ -14,6 +14,7 @@ difference. Input parameters include:\n\
   -gamma     : gamma (default 4/h)\n\
   -beta      : beta (default 0.01/h^2)\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 int main(int argc, char **args)
 {

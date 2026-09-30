@@ -7,6 +7,8 @@ static char help[] = "Demonstrates VecStrideScatter() and VecStrideGather().\n\n
      petscviewer.h - viewers
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

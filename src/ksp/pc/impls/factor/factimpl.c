@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/pc/impls/factor/factor.h> /*I "petscpc.h"  I*/
 
 PetscErrorCode PCFactorSetUpMatSolverType_Factor(PC pc)

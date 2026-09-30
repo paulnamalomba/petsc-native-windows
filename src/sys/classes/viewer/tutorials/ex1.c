@@ -1,5 +1,6 @@
 static char help[] = "Appends to an ASCII file.\n\n";
 
+#include <petscsys.h>
 #include <petscviewer.h>
 
 int main(int argc, char **args)

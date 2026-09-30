@@ -1,6 +1,7 @@
 static char help[] = "Check to see of DM_BOUNDARY_MIRROR works in 3D for DMDA with star stencil\n";
 
 #include "petscdmda.h"
+#include <petscviewer.h>
 
 /* Contributed by Gourav Kumbhojkar */
 

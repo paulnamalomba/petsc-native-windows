@@ -1,5 +1,6 @@
 static char help[] = "Solves a tridiagonal linear system with CUDA managed memory.\n\n";
 
+#include <petscoptions.h>
 #include <petscdevice_cuda.h>
 #include <petscksp.h>
 

@@ -1,5 +1,6 @@
 const char help[] = "Tests PetscDTPTrimmedEvalJet()";
 
+#include <petscoptions.h>
 #include <petscdt.h>
 #include <petscblaslapack.h>
 #include <petscmat.h>

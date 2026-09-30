@@ -10,6 +10,8 @@ Input parameters include:\n\
    This example was modified from ex9busdmnetwork.c.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdmnetwork.h>
 

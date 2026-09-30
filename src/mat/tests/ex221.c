@@ -1,5 +1,6 @@
 static char help[] = "Tests various routines for MATSHELL\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 typedef struct _n_User *User;

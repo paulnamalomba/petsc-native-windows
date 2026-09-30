@@ -11,6 +11,7 @@ static char help[] = "Copy of ex5.c\n";
    Include "petscdmda.h" so that we can use distributed arrays (DMDAs).
    Include "petscsnes.h" so that we can use SNES solvers.  Note that this
 */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscsnes.h>

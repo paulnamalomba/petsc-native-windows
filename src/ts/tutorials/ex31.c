@@ -40,6 +40,7 @@ List of cases and their names in the code:-
 
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 /* Function declarations */

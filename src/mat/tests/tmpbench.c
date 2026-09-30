@@ -1,6 +1,7 @@
 static char help[] = "Benchmark dense matrix LU factorization (BLAS/LAPACK)\n\n";
 
 #include <petscbm.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

@@ -1,5 +1,6 @@
 static char help[] = "Test for mesh reordering\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

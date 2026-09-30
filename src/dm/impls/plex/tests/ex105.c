@@ -1,6 +1,7 @@
 static char help[] = "Tests DMPlexTransformCreateSplitCellLabel().\n\n";
 
 #include <petscdmplex.h>
+#include <petscviewer.h>
 #include <petscdmplextransform.h>
 
 // Flags a single cell for refinement, which is what an error estimator would do

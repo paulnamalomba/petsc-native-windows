@@ -20,6 +20,7 @@ linear solvers on the individual blocks.\n\n";
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

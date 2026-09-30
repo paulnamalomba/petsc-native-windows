@@ -80,6 +80,7 @@ static char help[] = "\
                       Usage: ./ex35 -problem 3 -file input/square_with_hole.h5m -mg\n";
 
 /* PETSc includes */
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdmmoab.h>
 

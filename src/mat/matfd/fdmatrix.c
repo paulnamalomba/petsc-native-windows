@@ -3,6 +3,8 @@
   used for finite difference computations of Jacobians using coloring.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
 #include <petsc/private/isimpl.h>
 

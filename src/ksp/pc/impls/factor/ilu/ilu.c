@@ -1,6 +1,7 @@
 /*
    Defines a ILU factorization preconditioner for any Mat implementation
 */
+#include <petscoptions.h>
 #include <../src/ksp/pc/impls/factor/ilu/ilu.h> /*I "petscpc.h"  I*/
 
 static PetscErrorCode PCFactorReorderForNonzeroDiagonal_ILU(PC pc, PetscReal z)

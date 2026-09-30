@@ -1,7 +1,8 @@
 /*
     Provides an interface to the MUMPS sparse solver
 */
-#include <petscpkg_version.h>
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscsf.h>
 #include <../src/mat/impls/aij/mpi/mpiaij.h> /*I  "petscmat.h"  I*/
 #include <../src/mat/impls/sbaij/mpi/mpisbaij.h>

@@ -1,5 +1,6 @@
 static char help[] = "Tests MatGetLocalSubMatrix() on a MATIS with fields of different block sizes.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /* Deterministic entry k of the element matrix coupling node i of field fi with node j of field fj */

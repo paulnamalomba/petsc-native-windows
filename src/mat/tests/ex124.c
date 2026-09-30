@@ -3,6 +3,8 @@ Reads PETSc matrix A and B, then check B=A-B \n\
 Input parameters include\n\
   -fA <input_file> -fB <input_file> \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

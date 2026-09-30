@@ -1,6 +1,7 @@
 static char help[] = "Test degenerate near null space";
 
 #include <petscdmplex.h>
+#include <petscviewer.h>
 #include <petscsnes.h>
 #include <petscds.h>
 #include <petscbag.h>

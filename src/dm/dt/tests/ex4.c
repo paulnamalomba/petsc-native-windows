@@ -1,6 +1,7 @@
 static char help[] = "Tests dual space symmetry.\n\n";
 
 #include <petscfe.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 
 static PetscErrorCode CheckSymmetry(PetscInt dim, PetscInt order, PetscBool tensor)

@@ -9,6 +9,7 @@ static char help[] = "Partition a tiny grid using hierarchical partitioning.\n\n
      petscviewer.h - viewers
 */
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

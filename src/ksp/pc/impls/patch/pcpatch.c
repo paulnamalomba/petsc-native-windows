@@ -1,9 +1,10 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcpatchimpl.h> /*I "petscpc.h" I*/
 #include <petsc/private/kspimpl.h>     /* For ksp->setfromoptionscalled */
 #include <petsc/private/vecimpl.h>     /* For vec->map */
 #include <petsc/private/dmpleximpl.h>  /* For DMPlexComputeJacobian_Patch_Internal() */
 #include <petscsf.h>
-#include <petscbt.h>
 #include <petscds.h>
 #include <../src/mat/impls/dense/seq/dense.h> /*I "petscmat.h" I*/
 

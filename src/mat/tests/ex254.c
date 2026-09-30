@@ -1,5 +1,6 @@
 static char help[] = "Test MatSetValuesCOO() for MPIAIJ and its subclasses \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 int main(int argc, char **args)
 {

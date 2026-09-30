@@ -1,6 +1,7 @@
 /* Routines to visualize DMs through GLVis */
 
 #include <petsc/private/dmimpl.h>
+#include <petscviewer.h>
 #include <petsc/private/glvisviewerimpl.h>
 
 PetscErrorCode DMView_GLVis(DM dm, PetscViewer viewer, PetscErrorCode (*DMView_GLVis_ASCII)(DM, PetscViewer))

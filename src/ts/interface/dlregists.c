@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/tsimpl.h>
 
 static PetscBool TSPackageInitialized = PETSC_FALSE;

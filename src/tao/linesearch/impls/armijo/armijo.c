@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/taolinesearchimpl.h>
 #include <../src/tao/linesearch/impls/armijo/armijo.h>
 

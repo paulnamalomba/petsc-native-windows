@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscts.h>
 #include <stdio.h>
 

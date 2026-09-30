@@ -6,6 +6,8 @@ static char help[] = "Solves the incompressible, variable-viscosity Stokes equat
                      "-rediscretize: create operators for all grids and set up a FieldSplit/MG solver\n"
                      "-dump_solution: dump VTK files\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscksp.h>
 #include <petscdmstag.h>

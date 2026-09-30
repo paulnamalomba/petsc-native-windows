@@ -1,6 +1,7 @@
 static const char help[] = "Test PetscSFFetchAndOp \n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 #include <petscsf.h>
 
 int main(int argc, char *argv[])

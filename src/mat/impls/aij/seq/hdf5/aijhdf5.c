@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <petsc/private/isimpl.h>
 #include <petsc/private/vecimpl.h>

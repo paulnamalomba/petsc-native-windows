@@ -1,5 +1,6 @@
 static char help[] = "Tests save/load plex with distribution in HDF5.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsf.h>
 #include <petsclayouthdf5.h>

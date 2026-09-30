@@ -2,6 +2,8 @@ static char help[] = "Creates a matrix from quadrilateral finite elements in 2D,
   -ne <size>       : problem size in number of elements (eg, -ne 31 gives 32^2 grid)\n\
   -alpha <v>      : scaling of material coefficient in embedded circle\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

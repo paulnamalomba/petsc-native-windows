@@ -4,6 +4,8 @@ static char help[] = "Tests MatConvert(), MatLoad() for MATELEMENTAL interface.\
    mpiexec -n <np> ./ex173 -fA <A_data> -fB <B_data> -orig_mat_type <type> -orig_mat_type <mat_type>
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 #include <petscmatelemental.h>
 

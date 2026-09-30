@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/pc/impls/is/nn/nn.h>
 
 /*

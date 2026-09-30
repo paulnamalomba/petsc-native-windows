@@ -9,6 +9,7 @@
  This version tests correlated terms using both vector and listed forms
 */
 
+#include <petscoptions.h>
 #include <petsctao.h>
 
 /*

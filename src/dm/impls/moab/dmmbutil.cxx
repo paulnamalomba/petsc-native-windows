@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/dmmbimpl.h> /*I  "petscdmmoab.h"   I*/
 #include <petsc/private/vecimpl.h>
 

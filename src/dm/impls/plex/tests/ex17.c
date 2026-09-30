@@ -1,5 +1,6 @@
 static char help[] = "Tests for point location\n\n";
 
+#include <petscoptions.h>
 #include <petscsf.h>
 #include <petscdmplex.h>
 

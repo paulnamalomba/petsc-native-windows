@@ -20,9 +20,9 @@ static char help[] = "Solves one dimensional Burger's equation compares with exa
 
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdt.h>
-#include <petscdraw.h>
 #include <petscdmda.h>
 
 /*

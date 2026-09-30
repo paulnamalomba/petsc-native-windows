@@ -5,6 +5,7 @@
 */
 
 #include <../src/mat/impls/dense/seq/dense.h> /*I "petscmat.h" I*/
+#include <petscviewer.h>
 #include <../src/mat/impls/dense/mpi/mpidense.h>
 #include <petscblaslapack.h>
 #include <../src/mat/impls/aij/seq/aij.h>

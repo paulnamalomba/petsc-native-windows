@@ -6,6 +6,8 @@ static char help[] = "Test MatGetInertia().\n\n";
   ./ex33 -sigma <shift> -fA <matrix_file>
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 int main(int argc, char **args)
 {

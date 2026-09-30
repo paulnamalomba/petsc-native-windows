@@ -2,6 +2,7 @@ static char help[] = "Test DMStag ghosted boundaries in 2d\n\n";
 /* This solves a very contrived problem - the "pressure" terms are set to a constant function
    and the "velocity" terms are just the sum of neighboring values of these, hence twice the
    constant */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscksp.h>
 #include <petscdmstag.h>

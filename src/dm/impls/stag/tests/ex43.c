@@ -1,6 +1,7 @@
 static char help[] = "Test using nested field splits with DMStag()\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmstag.h>
 #include <petscksp.h>
 

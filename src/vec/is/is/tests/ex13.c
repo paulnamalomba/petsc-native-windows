@@ -1,7 +1,7 @@
 static char help[] = "Tests ISDuplicate(), ISCopy(), ISShift(), ISEqualUnsorted(), ISEqual().\n\n";
 
+#include <petscoptions.h>
 #include <petscis.h>
-#include <petscviewer.h>
 
 /*
 type = 0 general

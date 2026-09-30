@@ -1,5 +1,6 @@
 static char help[] = "Tests point block Jacobi and ILU for different block sizes\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

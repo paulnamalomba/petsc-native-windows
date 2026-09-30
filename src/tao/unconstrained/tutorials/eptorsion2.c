@@ -30,6 +30,7 @@
   the parallel mesh.
 */
 
+#include <petscoptions.h>
 #include <petsctao.h>
 #include <petscdmda.h>
 

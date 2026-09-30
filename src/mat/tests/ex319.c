@@ -2,6 +2,7 @@ static char help[] = "Tests MatMatMult() of an MPIAIJ-family matrix with an MPID
 
 // Contributed by: Steven Dargaville
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /* The product of the matrices whose types are set with -A_mat_type and -B_mat_type is compared against

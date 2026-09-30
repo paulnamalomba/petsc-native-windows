@@ -2,6 +2,7 @@ static char help[] = "This example demonstrates the use of DMNetwork interface f
                       The example can be found in p.150 of 'Strang, Gilbert. Computational Science and Engineering. Wellesley, MA'.\n\n";
 
 #include <petscdmnetwork.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 /* The topology looks like:

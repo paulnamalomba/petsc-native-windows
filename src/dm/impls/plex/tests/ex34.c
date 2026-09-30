@@ -1,5 +1,6 @@
 static char help[] = "Tests interpolation and output of hybrid meshes\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

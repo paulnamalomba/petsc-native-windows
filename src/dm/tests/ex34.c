@@ -1,5 +1,7 @@
 static const char help[] = "Test DMDAGetOwnershipRanges()\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

@@ -7,6 +7,8 @@
      pcimpl.h - private include file intended for use by all preconditioners
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
 #include <petscdevice_cuda.h>
 #include <amgx_c.h>

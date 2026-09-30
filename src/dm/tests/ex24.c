@@ -1,6 +1,7 @@
 static char help[] = "Tests DMLocalToGlobal() for dof > 1\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 
 int main(int argc, char **argv)

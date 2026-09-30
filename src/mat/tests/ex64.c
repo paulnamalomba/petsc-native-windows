@@ -1,6 +1,7 @@
 static char help[] = "Saves 4by4 block matrix.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

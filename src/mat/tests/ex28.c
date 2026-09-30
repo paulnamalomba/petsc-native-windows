@@ -1,5 +1,6 @@
 static char help[] = "Illustrate how to do one symbolic factorization and multiple numeric factorizations using same matrix nonzero structure. \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

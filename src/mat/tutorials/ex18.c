@@ -14,6 +14,7 @@ static char help[] = "Demonstrates the use of the COO interface to PETSc matrice
 */
 
 #include <petscmat.h>
+#include <petscviewer.h>
 #include "ex18.h"
 
 static PetscErrorCode CreateFEStruct(FEStruct *fe)

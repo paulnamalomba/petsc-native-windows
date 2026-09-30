@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/viewerimpl.h> /* "petscsys.h" */
 #include <mathematica.h>
 

@@ -1,5 +1,6 @@
 static char help[] = "Test conversion of ScaLAPACK matrices.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

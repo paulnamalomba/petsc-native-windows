@@ -714,7 +714,6 @@ them.
 - **Inconsistent timings**: Inconsistent timings are likely due to
   other users on the machine, thrashing (using more virtual memory than
   available physical memory), or paging in of the initial executable.
-  {any}`sec_profaccuracy` provides information on
-  overcoming paging overhead when profiling a code. We have found on
+  We have found on
   all systems that if you follow all the advise above your timings will
   be consistent within a variation of less than five percent.

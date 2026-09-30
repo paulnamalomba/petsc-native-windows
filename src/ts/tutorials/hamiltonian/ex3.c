@@ -10,6 +10,8 @@ static char help[] = "Landau Damping test using Vlasov-Poisson equations\n";
                                Optional prefix for filenames (default: "particles").
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
@@ -17,7 +19,6 @@ static char help[] = "Landau Damping test using Vlasov-Poisson equations\n";
 #include <petscds.h>
 #include <petscbag.h>
 #include <petscdraw.h>
-#include <petscviewer.h>
 #include <petsclandau.h>
 #include <petscdmcomposite.h>
 #include <petsc/private/dmpleximpl.h>  /* For norm and dot */

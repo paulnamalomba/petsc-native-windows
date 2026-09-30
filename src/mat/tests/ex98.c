@@ -9,6 +9,7 @@ static char help[] = "Tests MatMPIAIJSetPreallocationCSR()\n\n";
      petscviewer.h - viewers
 */
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

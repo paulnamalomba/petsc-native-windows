@@ -1,4 +1,5 @@
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
+#include <petscviewer.h>
 
 typedef struct {
   PetscScalar diag;

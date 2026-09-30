@@ -24,6 +24,7 @@ boundary gives an essential boundary condition on the flux space, $\vb{q} \cdot 
 becomes a natural condition in the weak form, <t_n, g>_\Gamma.
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

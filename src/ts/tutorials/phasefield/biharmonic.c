@@ -43,6 +43,8 @@ Evolve the Cahn-Hillard equations: logarithmic +  double obstacle (never shrinks
 ./biharmonic -ts_monitor -snes_monitor  -pc_type lu  --snes_converged_reason  -draw_pause -2   -ts_type cn    -da_refine 5   -kappa .00001 -ts_time_step 5.96046e-06 -cahn-hillard -energy 4 -snes_linesearch_monitor -theta .00000001   -ts_monitor_draw_solution --mymonitor
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscts.h>

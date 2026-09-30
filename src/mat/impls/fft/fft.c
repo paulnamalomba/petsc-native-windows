@@ -2,6 +2,7 @@
     Provides an interface to the FFT packages.
 */
 
+#include <petscoptions.h>
 #include <../src/mat/impls/fft/fft.h> /*I "petscmat.h" I*/
 
 static PetscErrorCode MatDestroy_FFT(Mat A)

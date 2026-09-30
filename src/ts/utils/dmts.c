@@ -1,4 +1,5 @@
 #include <petsc/private/tsimpl.h> /*I "petscts.h" I*/
+#include <petscviewer.h>
 #include <petsc/private/dmimpl.h>
 
 static PetscErrorCode DMTSUnsetRHSFunctionContext_DMTS(DMTS tsdm)
@@ -95,21 +96,11 @@ PetscErrorCode DMTSLoad(DMTS kdm, PetscViewer viewer)
 
 PetscErrorCode DMTSView(DMTS kdm, PetscViewer viewer)
 {
-  PetscBool isascii, isbinary;
+  PetscBool isbinary;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERBINARY, &isbinary));
-  if (isascii) {
-#if PetscDefined(SERIALIZE_FUNCTIONS)
-    const char *fname;
-
-    PetscCall(PetscFPTFind(kdm->ops->ifunction, &fname));
-    if (fname) PetscCall(PetscViewerASCIIPrintf(viewer, "  IFunction used by TS: %s\n", fname));
-    PetscCall(PetscFPTFind(kdm->ops->ijacobian, &fname));
-    if (fname) PetscCall(PetscViewerASCIIPrintf(viewer, "  IJacobian function used by TS: %s\n", fname));
-#endif
-  } else if (isbinary) {
+  if (isbinary) {
     struct {
       TSIFunctionFn *ifunction;
     } funcstruct;

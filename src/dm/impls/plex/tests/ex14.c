@@ -1,5 +1,6 @@
 static char help[] = "Tests for coarsening\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

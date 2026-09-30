@@ -14,6 +14,7 @@ To produce nice output, use
   -dm_refine 3 -show_error -dm_view hdf5:sol1.h5 -error_vec_view hdf5:sol1.h5::append -sol_vec_view hdf5:sol1.h5::append -exact_vec_view hdf5:sol1.h5::append
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

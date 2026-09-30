@@ -5,6 +5,7 @@
   performing operations for which this format is more suitable.
 */
 
+#include <petscoptions.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/mat/impls/sell/seq/sell.h>
 

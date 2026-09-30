@@ -1,5 +1,6 @@
 const char help[] = "Simple example to get equally space points in high-order elements (and XGC mirror)";
 
+#include <petscoptions.h>
 #include <petscfe.h>
 #include <petscdmplex.h>
 static PetscErrorCode x(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf_unused, PetscScalar *u, void *actx)

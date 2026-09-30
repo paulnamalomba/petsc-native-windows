@@ -2,6 +2,7 @@ static char help[] = "Benchmark Poisson Problem in 2d and 3d with finite element
 We solve the Poisson problem in a rectangular domain\n\
 using a parallel unstructured mesh (DMPLEX) to discretize it.\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

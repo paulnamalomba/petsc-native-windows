@@ -1,4 +1,5 @@
 #include <petsc/private/dmimpl.h>
+#include <petscviewer.h>
 #include <petscdmredundant.h> /*I      "petscdmredundant.h" I*/
 
 typedef struct {

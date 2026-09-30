@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>
 #include <petscsf.h>

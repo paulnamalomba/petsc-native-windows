@@ -1,4 +1,5 @@
 #include <petsc/private/taolinesearchimpl.h>
+#include <petscviewer.h>
 #include <../src/tao/linesearch/impls/morethuente/morethuente.h>
 
 /*

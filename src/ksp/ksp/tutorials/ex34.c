@@ -16,6 +16,8 @@ This uses multigrid to solve the linear system
 
 static char help[] = "Solves 3D Laplacian using multigrid.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscksp.h>

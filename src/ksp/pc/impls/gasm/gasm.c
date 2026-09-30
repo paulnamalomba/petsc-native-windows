@@ -8,6 +8,8 @@
        n    - actual number of local subdomains on this process (set in `PCGASMSetSubdomains()` or calculated in `PCGASMSetTotalSubdomains()`)
        nmax - maximum number of local subdomains per process (calculated in PCSetUp_GASM())
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
 #include <petscdm.h>
 

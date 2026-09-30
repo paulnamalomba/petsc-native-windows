@@ -24,6 +24,7 @@ Thus,                                                               \n\
                                                                     \n\
 This example is a TS version of the KSP ex74.c tutorial.            \n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef enum {

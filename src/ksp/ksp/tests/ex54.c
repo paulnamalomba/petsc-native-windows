@@ -4,6 +4,8 @@
      As the matrix is rectangular, least square solution is computed, so KSPLSQR is also tested here.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 PetscErrorCode fill(Mat m, Vec v)

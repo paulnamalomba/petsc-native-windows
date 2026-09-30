@@ -1,5 +1,6 @@
 static char help[] = "Tests for creation of submeshes\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 static PetscErrorCode CreateMesh(MPI_Comm comm, DM *dm)

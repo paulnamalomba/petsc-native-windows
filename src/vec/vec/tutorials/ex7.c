@@ -3,6 +3,7 @@ Also demonstrates passing  PETSc objects, MPI Communicators from C to Fortran\n\
 and from Fortran to C\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 /*
   Ugly stuff to insure the function names match between Fortran
   and C. This is out of our PETSc hands to cleanup.

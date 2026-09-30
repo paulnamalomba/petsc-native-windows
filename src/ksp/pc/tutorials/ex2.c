@@ -14,6 +14,7 @@ static char help[] = "Test file for the PCFactorSetShiftType()\n";
  */
 
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

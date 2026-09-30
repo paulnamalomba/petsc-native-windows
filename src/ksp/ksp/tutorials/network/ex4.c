@@ -1,5 +1,7 @@
 static char help[] = "This example tests subnetwork coupling with zero size components. \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmnetwork.h>
 
 int main(int argc, char **argv)

@@ -1,5 +1,7 @@
 static const char help[] = "Test MatGetLocalSubMatrix() with multiple levels of nesting.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char *argv[])

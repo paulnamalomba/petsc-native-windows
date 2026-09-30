@@ -1,5 +1,6 @@
 static char help[] = "Tests for geometry models\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 

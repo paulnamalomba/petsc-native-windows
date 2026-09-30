@@ -14,11 +14,10 @@ static char help[] = "Particle Basis Landau Example using nonlinear solve + Impl
   [1] https://arxiv.org/abs/1910.03080v2
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
 #include <petscts.h>
-#include <petscviewer.h>
-#include <petscmath.h>
 
 typedef struct {
   /* Velocity space grid and functions */

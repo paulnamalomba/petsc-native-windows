@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/dmimpl.h> /*I "petscdm.h" I*/
 
 PetscFunctionList DMGeomModelList              = NULL;

@@ -34,6 +34,8 @@ We will have three objects:
  - Dual Space, P'+K: This looks like a set of functionals that can act on members of P, each n is defined by a Q
  - FEM: This keeps {P, P', Q}
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
 #include <petscdmplex.h>
 

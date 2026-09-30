@@ -8,6 +8,7 @@ differently from the way it is assembled.  Input arguments are:\n\
    based on src/ksp/ksp/tutorials/ex3.c
  */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /* Declare user-defined routines */

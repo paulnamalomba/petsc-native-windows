@@ -1,5 +1,6 @@
 static char help[] = "Simple MOAB example\n\n";
 
+#include <petscoptions.h>
 #include <petscdmmoab.h>
 #if defined(__GNUC__) || defined(__GNUG__)
   #pragma GCC diagnostic push

@@ -3,6 +3,7 @@
    allow it to be replaced at link time by an alternative routine.
 */
 #include <petsc/private/petscimpl.h> /*I    "petscsys.h"   I*/
+#include <petscoptions.h>
 
 /*
   The next set of variables determine which, if any, PetscInfo() calls are used.

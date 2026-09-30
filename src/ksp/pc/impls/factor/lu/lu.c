@@ -4,6 +4,7 @@
          a direct solver.
 */
 
+#include <petscoptions.h>
 #include <../src/ksp/pc/impls/factor/lu/lu.h> /*I "petscpc.h" I*/
 
 static PetscErrorCode PCFactorReorderForNonzeroDiagonal_LU(PC pc, PetscReal z)

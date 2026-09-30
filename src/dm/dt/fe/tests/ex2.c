@@ -1,5 +1,6 @@
 static const char help[] = "Tests for injecting basis functions";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscfe.h>
 #include <petscds.h>

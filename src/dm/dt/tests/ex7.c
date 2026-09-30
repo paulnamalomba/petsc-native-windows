@@ -1,5 +1,6 @@
 static char help[] = "Test the PetscDTAltV interface for k-forms (alternating k-linear maps).\n\n";
 
+#include <petscoptions.h>
 #include <petscviewer.h>
 #include <petscdt.h>
 

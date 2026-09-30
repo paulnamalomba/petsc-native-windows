@@ -15,6 +15,8 @@ where
               1 -(x0^2 - x1)]
 ---------------------------------------------------------------------- */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 
 static char help[] = "Solves constrained optimization problem using pdipm.\n\

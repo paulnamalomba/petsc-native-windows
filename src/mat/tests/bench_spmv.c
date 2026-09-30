@@ -1,5 +1,7 @@
 static char help[] = "Driver for benchmarking SpMV.";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 #include "cJSON.h"
 #include "mmloader.h"

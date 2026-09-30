@@ -4,6 +4,8 @@ static char help[] = "Using finite difference for the problem in ex9busopt.c \n\
   Use finite difference approximations to solve the same optimization problem as in ex9busopt.c.
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscts.h>
 #include <petscdm.h>

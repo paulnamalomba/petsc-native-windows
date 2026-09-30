@@ -1,5 +1,6 @@
 static const char help[] = "Test parallel assembly of SBAIJ matrices\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 PetscErrorCode Assemble(MPI_Comm comm, PetscInt n, MatType mtype)

@@ -12,6 +12,8 @@ Input parameters include:\n\
    See ex16adj for a description of the problem being solved.
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscmat.h>
 

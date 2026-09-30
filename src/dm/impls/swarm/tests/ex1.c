@@ -1,5 +1,6 @@
 static const char help[] = "Test initialization and migration with swarm.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
 

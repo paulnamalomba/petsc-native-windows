@@ -1,6 +1,7 @@
 static const char help[] = "Test VecGetSubVector()\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char *argv[])
 {

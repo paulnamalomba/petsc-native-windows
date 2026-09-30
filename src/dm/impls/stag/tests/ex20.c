@@ -1,5 +1,6 @@
 static char help[] = "Test DMStag transfer operators.\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 

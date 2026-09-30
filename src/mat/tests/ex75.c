@@ -1,5 +1,6 @@
 static char help[] = "Tests various routines in MatMPISBAIJ format.\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

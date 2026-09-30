@@ -1,5 +1,6 @@
 static char help[] = "Test leaf sorting in PetscSFSetGraph()\n\n";
 
+#include <petscoptions.h>
 #include <petscsf.h>
 
 typedef struct {

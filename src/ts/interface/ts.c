@@ -1,9 +1,10 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/tsimpl.h> /*I "petscts.h"  I*/
 #include <petscdmda.h>
 #include <petscdmshell.h>
 #include <petscdmplex.h>  // For TSSetFromOptions()
 #include <petscdmswarm.h> // For TSSetFromOptions()
-#include <petscviewer.h>
 #include <petscdraw.h>
 #include <petscconvest.h>
 

@@ -1,5 +1,6 @@
 static char help[] = "Orient a mesh in parallel\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

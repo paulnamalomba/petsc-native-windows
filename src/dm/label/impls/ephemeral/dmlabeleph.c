@@ -1,4 +1,5 @@
 #include <petsc/private/dmlabelimpl.h> /*I      "petscdmlabelephemeral.h"   I*/
+#include <petscviewer.h>
 #include <petscdmlabelephemeral.h>
 
 /*

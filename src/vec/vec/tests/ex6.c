@@ -1,6 +1,7 @@
 static char help[] = "Demonstrates a scatter with a stride and general index set.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/viewerimpl.h> /*I    "petscviewer.h"   I*/
 #include <mat.h>                      /*I    "petscmat.h"      I*/
 

@@ -1,5 +1,6 @@
 static const char help[] = "Test for non-manifold interpolation";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 /*

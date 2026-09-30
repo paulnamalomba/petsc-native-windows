@@ -87,6 +87,7 @@ The flow can be driven with the lid or with buoyancy or both:\n\
      petscviewer.h - viewers               petscpc.h  - preconditioners
      petscksp.h   - linear solvers         petscsnes.h - nonlinear solvers
 */
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdm.h>
 #include <petscdmda.h>

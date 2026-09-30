@@ -6,6 +6,7 @@
    files)
  */
 #include <petsc/private/kspimpl.h> /*I "petscksp.h" I*/
+#include <petscviewer.h>
 #include <petscdmshell.h>
 #include <petscdraw.h>
 

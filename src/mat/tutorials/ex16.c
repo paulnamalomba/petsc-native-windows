@@ -5,6 +5,8 @@ static char help[] = "Reads a matrix from PETSc binary file. Use for view or inv
       ./ex16 -f <matrix file> -a_mat_view ascii::ascii_info
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 int main(int argc, char **args)
 {

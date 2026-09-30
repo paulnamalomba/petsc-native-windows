@@ -8,6 +8,8 @@
 
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/sbaij/seq/sbaij.h>
 #include <../src/mat/impls/sbaij/seq/cholmod/cholmodimpl.h>
 

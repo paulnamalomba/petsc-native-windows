@@ -1,5 +1,6 @@
 const char help[] = "Demonstration of elastic net regularization (https://en.wikipedia.org/wiki/Elastic_net_regularization) using TAO";
 
+#include <petscoptions.h>
 #include <petsctao.h>
 
 int main(int argc, char **argv)

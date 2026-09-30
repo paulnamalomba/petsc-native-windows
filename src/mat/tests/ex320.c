@@ -1,6 +1,7 @@
 static char help[] = "Test MatNullSpaceView()/MatNullSpaceLoad() with a binary viewer.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

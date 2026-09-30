@@ -1,6 +1,6 @@
 static char help[] = "Tests application ordering.\n\n";
 
-#include <petscsys.h>
+#include <petscoptions.h>
 #include <petscao.h>
 #include <petscviewer.h>
 

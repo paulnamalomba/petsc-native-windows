@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcisimpl.h> /*I "petscpc.h" I*/
 
 static PetscErrorCode PCISSetUseStiffnessScaling_IS(PC pc, PetscBool use)

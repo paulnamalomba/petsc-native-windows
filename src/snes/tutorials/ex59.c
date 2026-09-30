@@ -9,6 +9,7 @@ static const char help[] = "Tries to solve u`` + u^{2} = f for an easy case and 
 
 */
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 PetscBool second_order = PETSC_FALSE;

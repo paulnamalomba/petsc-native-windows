@@ -1,5 +1,6 @@
 #include <petsc/private/dmfieldimpl.h> /*I "petscdmfield.h" I*/
-#include <petsc/private/dmimpl.h>      /*I "petscdm.h" I*/
+#include <petscviewer.h>
+#include <petsc/private/dmimpl.h> /*I "petscdm.h" I*/
 #include <petscdmda.h>
 
 typedef struct _n_DMField_DA {

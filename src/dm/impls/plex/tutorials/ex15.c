@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "petscsf.h"
 static char help[] = "Demonstrate CGNS parallel load-save-reload cycle, including data\n\n";
 

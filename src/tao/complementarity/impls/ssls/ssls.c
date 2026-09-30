@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/tao/complementarity/impls/ssls/ssls.h>
 
 PetscErrorCode TaoSetFromOptions_SSLS(Tao tao, PetscOptionItems PetscOptionsObject)

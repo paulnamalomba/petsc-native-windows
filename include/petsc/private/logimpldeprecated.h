@@ -1,9 +1,7 @@
 #pragma once
 
-#include <petscsystypes.h>
-#include <petsclogtypes.h>
+#include <petsclog.h> // must precede petsclogdeprecated.h, which depends on it
 #include <petsclogdeprecated.h>
-#include <petscconf.h>
 
 /* MANSEC = Sys */
 /* SUBMANSEC = Log */

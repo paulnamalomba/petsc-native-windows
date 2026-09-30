@@ -1,6 +1,7 @@
 static char help[] = "Test Mat products \n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 int main(int argc, char **args)
 {
   Mat            A = NULL, B = NULL, C = NULL, D = NULL, E = NULL;

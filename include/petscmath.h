@@ -8,7 +8,6 @@
 #pragma once
 
 #include <math.h>
-#include <petscmacros.h>
 #include <petscsystypes.h>
 
 /* SUBMANSEC = Sys */

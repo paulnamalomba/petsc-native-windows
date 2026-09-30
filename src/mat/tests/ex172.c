@@ -2,6 +2,7 @@ static char help[] = "Test MatAXPY and SUBSET_NONZERO_PATTERN [-different] [-ski
 
 /* A test contributed by Jose E. Roman, Oct. 2014 */
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

@@ -1,6 +1,7 @@
 const char help[] = "Coverage tests for TAOTERMSHELL";
 
 #include <petsctaoterm.h>
+#include <petscviewer.h>
 
 static PetscErrorCode TaoTermCreateSolutionVec_Test(TaoTerm term, Vec *solution)
 {

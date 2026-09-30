@@ -22,6 +22,7 @@ Reference: L. Shampine and S. Thompson, "Event Location for Ordinary Differentia
            http://www.radford.edu/~thompson/webddes/eventsweb.pdf
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
 #include <petscdmda.h>
 #include <petscts.h>
 /*

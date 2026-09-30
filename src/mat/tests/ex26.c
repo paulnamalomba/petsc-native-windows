@@ -1,5 +1,6 @@
 static char help[] = "Tests MatGetRowIJ for SeqAIJ, SeqBAIJ and SeqSBAIJ\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 PetscErrorCode DumpCSR(Mat A, PetscInt shift, PetscBool symmetric, PetscBool compressed)

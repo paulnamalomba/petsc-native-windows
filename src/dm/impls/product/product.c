@@ -1,4 +1,5 @@
 #include <petsc/private/dmproductimpl.h>
+#include <petscviewer.h>
 
 static PetscErrorCode DMDestroy_Product(DM dm)
 {

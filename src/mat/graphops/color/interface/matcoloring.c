@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/matimpl.h> /*I "petscmat.h"  I*/
 
 PetscFunctionList MatColoringList              = NULL;
@@ -366,7 +368,7 @@ PetscErrorCode MatColoringApply(MatColoring mc, ISColoring *coloring)
 
   /* view */
   PetscCall(PetscOptionsCreateViewer(PetscObjectComm((PetscObject)mc), ((PetscObject)mc)->options, ((PetscObject)mc)->prefix, "-mat_coloring_view", &viewer, &format, &flg));
-  if (flg && !PetscPreLoadingOn) {
+  if (flg) {
     PetscCall(PetscViewerPushFormat(viewer, format));
     PetscCall(MatColoringView(mc, viewer));
     PetscCall(MatGetSize(mc->mat, NULL, &nc));

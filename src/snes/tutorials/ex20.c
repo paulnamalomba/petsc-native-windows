@@ -2,6 +2,7 @@ static char help[] = "Poisson Problem with finite elements.\n\
 This example supports automatic convergence estimation for multilevel solvers\n\
 and solver adaptivity.\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

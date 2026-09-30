@@ -6,6 +6,8 @@
 /*
      Defines the data structure for the base matrix type (SeqAIJ)
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h> /*I "petscmat.h" I*/
 
 /*

@@ -1,5 +1,6 @@
 static const char help[] = "Tests PCASMGetSubKSP() ordering and reused submatrices across a change of operator.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

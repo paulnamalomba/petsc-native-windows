@@ -1,4 +1,5 @@
 #include <petsc/private/tshistoryimpl.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 /* these two functions have been stolen from bdf.c */

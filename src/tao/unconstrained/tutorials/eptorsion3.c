@@ -26,6 +26,7 @@
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
 
+#include <petscoptions.h>
 #include <petsctao.h>
 
 static char help[] = "Demonstrates use of the TAO package to solve \n\

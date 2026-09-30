@@ -1,5 +1,6 @@
 static char help[] = "Test DMStagRestrictSimple()\n\n";
 
+#include <petscoptions.h>
 #include <petscdmstag.h>
 
 int main(int argc, char **argv)

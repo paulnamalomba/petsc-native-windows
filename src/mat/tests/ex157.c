@@ -1,5 +1,6 @@
 static char help[] = "This program illustrates the use of PETSc-fftw interface for parallel real DFT\n";
 #include <petscmat.h>
+#include <petscviewer.h>
 #include <fftw3-mpi.h>
 int main(int argc, char **args)
 {

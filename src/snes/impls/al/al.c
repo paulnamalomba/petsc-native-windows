@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/snes/impls/al/alimpl.h> /*I "petscsnes.h" I*/
 
 /*

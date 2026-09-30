@@ -1,5 +1,7 @@
 static char help[] = "Tests the use of MatSolveTranspose().\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

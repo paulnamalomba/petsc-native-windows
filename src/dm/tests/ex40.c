@@ -1,5 +1,7 @@
 static char help[] = "Tests mirror boundary conditions in 2-d.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "petscsf.h"
 static char help[] = "Test CGNS writing output with isoperiodic boundaries\n\n";
 // Also tests DMSetCoordinateDisc() for isoperiodic boundaries and projection = true

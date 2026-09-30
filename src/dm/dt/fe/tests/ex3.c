@@ -4,6 +4,7 @@ static const char help[] = "Tests for determining whether a new finite element w
   Use -interpolation_view and -l2_projection_view to look at the interpolants.
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscfe.h>
 #include <petscds.h>

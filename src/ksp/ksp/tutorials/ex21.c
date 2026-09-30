@@ -1,5 +1,6 @@
 static char help[] = "Solves a RBF kernel matrix with KSP and PCH2OPUS.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 typedef struct {

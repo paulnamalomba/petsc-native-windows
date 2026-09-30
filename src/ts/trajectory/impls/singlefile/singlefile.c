@@ -1,4 +1,5 @@
 #include <petsc/private/tsimpl.h> /*I "petscts.h"  I*/
+#include <petscviewer.h>
 
 typedef struct {
   PetscViewer viewer;

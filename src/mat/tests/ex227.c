@@ -1,5 +1,6 @@
 static char help[] = "Test MatNullSpaceTest() with options prefixes.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

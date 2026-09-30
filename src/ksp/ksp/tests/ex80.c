@@ -1,6 +1,7 @@
 static char help[] = "Test the Fischer-3 initial guess routine.\n\n";
 
 #include <petscksp.h>
+#include <petscviewer.h>
 
 #define SIZE 3
 

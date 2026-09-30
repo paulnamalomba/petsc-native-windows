@@ -1,4 +1,5 @@
 #include <petsc/private/drawimpl.h> /*I "petscdraw.h" I*/
+#include <petscoptions.h>
 
 /*@
   PetscDrawTriangle - draws a triangle  onto a drawable.

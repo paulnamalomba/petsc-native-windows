@@ -31,6 +31,8 @@ discretization error) while 2 is not conservative (i.e., scales with temporal di
 
 F*/
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 typedef enum {

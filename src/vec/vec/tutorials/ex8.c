@@ -7,6 +7,7 @@ static char help[] = "Demonstrates using a local ordering to set values into a p
      petscviewer.h - viewers
 */
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

@@ -1,6 +1,8 @@
 /*
     Defines the multigrid preconditioner interface.
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcmgimpl.h> /*I "petscksp.h" I*/
 #include <petsc/private/kspimpl.h>
 #include <petscdm.h>

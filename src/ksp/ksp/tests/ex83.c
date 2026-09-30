@@ -1,6 +1,7 @@
 static char help[] = "Test the Fischer-1 initial guess routine with VECNEST.\n\n";
 
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

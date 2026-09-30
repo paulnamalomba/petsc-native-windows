@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/dm/impls/composite/packimpl.h> /*I  "petscdmcomposite.h"  I*/
 
 static PetscErrorCode DMCreateMatrix_Composite_Nest(DM dm, Mat *J)

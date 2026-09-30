@@ -1,5 +1,6 @@
 /* function subroutines used by water.c */
 
+#include <petscoptions.h>
 #include "water.h"
 #include <petscdmnetwork.h>
 

@@ -1,4 +1,5 @@
 #include <petsc/private/sfimpl.h>
+#include <petscoptions.h>
 
 static PetscBool PetscSFPackageInitialized = PETSC_FALSE;
 

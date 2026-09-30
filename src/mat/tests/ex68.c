@@ -1,6 +1,7 @@
 static char help[] = "Tests MatReorderForNonzeroDiagonal().\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

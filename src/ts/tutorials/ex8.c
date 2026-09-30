@@ -9,6 +9,7 @@ static char help[] = "Nonlinear DAE benchmark problems.\n";
      petscviewer.h - viewers               petscpc.h  - preconditioners
      petscksp.h   - linear solvers
 */
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct _Problem *Problem;

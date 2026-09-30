@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "petscsf.h"
 static char help[] = "Simple demonstration of CGNS parallel load-save including data\n\n";
 // As this is a tutorial that is intended to be an easy starting point feel free to make new
