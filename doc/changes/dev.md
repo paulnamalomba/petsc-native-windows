@@ -54,11 +54,15 @@
 ```{rubric} PC:
 ```
 
+- Change interface to `PCPatchSetDiscretisationInfo()` to address subspace DoFs using `IS`s instead of with offsets and block sizes
+
 ```{rubric} KSP:
 ```
 
 ```{rubric} SNES:
 ```
+
+- Change interface to `SNESPatchSetDiscretisationInfo()` to address subspace DoFs using `IS`s instead of with offsets and block sizes
 
 ```{rubric} SNESLineSearch:
 ```
