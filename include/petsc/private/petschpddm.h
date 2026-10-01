@@ -40,7 +40,7 @@ struct PC_HPDDM {
   PetscBool                   deflation;                                    /* aux is the local deflation space? */
   PetscErrorCode (*setup)(Mat, PetscReal, Vec, Vec, PetscReal, IS, void *); /* setup function for the auxiliary matrix */
   void *setup_ctx;                                                          /* context for setup */
-  Vec   scaling;                                                            /* user PoU in the ordering of is */
+  Vec   scaling;                                                            /* user-provided scaling in the ordering of is */
 };
 
 struct KSP_HPDDM {
