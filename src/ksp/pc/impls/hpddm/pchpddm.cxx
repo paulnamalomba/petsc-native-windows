@@ -3247,7 +3247,7 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
 }
 
 /*@
-  PCHPDDMSetDeflationMat - Sets the deflation space used to assemble a coarser operator, and optionally a diagonal partition of unity for it.
+  PCHPDDMSetDeflationMat - Sets the deflation space used to assemble a coarser operator, and optionally a diagonal scaling for it.
 
   Logically Collective; `scaling` must be `NULL` on all processes or on none
 
@@ -3255,7 +3255,7 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
 + pc      - preconditioner context
 . is      - index set of the local deflation matrix
 . U       - deflation sequential matrix stored as a `MATSEQDENSE`
-- scaling - local diagonal weights, or `NULL` to use the default partition of unity
+- scaling - local diagonal scaling, or `NULL` to use the default scaling
 
   Level: advanced
 
@@ -3270,18 +3270,18 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
   problems are not supported, and `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the supplied
   overlap.
 
-  With local unweighted deflation vectors $U_i$ and $D_i = \text{diag}(scaling)$, the global coarse
-  basis is $Z = [R_i^T D_i U_i]$; do not preweight $U_i$. By default, a fine-level `PCASM` uses
-  `PC_ASM_WEIGHTED`, and the same $D_i$ then weights the fine correction
+  With local unscaled deflation vectors $U_i$ and $D_i = \text{diag}(scaling)$, the global coarse
+  basis is $Z = [R_i^T D_i U_i]$; do not prescale $U_i$. By default, a fine-level `PCASM` uses
+  `PC_ASM_WEIGHTED`, and the same $D_i$ then scales the fine correction
   $\sum_i R_i^T D_i A_i^{-1} R_i$ through `PCASMWeightedSetScaling()`, which requires one local
   subdomain per process. With any other fine-level configuration, for example
   `-pc_hpddm_levels_1_pc_asm_type basic` or a `-pc_hpddm_levels_1_pc_type` other than `asm`,
-  $D_i$ only weights the coarse space.
+  $D_i$ only scales the coarse space.
 
-  PETSc uses the supplied weights verbatim and does not check the partition-of-unity property.
+  PETSc uses the supplied scaling verbatim and does not check that $\sum_i R_i^T D_i R_i = I$.
   $D_i$ must vanish on every subdomain row that the operator couples to a row outside the
   subdomain, so that $A R_i^T D_i$ has no nonzero rows outside it. For finite elements, make the
-  partition of unity vanish on the elements touching the artificial boundary. The local
+  scaling vanish on the elements touching the artificial boundary. The local
   coarse-operator assembly relies on this condition, which is not checked here.
   `PCApplyTranspose()` and `PCMatApplyTranspose()` with a `scaling` are currently unsupported
   for complex scalars.
