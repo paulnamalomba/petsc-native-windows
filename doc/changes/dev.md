@@ -70,7 +70,7 @@
 ```{rubric} PC:
 ```
 
-- Change `PCHPDDMSetDeflationMat()` to take an optional `Vec` of user-supplied partition-of-unity weights for the custom coarse space. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the weights are forwarded accordingly.
+- Change `PCHPDDMSetDeflationMat()` to take an optional `Vec` of user-supplied scaling for the custom coarse space. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the weights are forwarded accordingly.
 
 ```{rubric} KSP:
 ```

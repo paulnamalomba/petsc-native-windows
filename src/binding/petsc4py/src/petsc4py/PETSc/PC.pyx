@@ -2836,7 +2836,7 @@ cdef class PC(Object):
         U
             The deflation sequential matrix of type `Mat.Type.DENSE`.
         scaling
-            The local partition-of-unity weights, in the ordering of ``uis``,
+            The weights to use in the coarse correction, in the ordering of ``uis``,
             or `None` to use the default partition of unity.
 
         See Also
