@@ -1,6 +1,33 @@
-static const char help[] = "Tests custom PCHPDDM deflation and ASM scaling against the explicit two-level operator.\n\n";
+static const char help[] = "Tests PCHPDDM with a custom deflation space and partition of unity against the explicit two-level operator.\n\n";
+
+/*
+  Setup, on two processes:
+  - A is an 8 x 8 tridiagonal matrix, complex in complex builds, with 4 rows per process.
+  - The overlapping subdomain of process p holds the global rows 2p, ..., 2p + 5, see SubdomainRow().
+  - The partition of unity D_p is given by Weight() and the single deflation vector U_p by Mode().
+    With -empty_rank0, process 0 supplies no deflation vector.
+  - ModifySubmatrices() shifts the local matrices of the fine-level PCASM, as optimized transmission
+    conditions would, so that the local solvers A_p differ from the restrictions of A.
+
+  After each setup, PCApply() and PCMatApply() must match the reference operator
+    T = Q + B (I - A Q)    with -pc_hpddm_coarse_correction deflated,
+    T = B + Q (I - A B)    with -pc_hpddm_coarse_correction deflated_reversed,
+  where Q = Z (Z^H A Z)^{-1} Z^H is the coarse correction with Z = [R_p^T D_p U_p], and B is the
+  fine-level correction, see FineLevelType.
+*/
 
 #include <petscksp.h>
+
+#define N_GLOBAL    8 // number of unknowns
+#define N_LOCAL     4 // rows owned by each process
+#define N_SUBDOMAIN 6 // rows of each overlapping subdomain
+
+// fine-level corrections that the reference operator can reproduce
+typedef enum {
+  FINE_ASM_WEIGHTED, // default with a custom scaling: B = sum_p R_p^T D_p A_p^{-1} R_p
+  FINE_ASM_BASIC,    // -pc_hpddm_levels_1_pc_asm_type basic: B = sum_p R_p^T A_p^{-1} R_p
+  FINE_JACOBI        // -pc_hpddm_levels_1_pc_type jacobi: B = diag(A)^{-1}
+} FineLevelType;
 
 static PetscScalar TestScalar(PetscReal real, PetscReal imag)
 {
@@ -12,16 +39,42 @@ static PetscScalar TestScalar(PetscReal real, PetscReal imag)
 #endif
 }
 
-static PetscScalar Weight(PetscInt rank, PetscInt row)
+// global row of the i-th row of the overlapping subdomain of process p: rows 0-5 for process 0, rows 2-7 for process 1
+static PetscInt SubdomainRow(PetscMPIInt p, PetscInt i)
 {
-  const PetscReal first[] = {1.0, 1.0, 1.0, 0.65, 0.35, 0.0, 0.0, 0.0};
-
-  return rank ? 1.0 - first[row] : first[row];
+  return 2 * p + i;
 }
 
-static PetscScalar Mode(PetscInt rank, PetscInt row)
+/*
+  Partition-of-unity weight of process p at a global row. Process 0 weights its rows 0-5 by 1, 1, 1, 0.65, 0.35, 0,
+  and process 1 weights its rows 2-7 by the complements 0, 0.35, 0.65, 1, 1, 1. The weights sum to one on every row
+  and vanish outside each subdomain. They also vanish on the subdomain row that A couples to the outside (row 5 for
+  process 0, row 2 for process 1), as PCHPDDMSetDeflationMatScaling() requires.
+*/
+static PetscScalar Weight(PetscMPIInt p, PetscInt row)
 {
-  return TestScalar(1.0 + 0.15 * row, 0.3 * (rank + 1) - 0.05 * row);
+  const PetscReal process0[N_GLOBAL] = {1.0, 1.0, 1.0, 0.65, 0.35, 0.0, 0.0, 0.0};
+
+  return p == 0 ? process0[row] : 1.0 - process0[row];
+}
+
+// entry of the deflation vector of process p at a global row; complex in complex builds, which exercises conjugation
+static PetscScalar Mode(PetscMPIInt p, PetscInt row)
+{
+  return TestScalar(1.0 + 0.15 * row, 0.3 * (p + 1) - 0.05 * row);
+}
+
+// shift applied to every fine-level local matrix by ModifySubmatrices(), and by the reference operator
+static PetscScalar LocalShift(void)
+{
+  return TestScalar(0.35, 0.2);
+}
+
+static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], void *ctx)
+{
+  PetscFunctionBeginUser;
+  for (PetscInt i = 0; i < n; ++i) PetscCall(MatShift(sub[i], LocalShift()));
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode CreateOperator(Mat *A)
@@ -29,127 +82,198 @@ static PetscErrorCode CreateOperator(Mat *A)
   PetscInt start, end;
 
   PetscFunctionBeginUser;
-  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, 4, 4, 8, 8, 3, NULL, 2, NULL, A));
+  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, N_LOCAL, N_LOCAL, N_GLOBAL, N_GLOBAL, 3, NULL, 2, NULL, A));
   PetscCall(MatGetOwnershipRange(*A, &start, &end));
   for (PetscInt row = start; row < end; ++row) {
     PetscCall(MatSetValue(*A, row, row, TestScalar(3.0 + 0.1 * row, 0.25), INSERT_VALUES));
-    if (row) PetscCall(MatSetValue(*A, row, row - 1, TestScalar(-0.9, 0.07), INSERT_VALUES));
-    if (row < 7) PetscCall(MatSetValue(*A, row, row + 1, TestScalar(-0.3, -0.12), INSERT_VALUES));
+    if (row > 0) PetscCall(MatSetValue(*A, row, row - 1, TestScalar(-0.9, 0.07), INSERT_VALUES));
+    if (row < N_GLOBAL - 1) PetscCall(MatSetValue(*A, row, row + 1, TestScalar(-0.3, -0.12), INSERT_VALUES));
   }
   PetscCall(MatAssemblyBegin(*A, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(*A, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], void *ctx)
-{
-  PetscFunctionBeginUser;
-  for (PetscInt i = 0; i < n; ++i) PetscCall(MatShift(sub[i], TestScalar(0.35, 0.2)));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
+/*
+  Inputs of PCHPDDMSetDeflationMat() and PCHPDDMSetDeflationMatScaling(), as a user would build them: the subdomain IS,
+  the local deflation matrix U (one column, or none on process 0 with -empty_rank0), and the local weights D. All three
+  list the subdomain rows in reverse order, unlike the sorted order used internally by PCASM, so that the test also
+  checks how PCHPDDM reorders the weights.
+*/
 static PetscErrorCode CreateDeflation(PetscBool empty_rank0, IS *is, Mat *U, Vec *D)
 {
   PetscMPIInt  rank;
-  PetscInt     idx[6];
+  PetscInt     rows[N_SUBDOMAIN], nmodes;
   PetscScalar *u, *d;
 
   PetscFunctionBeginUser;
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD, &rank));
-  /* Deliberately use the reverse of PCASM's final sorted ordering. */
-  for (PetscInt i = 0; i < 6; ++i) idx[i] = 2 * rank + 5 - i;
-  PetscCall(ISCreateGeneral(PETSC_COMM_SELF, 6, idx, PETSC_COPY_VALUES, is));
-  PetscCall(MatCreateSeqDense(PETSC_COMM_SELF, 6, empty_rank0 && !rank ? 0 : 1, NULL, U));
-  PetscCall(VecCreateSeq(PETSC_COMM_SELF, 6, D));
+  nmodes = (empty_rank0 == PETSC_TRUE && rank == 0) ? 0 : 1; // number of local deflation vectors
+  for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) rows[i] = SubdomainRow(rank, N_SUBDOMAIN - 1 - i);
+  PetscCall(ISCreateGeneral(PETSC_COMM_SELF, N_SUBDOMAIN, rows, PETSC_COPY_VALUES, is));
+  PetscCall(MatCreateSeqDense(PETSC_COMM_SELF, N_SUBDOMAIN, nmodes, NULL, U));
+  PetscCall(VecCreateSeq(PETSC_COMM_SELF, N_SUBDOMAIN, D));
   PetscCall(MatDenseGetArray(*U, &u));
   PetscCall(VecGetArray(*D, &d));
-  for (PetscInt i = 0; i < 6; ++i) {
-    d[i] = Weight(rank, idx[i]);
-    if (!empty_rank0 || rank) u[i] = Mode(rank, idx[i]);
+  for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) {
+    d[i] = Weight(rank, rows[i]);
+    if (nmodes > 0) u[i] = Mode(rank, rows[i]);
   }
   PetscCall(VecRestoreArray(*D, &d));
   PetscCall(MatDenseRestoreArray(*U, &u));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateReference(Mat A, PetscBool empty_rank0, PetscBool reversed, Mat *T)
+/*
+  Fine-level correction B, see FineLevelType. For PCASM, each process adds its term R_p^T [D_p] A_p^{-1} R_p column by
+  column, with A_p the shifted restriction of A to its subdomain, factored with LU like the PCASM local solver.
+*/
+static PetscErrorCode CreateFineReference(Mat A, FineLevelType fine, Mat *B)
 {
-  Mat                B, Z, R, AZ, E, Q, AB, QE, *sub;
+  Mat               *sub;
   KSP                ksp;
-  PC                 subpc;
+  PC                 lu;
   Vec                x, y;
   IS                 is;
   PetscMPIInt        rank;
-  PetscInt           idx[6], start, end;
+  PetscInt           rows[N_SUBDOMAIN], start, end;
   const PetscScalar *values;
-  PetscScalar        column[6];
+  PetscScalar        column[N_SUBDOMAIN];
 
   PetscFunctionBeginUser;
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD, &rank));
-  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, 4, 4, 8, 8, 4, NULL, 4, NULL, &B));
-  for (PetscInt i = 0; i < 6; ++i) idx[i] = 2 * rank + i;
-  PetscCall(ISCreateGeneral(PETSC_COMM_SELF, 6, idx, PETSC_COPY_VALUES, &is));
-  PetscCall(MatCreateSubMatrices(A, 1, &is, &is, MAT_INITIAL_MATRIX, &sub));
-  PetscCall(MatShift(sub[0], TestScalar(0.35, 0.2)));
-  PetscCall(KSPCreate(PETSC_COMM_SELF, &ksp));
-  PetscCall(KSPSetType(ksp, KSPPREONLY));
-  PetscCall(KSPSetOperators(ksp, sub[0], sub[0]));
-  PetscCall(KSPGetPC(ksp, &subpc));
-  PetscCall(PCSetType(subpc, PCLU));
-  PetscCall(MatCreateVecs(sub[0], &x, &y));
-  for (PetscInt j = 0; j < 6; ++j) {
-    PetscCall(VecSet(x, 0.0));
-    PetscCall(VecSetValue(x, j, 1.0, INSERT_VALUES));
-    PetscCall(VecAssemblyBegin(x));
-    PetscCall(VecAssemblyEnd(x));
-    PetscCall(KSPSolve(ksp, x, y));
-    PetscCall(VecGetArrayRead(y, &values));
-    for (PetscInt i = 0; i < 6; ++i) column[i] = Weight(rank, idx[i]) * values[i];
-    PetscCall(MatSetValues(B, 6, idx, 1, idx + j, column, ADD_VALUES));
-    PetscCall(VecRestoreArrayRead(y, &values));
+  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, N_LOCAL, N_LOCAL, N_GLOBAL, N_GLOBAL, N_LOCAL, NULL, N_LOCAL, NULL, B)); // rows may be dense
+  if (fine == FINE_JACOBI) {
+    PetscCall(MatCreateVecs(A, NULL, &x));
+    PetscCall(MatGetDiagonal(A, x));
+    PetscCall(MatGetOwnershipRange(A, &start, &end));
+    PetscCall(VecGetArrayRead(x, &values));
+    for (PetscInt row = start; row < end; ++row) PetscCall(MatSetValue(*B, row, row, (PetscScalar)1.0 / values[row - start], INSERT_VALUES));
+    PetscCall(VecRestoreArrayRead(x, &values));
+    PetscCall(VecDestroy(&x));
+  } else {
+    for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) rows[i] = SubdomainRow(rank, i);
+    PetscCall(ISCreateGeneral(PETSC_COMM_SELF, N_SUBDOMAIN, rows, PETSC_COPY_VALUES, &is));
+    PetscCall(MatCreateSubMatrices(A, 1, &is, &is, MAT_INITIAL_MATRIX, &sub));
+    PetscCall(MatShift(sub[0], LocalShift()));
+    PetscCall(KSPCreate(PETSC_COMM_SELF, &ksp));
+    PetscCall(KSPSetType(ksp, KSPPREONLY));
+    PetscCall(KSPSetOperators(ksp, sub[0], sub[0]));
+    PetscCall(KSPGetPC(ksp, &lu));
+    PetscCall(PCSetType(lu, PCLU));
+    PetscCall(MatCreateVecs(sub[0], &x, &y));
+    for (PetscInt j = 0; j < N_SUBDOMAIN; ++j) { // column j of A_p^{-1}, scaled by D_p for PC_ASM_WEIGHTED
+      PetscCall(VecSet(x, 0.0));
+      PetscCall(VecSetValue(x, j, 1.0, INSERT_VALUES));
+      PetscCall(VecAssemblyBegin(x));
+      PetscCall(VecAssemblyEnd(x));
+      PetscCall(KSPSolve(ksp, x, y));
+      PetscCall(VecGetArrayRead(y, &values));
+      for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) column[i] = (fine == FINE_ASM_WEIGHTED ? Weight(rank, rows[i]) : (PetscScalar)1.0) * values[i];
+      PetscCall(MatSetValues(*B, N_SUBDOMAIN, rows, 1, rows + j, column, ADD_VALUES));
+      PetscCall(VecRestoreArrayRead(y, &values));
+    }
+    PetscCall(VecDestroy(&x));
+    PetscCall(VecDestroy(&y));
+    PetscCall(KSPDestroy(&ksp));
+    PetscCall(MatDestroySubMatrices(1, &sub));
+    PetscCall(ISDestroy(&is));
   }
-  PetscCall(VecDestroy(&x));
-  PetscCall(VecDestroy(&y));
-  PetscCall(KSPDestroy(&ksp));
-  PetscCall(MatDestroySubMatrices(1, &sub));
-  PetscCall(ISDestroy(&is));
-  PetscCall(MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, 4, empty_rank0 && !rank ? 0 : 1, 8, empty_rank0 ? 1 : 2, 1, NULL, 1, NULL, &Z));
+  PetscCall(MatAssemblyBegin(*B, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(*B, MAT_FINAL_ASSEMBLY));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Coarse correction Q = Z (Z^H A Z)^{-1} Z^H. Column p of Z is the weighted deflation vector R_p^T D_p U_p of process p,
+  which is zero outside subdomain p because Weight() is. With -empty_rank0, Z only has the column of process 1.
+*/
+static PetscErrorCode CreateCoarseReference(Mat A, PetscBool empty_rank0, Mat *Q)
+{
+  Mat         Z, Zh, AZ, E, EinvZh;
+  KSP         ksp;
+  PC          lu;
+  PetscMPIInt rank, first_process = empty_rank0 == PETSC_TRUE ? 1 : 0; // first process with a deflation vector
+  PetscInt    start, end;
+
+  PetscFunctionBeginUser;
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD, &rank));
+  PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, N_LOCAL, rank < first_process ? 0 : 1, N_GLOBAL, 2 - first_process, 1, NULL, 1, NULL, &Z));
   PetscCall(MatGetOwnershipRange(Z, &start, &end));
-  for (PetscInt i = start; i < end; ++i)
-    for (PetscInt j = empty_rank0 ? 1 : 0; j < 2; ++j) PetscCall(MatSetValue(Z, i, j - (empty_rank0 ? 1 : 0), Weight(j, i) * Mode(j, i), INSERT_VALUES));
+  for (PetscInt row = start; row < end; ++row)
+    for (PetscMPIInt p = first_process; p < 2; ++p) PetscCall(MatSetValue(Z, row, p - first_process, Weight(p, row) * Mode(p, row), INSERT_VALUES));
   PetscCall(MatAssemblyBegin(Z, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Z, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatHermitianTranspose(Z, MAT_INITIAL_MATRIX, &R));
+  PetscCall(MatHermitianTranspose(Z, MAT_INITIAL_MATRIX, &Zh));
   PetscCall(MatMatMult(A, Z, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &AZ));
-  PetscCall(MatMatMult(R, AZ, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &E));
-  PetscCall(MatConvert(R, MATDENSE, MAT_INPLACE_MATRIX, &R));
-  PetscCall(MatDuplicate(R, MAT_DO_NOT_COPY_VALUES, &QE));
+  PetscCall(MatMatMult(Zh, AZ, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &E));
+  PetscCall(MatConvert(Zh, MATDENSE, MAT_INPLACE_MATRIX, &Zh)); // KSPMatSolve() needs dense right-hand sides
+  PetscCall(MatDuplicate(Zh, MAT_DO_NOT_COPY_VALUES, &EinvZh));
   PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
   PetscCall(KSPSetType(ksp, KSPPREONLY));
   PetscCall(KSPSetOperators(ksp, E, E));
-  PetscCall(KSPGetPC(ksp, &subpc));
-  PetscCall(PCSetType(subpc, PCLU));
-  PetscCall(PCFactorSetMatSolverType(subpc, MATSOLVERMUMPS));
-  PetscCall(KSPMatSolve(ksp, R, QE));
-  PetscCall(MatMatMult(Z, QE, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &Q));
-  /* Deflated: Q + B (I - A Q). Reversed: B + Q (I - A B). */
-  PetscCall(MatMatMult(A, reversed ? B : Q, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &AB));
-  PetscCall(MatScale(AB, -1.0));
-  PetscCall(MatShift(AB, 1.0));
-  PetscCall(MatMatMult(reversed ? Q : B, AB, MAT_INITIAL_MATRIX, PETSC_DETERMINE, T));
-  PetscCall(MatConvert(B, MATDENSE, MAT_INPLACE_MATRIX, &B));
-  PetscCall(MatAXPY(*T, 1.0, reversed ? B : Q, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(KSPGetPC(ksp, &lu));
+  PetscCall(PCSetType(lu, PCLU));
+  PetscCall(PCFactorSetMatSolverType(lu, MATSOLVERMUMPS));
+  PetscCall(KSPMatSolve(ksp, Zh, EinvZh));
+  PetscCall(MatMatMult(Z, EinvZh, MAT_INITIAL_MATRIX, PETSC_DETERMINE, Q));
   PetscCall(KSPDestroy(&ksp));
-  PetscCall(MatDestroy(&B));
   PetscCall(MatDestroy(&Z));
-  PetscCall(MatDestroy(&R));
+  PetscCall(MatDestroy(&Zh));
   PetscCall(MatDestroy(&AZ));
   PetscCall(MatDestroy(&E));
+  PetscCall(MatDestroy(&EinvZh));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Reference two-level operator T = first + second (I - A first), see the description at the top of this file: the
+  deflated correction applies the coarse level first, the reversed one applies the fine level first.
+*/
+static PetscErrorCode CreateReference(Mat A, PetscBool empty_rank0, FineLevelType fine, PCHPDDMCoarseCorrectionType correction, Mat *T)
+{
+  Mat B, Q, first, second, IA;
+
+  PetscFunctionBeginUser;
+  PetscCall(CreateFineReference(A, fine, &B));
+  PetscCall(CreateCoarseReference(A, empty_rank0, &Q));
+  if (correction == PC_HPDDM_COARSE_CORRECTION_DEFLATED_REVERSED) {
+    first  = B;
+    second = Q;
+  } else {
+    first  = Q;
+    second = B;
+  }
+  PetscCall(MatMatMult(A, first, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &IA));
+  PetscCall(MatScale(IA, -1.0));
+  PetscCall(MatShift(IA, 1.0)); // I - A first
+  PetscCall(MatMatMult(second, IA, MAT_INITIAL_MATRIX, PETSC_DETERMINE, T));
+  PetscCall(MatConvert(B, MATDENSE, MAT_INPLACE_MATRIX, &B)); // T is dense, and MatAXPY() needs B in the same format; in place, so first still refers to B
+  PetscCall(MatAXPY(*T, 1.0, first, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(MatDestroy(&B));
   PetscCall(MatDestroy(&Q));
-  PetscCall(MatDestroy(&AB));
-  PetscCall(MatDestroy(&QE));
+  PetscCall(MatDestroy(&IA));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Fine-level correction that PCHPDDM builds from the same options, which the test blocks set on the command line. Only
+  the corrections of FineLevelType have a reference.
+*/
+static PetscErrorCode GetFineLevelType(FineLevelType *fine)
+{
+  char      type[256] = PCASM;
+  PCASMType asm_type  = PC_ASM_WEIGHTED; // default selected by PCHPDDM when a custom scaling is supplied
+  PetscBool asm_pc, jacobi;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-pc_hpddm_levels_1_pc_type", type, sizeof(type), NULL));
+  PetscCall(PetscOptionsGetEnum(NULL, NULL, "-pc_hpddm_levels_1_pc_asm_type", PCASMTypes, (PetscEnum *)&asm_type, NULL));
+  PetscCall(PetscStrcmp(type, PCASM, &asm_pc));
+  PetscCall(PetscStrcmp(type, PCJACOBI, &jacobi));
+  PetscCheck(jacobi == PETSC_TRUE || (asm_pc == PETSC_TRUE && (asm_type == PC_ASM_WEIGHTED || asm_type == PC_ASM_BASIC)), PETSC_COMM_WORLD, PETSC_ERR_SUP, "No reference for this fine-level PC, use PCJACOBI or PCASM of type PC_ASM_WEIGHTED or PC_ASM_BASIC");
+  if (jacobi == PETSC_TRUE) *fine = FINE_JACOBI;
+  else *fine = asm_type == PC_ASM_WEIGHTED ? FINE_ASM_WEIGHTED : FINE_ASM_BASIC;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -161,19 +285,24 @@ static PetscErrorCode CheckVector(Vec actual, Vec expected)
   PetscCall(VecNorm(expected, NORM_INFINITY, &norm));
   PetscCall(VecAXPY(expected, -1.0, actual));
   PetscCall(VecNorm(expected, NORM_INFINITY, &error));
-  PetscCheck(error <= 1000.0 * PETSC_MACHINE_EPSILON * PetscMax(1.0, norm), PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Weighted HPDDM error %g exceeds tolerance", (double)error);
+  PetscCheck(error <= 1000.0 * PETSC_MACHINE_EPSILON * PetscMax(1.0, norm), PETSC_COMM_WORLD, PETSC_ERR_PLIB, "PCHPDDM differs from the reference operator by %g", (double)error);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CheckApplications(PC pc, Mat B)
+/*
+  Compares the PC with the reference operator T: PCApply() on every unit vector, and PCMatApply() on a block of three
+  vectors. Real builds also check PCApplyTranspose() and PCMatApplyTranspose(), which complex builds do not support with
+  a custom scaling.
+*/
+static PetscErrorCode CheckApplications(PC pc, Mat T)
 {
   Vec      x, y, expected;
   PetscInt N, m, start, end;
 
   PetscFunctionBeginUser;
-  PetscCall(MatGetSize(B, &N, NULL));
-  PetscCall(MatGetLocalSize(B, &m, NULL));
-  PetscCall(MatCreateVecs(B, &x, &y));
+  PetscCall(MatGetSize(T, &N, NULL));
+  PetscCall(MatGetLocalSize(T, &m, NULL));
+  PetscCall(MatCreateVecs(T, &x, &y));
   PetscCall(VecDuplicate(y, &expected));
   PetscCall(VecGetOwnershipRange(x, &start, &end));
   for (PetscInt j = 0; j < N; ++j) {
@@ -182,11 +311,11 @@ static PetscErrorCode CheckApplications(PC pc, Mat B)
     PetscCall(VecAssemblyBegin(x));
     PetscCall(VecAssemblyEnd(x));
     PetscCall(PCApply(pc, x, y));
-    PetscCall(MatMult(B, x, expected));
+    PetscCall(MatMult(T, x, expected));
     PetscCall(CheckVector(y, expected));
 #if !PetscDefined(USE_COMPLEX)
     PetscCall(PCApplyTranspose(pc, x, y));
-    PetscCall(MatMultTranspose(B, x, expected));
+    PetscCall(MatMultTranspose(T, x, expected));
     PetscCall(CheckVector(y, expected));
 #endif
   }
@@ -195,7 +324,7 @@ static PetscErrorCode CheckApplications(PC pc, Mat B)
 
     PetscCall(MatCreateDense(PETSC_COMM_WORLD, m, PETSC_DECIDE, N, 3, NULL, &X));
     PetscCall(MatDuplicate(X, MAT_DO_NOT_COPY_VALUES, &Y));
-    for (PetscInt j = 0; j < 3; ++j) {
+    for (PetscInt j = 0; j < 3; ++j) { // arbitrary right-hand sides
       Vec          column;
       PetscScalar *values;
 
@@ -213,8 +342,8 @@ static PetscErrorCode CheckApplications(PC pc, Mat B)
 
         PetscCall(MatDenseGetColumnVecRead(X, j, &xc));
         PetscCall(MatDenseGetColumnVecRead(Y, j, &yc));
-        if (transpose) PetscCall(MatMultTranspose(B, xc, expected));
-        else PetscCall(MatMult(B, xc, expected));
+        if (transpose) PetscCall(MatMultTranspose(T, xc, expected));
+        else PetscCall(MatMult(T, xc, expected));
         PetscCall(CheckVector(yc, expected));
         PetscCall(MatDenseRestoreColumnVecRead(Y, j, &yc));
         PetscCall(MatDenseRestoreColumnVecRead(X, j, &xc));
@@ -237,36 +366,46 @@ int main(int argc, char **argv)
   Vec                         D;
   PetscMPIInt                 size;
   PetscBool                   empty_rank0 = PETSC_FALSE;
+  FineLevelType               fine        = FINE_ASM_WEIGHTED;
   PCHPDDMCoarseCorrectionType correction;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, NULL, help));
-  PetscCall(PetscOptionsGetBool(NULL, NULL, "-empty_rank0", &empty_rank0, NULL));
   PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
   PetscCheck(size == 2, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "Run with two processes");
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-empty_rank0", &empty_rank0, NULL));
+  PetscCall(GetFineLevelType(&fine));
   PetscCall(CreateOperator(&A));
   PetscCall(PCCreate(PETSC_COMM_WORLD, &pc));
   PetscCall(PCSetType(pc, PCHPDDM));
+  /*
+    Three setups of the same PC, each checked against the reference operator:
+    0. initial setup, after removing and reinstalling the scaling, which must leave no trace;
+    1. new operator values with the same deflation space and scaling: both levels are rebuilt, and the fine-level
+       PCASMType selected at the initial setup must persist;
+    2. PCReset() discards the deflation space and scaling, which are then installed again.
+  */
   for (PetscInt pass = 0; pass < 3; ++pass) {
-    if (pass != 1) {
-      if (pass) PetscCall(PCReset(pc));
+    if (pass == 1) PetscCall(MatScale(A, 1.1));
+    else {
+      if (pass == 2) PetscCall(PCReset(pc));
       PetscCall(CreateDeflation(empty_rank0, &is, &U, &D));
       PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
       PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
-      if (!pass) {
+      if (pass == 0) {
         PetscCall(PCHPDDMSetDeflationMatScaling(pc, NULL));
         PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
       }
-      PetscCall(VecDestroy(&D)); /* PC retains the vector, independently of the caller. */
+      PetscCall(VecDestroy(&D)); // the PC keeps its own reference
       PetscCall(ISDestroy(&is));
       PetscCall(MatDestroy(&U));
-    } else PetscCall(MatScale(A, 1.1)); /* rebuild coarse and fine operators with the same PoU */
+    }
     PetscCall(PCSetOperators(pc, A, A));
     PetscCall(PCSetModifySubMatrices(pc, ModifySubmatrices, NULL));
     PetscCall(PCSetFromOptions(pc));
     PetscCall(PCSetUp(pc));
     PetscCall(PCHPDDMGetCoarseCorrectionType(pc, &correction));
-    PetscCall(CreateReference(A, empty_rank0, (PetscBool)(correction == PC_HPDDM_COARSE_CORRECTION_DEFLATED_REVERSED), &T));
+    PetscCall(CreateReference(A, empty_rank0, fine, correction, &T));
     PetscCall(CheckApplications(pc, T));
     PetscCall(MatDestroy(&T));
   }
@@ -278,10 +417,25 @@ int main(int argc, char **argv)
 
 /*TEST
 
-  test:
+  testset:
+    # every case runs both coarse corrections, with and without a deflation vector on process 0
     nsize: 2
     requires: hpddm slepc mumps defined(PETSC_HAVE_DYNAMIC_LIBRARIES) defined(PETSC_USE_SHARED_LIBRARIES)
-    args: -pc_hpddm_define_subdomains true -pc_hpddm_coarse_correction {{deflated deflated_reversed}} -pc_hpddm_levels_1_sub_pc_type lu -pc_hpddm_coarse_mat_type aij -empty_rank0 {{false true}}
+    args: -pc_hpddm_define_subdomains true -pc_hpddm_coarse_correction {{deflated deflated_reversed}} -pc_hpddm_coarse_mat_type aij -empty_rank0 {{false true}}
     output_file: output/empty.out
+    test:
+      # default fine level: PCASM of type PC_ASM_WEIGHTED, weighted by the same partition of unity as the coarse space
+      suffix: weighted
+      args: -pc_hpddm_levels_1_sub_pc_type lu
+    test:
+      # unweighted PCASM: the partition of unity only weights the coarse space
+      # with one subdomain per process, multiplicative composition gives the same operator as additive, but it checks
+      # that the second setup keeps the selected PCASMType instead of reverting to PC_ASM_WEIGHTED
+      suffix: basic
+      args: -pc_hpddm_levels_1_sub_pc_type lu -pc_hpddm_levels_1_pc_asm_type basic -pc_hpddm_levels_1_pc_asm_local_type {{additive multiplicative}}
+    test:
+      # non-PCASM fine level: the partition of unity only weights the coarse space
+      suffix: jacobi
+      args: -pc_hpddm_levels_1_pc_type jacobi
 
 TEST*/
