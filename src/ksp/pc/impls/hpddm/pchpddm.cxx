@@ -1769,11 +1769,8 @@ static PetscErrorCode MatDestroy_Harmonic(Mat);
 
 static PetscErrorCode PCHPDDMComputeDeflationMatScaling_Private(PC_HPDDM *data, IS is, Vec scaling)
 {
-  IS                 perm;
-  const PetscInt    *indices;
-  const PetscScalar *input;
-  PetscScalar       *output;
-  PetscInt           n, m;
+  IS       perm;
+  PetscInt n, m;
 
   PetscFunctionBegin;
   PetscCall(ISGetLocalSize(is, &n));
@@ -1782,15 +1779,7 @@ static PetscErrorCode PCHPDDMComputeDeflationMatScaling_Private(PC_HPDDM *data, 
   PetscCall(ISEmbed(is, data->is, PETSC_TRUE, &perm));
   PetscCall(ISGetLocalSize(perm, &m));
   PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size does not match the supplied scaling vector size");
-  PetscCall(VecGetSize(scaling, &m));
-  PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Scaling vector size differs from the overlapping subdomain size");
-  PetscCall(ISGetIndices(perm, &indices));
-  PetscCall(VecGetArrayRead(data->scaling, &input));
-  PetscCall(VecGetArray(scaling, &output));
-  for (PetscInt i = 0; i < n; ++i) output[i] = input[indices[i]];
-  PetscCall(VecRestoreArray(scaling, &output));
-  PetscCall(VecRestoreArrayRead(data->scaling, &input));
-  PetscCall(ISRestoreIndices(perm, &indices));
+  PetscCall(VecISCopy(data->scaling, perm, SCATTER_REVERSE, scaling));
   PetscCall(ISDestroy(&perm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
