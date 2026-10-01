@@ -2824,7 +2824,7 @@ cdef class PC(Object):
         CHKERR(PCHPDDMGetSTShareSubKSP(self.pc, &cval))
         return toBool(cval)
 
-    def setHPDDMDeflationMat(self, IS uis, Mat U) -> None:
+    def setHPDDMDeflationMat(self, IS uis, Mat U, Vec scaling=None) -> None:
         """Set the deflation space used to assemble a coarse operator.
 
         Logically collective.
@@ -2835,13 +2835,18 @@ cdef class PC(Object):
             The `IS` of the local deflation matrix.
         U
             The deflation sequential matrix of type `Mat.Type.DENSE`.
+        scaling
+            The local partition-of-unity weights, in the ordering of ``uis``,
+            or `None` to use the default partition of unity.
 
         See Also
         --------
         petsc.PCHPDDMSetDeflationMat
 
         """
-        CHKERR(PCHPDDMSetDeflationMat(self.pc, uis.iset, U.mat))
+        cdef PetscVec scaling_vec = NULL
+        if scaling is not None: scaling_vec = scaling.vec
+        CHKERR(PCHPDDMSetDeflationMat(self.pc, uis.iset, U.mat, scaling_vec))
 
     # --- SPAI ---
 

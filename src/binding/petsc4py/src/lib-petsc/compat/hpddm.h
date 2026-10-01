@@ -18,7 +18,7 @@ PetscErrorCode PCHPDDMHasNeumannMat(PETSC_UNUSED PC pc,PETSC_UNUSED PetscBool ha
 PetscErrorCode PCHPDDMSetCoarseCorrectionType(PETSC_UNUSED PC pc,PETSC_UNUSED PCHPDDMCoarseCorrectionType type){PetscHPDDMError;}
 PetscErrorCode PCHPDDMGetCoarseCorrectionType(PETSC_UNUSED PC pc,PETSC_UNUSED PCHPDDMCoarseCorrectionType *type){PetscHPDDMError;}
 PetscErrorCode PCHPDDMGetSTShareSubKSP(PETSC_UNUSED PC pc,PETSC_UNUSED PetscBool *share){PetscHPDDMError;}
-PetscErrorCode PCHPDDMSetDeflationMat(PETSC_UNUSED PC pc,PETSC_UNUSED IS is,PETSC_UNUSED Mat U){PetscHPDDMError;}
+PetscErrorCode PCHPDDMSetDeflationMat(PETSC_UNUSED PC pc,PETSC_UNUSED IS is,PETSC_UNUSED Mat U,PETSC_UNUSED Vec scaling){PetscHPDDMError;}
 
 #undef PetscHPDDMError
 

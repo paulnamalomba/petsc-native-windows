@@ -49,7 +49,7 @@ static PetscInt SubdomainRow(PetscMPIInt p, PetscInt i)
   Partition-of-unity weight of process p at a global row. Process 0 weights its rows 0-5 by 1, 1, 1, 0.65, 0.35, 0,
   and process 1 weights its rows 2-7 by the complements 0, 0.35, 0.65, 1, 1, 1. The weights sum to one on every row
   and vanish outside each subdomain. They also vanish on the subdomain row that A couples to the outside (row 5 for
-  process 0, row 2 for process 1), as PCHPDDMSetDeflationMatScaling() requires.
+  process 0, row 2 for process 1), as PCHPDDMSetDeflationMat() requires.
 */
 static PetscScalar Weight(PetscMPIInt p, PetscInt row)
 {
@@ -95,10 +95,9 @@ static PetscErrorCode CreateOperator(Mat *A)
 }
 
 /*
-  Inputs of PCHPDDMSetDeflationMat() and PCHPDDMSetDeflationMatScaling(), as a user would build them: the subdomain IS,
-  the local deflation matrix U (one column, or none on process 0 with -empty_rank0), and the local weights D. All three
-  list the subdomain rows in reverse order, unlike the sorted order used internally by PCASM, so that the test also
-  checks how PCHPDDM reorders the weights.
+  Inputs of PCHPDDMSetDeflationMat(), as a user would build them: the subdomain IS, the local deflation matrix U (one
+  column, or none on process 0 with -empty_rank0), and the local weights D. All three list the subdomain rows in reverse
+  order, unlike the sorted order used internally by PCASM, so that the test also checks how PCHPDDM reorders the weights.
 */
 static PetscErrorCode CreateDeflation(PetscBool empty_rank0, IS *is, Mat *U, Vec *D)
 {
@@ -380,7 +379,7 @@ int main(int argc, char **argv)
   PetscCall(PCSetType(pc, PCHPDDM));
   /*
     Three setups of the same PC, each checked against the reference operator:
-    0. initial setup, after removing and reinstalling the scaling, which must leave no trace;
+    0. initial setup, after replacing a deflation space without scaling, which must leave no trace;
     1. new operator values with the same deflation space and scaling: both levels are rebuilt, and the fine-level
        PCASMType selected at the initial setup must persist;
     2. PCReset() discards the deflation space and scaling, which are then installed again.
@@ -390,12 +389,8 @@ int main(int argc, char **argv)
     else {
       if (pass == 2) PetscCall(PCReset(pc));
       PetscCall(CreateDeflation(empty_rank0, &is, &U, &D));
-      PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-      PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
-      if (pass == 0) {
-        PetscCall(PCHPDDMSetDeflationMatScaling(pc, NULL));
-        PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
-      }
+      if (pass == 0) PetscCall(PCHPDDMSetDeflationMat(pc, is, U, NULL));
+      PetscCall(PCHPDDMSetDeflationMat(pc, is, U, D));
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
       PetscCall(ISDestroy(&is));
       PetscCall(MatDestroy(&U));
