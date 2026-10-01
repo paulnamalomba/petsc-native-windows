@@ -52,7 +52,6 @@ static PetscErrorCode PCReset_HPDDM(PC pc)
   PetscCall(MatDestroy(&data->B));
   PetscCall(VecDestroy(&data->normal));
   PetscCall(VecDestroy(&data->scaling));
-  PetscCall(ISDestroy(&data->scaling_is));
   data->correction = PC_HPDDM_COARSE_CORRECTION_DEFLATED;
   data->Neumann    = PETSC_BOOL3_UNKNOWN;
   data->deflation  = PETSC_FALSE;
@@ -1780,7 +1779,7 @@ static PetscErrorCode PCHPDDMComputeDeflationMatScaling_Private(PC_HPDDM *data, 
   PetscCall(ISGetLocalSize(is, &n));
   PetscCall(VecGetSize(data->scaling, &m));
   PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size differs from the supplied scaling vector size");
-  PetscCall(ISEmbed(is, data->scaling_is, PETSC_TRUE, &perm));
+  PetscCall(ISEmbed(is, data->is, PETSC_TRUE, &perm));
   PetscCall(ISGetLocalSize(perm, &m));
   PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size does not match the supplied scaling vector size");
   PetscCall(VecGetSize(scaling, &m));
@@ -3288,7 +3287,6 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
   PetscFunctionBegin;
   /* the scaling is tied to the ordering of the IS it was supplied with, so it cannot outlive it */
   PetscCall(VecDestroy(&data->scaling));
-  PetscCall(ISDestroy(&data->scaling_is));
   PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, U, PETSC_TRUE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3317,9 +3315,7 @@ static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
     PetscCall(PetscObjectReference((PetscObject)scaling));
   }
   PetscCall(VecDestroy(&data->scaling));
-  PetscCall(ISDestroy(&data->scaling_is));
   data->scaling = scaling;
-  if (scaling) PetscCall(ISDuplicate(data->is, &data->scaling_is));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
