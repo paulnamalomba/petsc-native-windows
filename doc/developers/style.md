@@ -656,6 +656,31 @@ preceded by and followed by a blank line. For source code, this information is f
 > SUBMANSEC= DMPlex
 > ```
 
+### Include file contents
+
+PETSc provides public include C/C++ files for its API. Material for a particular aspect of PETSc is often split into two public include files with names of the form `petsc*.h`
+and `petsc*types.h`. For example, `petscsys.h` and `petscsystypes.h`. The objective of using two files to reduce the dependencies between include files which can
+reduce compile times of PETSc in two ways
+
+- When only the `petsc*types.h` information is needed to compile a source file, the compiler does not "waste time" processing everything in `petsc*.h`. For example, since the
+  solver APIs including
+  `PC`, `KSP`, `SNES`, `TS` all use `DM` arguments, the source code for them must include `petscdmtypes.h` but, except for a very small number of source files, it does not need `petscdm.h`.
+
+- When developing new code and adding new function APIs into an existing `petsc*.h`, only the source files that specifically need `petsc*.h` will get recompiled, those that use
+  `petsc*types.h` do not, thus changing a five minute recompile to a minute. Again, this is examplified with the solver APIs and `DM`.
+
+In general, the `petsc*types.h` file contains the non-function pointer typedefs (for example, `typedef struct _p_DM *DM`), enums and non-function-like C preprocessing macros (for example,
+`#define PETSC_DRAW_X "x"`). Function prototypes, function pointer typedefs (for example, `SNESFunctionFn`), and function-like C preprocessing macros
+(for example, `#define PetscMalloc1()`) are in `petsc*.h`. Exceptions to these general rules may exist for a specific reason.
+
+Each public header `petsc*.h` must include its corresponding `petsc*types.h` to ensure type definitions are available when the public header is included directly.
+
+There should be no cycles in the include files, that is, for example `petscsys.h` should not include `petscoptions.h` that includes `petscsys.h`. The number of include files that
+a particular include file must include should be minimized, for example, an include file that does not related to using the options database should generally not include `petscoptions.h`.
+
+Best not to put static inline functions in include files unless they are truly needed for performance. Putting an entire function into an include file requires possibly including multiple other
+include files that would otherwise not need to be exposed in the include file.
+
 (manual_page_format)=
 
 ### Manual Page Format
