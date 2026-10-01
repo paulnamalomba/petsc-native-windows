@@ -600,7 +600,7 @@ static PetscErrorCode PCView_HPDDM(PC pc, PetscViewer viewer)
       if (!data->deflation) {
         PetscCall(PetscViewerASCIIPrintf(viewer, "Neumann matrix attached? %s\n", PetscBools[PetscBool3ToBool(data->Neumann)]));
         PetscCall(PetscViewerASCIIPrintf(viewer, "shared subdomain KSP between SLEPc and PETSc? %s\n", PetscBools[data->share]));
-      } else PetscCall(PetscViewerASCIIPrintf(viewer, "user-supplied deflation matrix%s\n", data->scaling ? " and partition of unity" : ""));
+      } else PetscCall(PetscViewerASCIIPrintf(viewer, "user-supplied deflation matrix%s\n", data->scaling ? " and scaling" : ""));
       PetscCall(PetscViewerASCIIPrintf(viewer, "coarse correction: %s\n", PCHPDDMCoarseCorrectionTypes[data->correction]));
       PetscCall(PetscViewerASCIIPrintf(viewer, "on process #0, value%s (+ threshold%s if available) for selecting deflation vectors:", data->N > 2 ? "s" : "", data->N > 2 ? "s" : ""));
       PetscCall(PetscViewerASCIIGetTab(viewer, &tabs));
@@ -1779,10 +1779,10 @@ static PetscErrorCode PCHPDDMComputeDeflationMatScaling_Private(PC_HPDDM *data, 
   PetscFunctionBegin;
   PetscCall(ISGetLocalSize(is, &n));
   PetscCall(VecGetSize(data->scaling, &m));
-  PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size differs from the supplied partition of unity");
+  PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size differs from the supplied scaling vector size");
   PetscCall(ISEmbed(is, data->scaling_is, PETSC_TRUE, &perm));
   PetscCall(ISGetLocalSize(perm, &m));
-  PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain does not match the supplied partition of unity");
+  PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Overlapping subdomain size does not match the supplied scaling vector size");
   PetscCall(VecGetSize(scaling, &m));
   PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Scaling vector size differs from the overlapping subdomain size");
   PetscCall(ISGetIndices(perm, &indices));
