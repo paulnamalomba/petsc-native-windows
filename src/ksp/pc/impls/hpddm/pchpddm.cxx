@@ -3005,7 +3005,7 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
       else inner = data->levels[0]->pc;
       if (inner) {
         if (!inner->setupcalled) PetscCall(PCSetType(inner, PCASM));
-        if (data->scaling) PetscCall(PCASMSetType(inner, PC_ASM_WEIGHTED));
+        if (data->scaling && !inner->setupcalled) PetscCall(PCASMSetType(inner, PC_ASM_WEIGHTED));
         PetscCall(PCSetFromOptions(inner));
         PetscCall(PCSetModifySubMatrices(inner, pc->modifysubmatrices, pc->modifysubmatricesP));
         PetscCall(PetscStrcmp(((PetscObject)inner)->type_name, PCASM, &flg));
@@ -3076,25 +3076,30 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
   }
   if (data->scaling) {
     PC        fine = data->levels[0]->pc;
-    PCASMType type;
-    Mat      *submat;
-    Vec       scaling;
-    IS       *is;
-    PetscInt  n;
     PetscBool flg;
 
     PetscCall(PetscObjectTypeCompare((PetscObject)fine, PCASM, &flg));
-    PetscCheck(flg, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Custom deflation scaling requires a fine-level PCASM");
-    PetscCall(PCASMGetType(fine, &type));
-    PetscCheck(type == PC_ASM_WEIGHTED, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_INCOMP, "Custom deflation scaling requires -%spc_hpddm_levels_1_pc_asm_type weighted", pcpre ? pcpre : "");
-    PetscCall(PCSetUp(fine));
-    PetscCall(PCASMGetLocalSubdomains(fine, &n, &is, nullptr));
-    PetscCheck(n == 1, PETSC_COMM_SELF, PETSC_ERR_SUP, "Custom deflation scaling requires one overlapping subdomain per process");
-    PetscCall(PCASMGetLocalSubmatrices(fine, nullptr, &submat));
-    PetscCall(MatCreateVecs(submat[0], &scaling, nullptr));
-    PetscCall(PCHPDDMComputeDeflationMatScaling_Private(data, is[0], scaling));
-    PetscCall(PCASMWeightedSetScaling(fine, 1, &scaling));
-    PetscCall(VecDestroy(&scaling));
+    if (flg) {
+      PCASMType type;
+
+      PetscCall(PCASMGetType(fine, &type));
+      flg = (type == PC_ASM_WEIGHTED ? PETSC_TRUE : PETSC_FALSE);
+    }
+    if (flg) { /* forward the scaling to PC_ASM_WEIGHTED, otherwise it only weights the coarse space */
+      Mat     *submat;
+      Vec      scaling;
+      IS      *asm_is;
+      PetscInt n;
+
+      PetscCall(PCSetUp(fine));
+      PetscCall(PCASMGetLocalSubdomains(fine, &n, &asm_is, nullptr));
+      PetscCheck(n == 1, PETSC_COMM_SELF, PETSC_ERR_SUP, "Custom deflation scaling requires one overlapping subdomain per process");
+      PetscCall(PCASMGetLocalSubmatrices(fine, nullptr, &submat));
+      PetscCall(MatCreateVecs(submat[0], &scaling, nullptr));
+      PetscCall(PCHPDDMComputeDeflationMatScaling_Private(data, asm_is[0], scaling));
+      PetscCall(PCASMWeightedSetScaling(fine, 1, &scaling));
+      PetscCall(VecDestroy(&scaling));
+    }
   }
   if (algebraic) PetscCall(MatDestroy(&data->aux));
   if (unsorted && unsorted != is[0]) {
@@ -3319,7 +3324,7 @@ static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
 }
 
 /*@
-  PCHPDDMSetDeflationMatScaling - Sets a diagonal partition of unity for supplied deflation vectors and the fine-level Schwarz correction.
+  PCHPDDMSetDeflationMatScaling - Sets a diagonal partition of unity for supplied deflation vectors and, by default, the fine-level Schwarz correction.
 
   Logically Collective
 
@@ -3337,13 +3342,15 @@ static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
   This currently requires two levels with at least one deflation vector globally (individual
   processes may supply zero vectors), an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` operator,
   and `-pc_hpddm_define_subdomains true`. Internal harmonic, block-splitting, and Neumann auxiliary
-  problems are not supported. The fine-level preconditioner must be `PCASM` with one local
-  subdomain per process and no additional `-pc_hpddm_levels_1_pc_asm_overlap` expansion;
-  this routine selects `PC_ASM_WEIGHTED`. An explicit incompatible
-  `-pc_hpddm_levels_1_pc_asm_type` is an error.
+  problems are not supported, and `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the supplied
+  overlap.
   With local unweighted deflation vectors U_i and D_i = diag(scaling), the global coarse basis is
-  Z = [R_i^T D_i U_i]. The same D_i weights the fine correction sum_i R_i^T D_i A_i^{-1} R_i
-  through `PCASMWeightedSetScaling()`. Do not preweight U_i. PETSc uses the supplied weights verbatim;
+  Z = [R_i^T D_i U_i]. This routine makes `PC_ASM_WEIGHTED` the default fine-level `PCASMType`, so
+  that the same D_i weights the fine correction sum_i R_i^T D_i A_i^{-1} R_i through
+  `PCASMWeightedSetScaling()`. Forwarding the weights from `PCHPDDM` requires one local subdomain
+  per process. With another fine-level preconditioner, for example `-pc_hpddm_levels_1_pc_asm_type basic` or a
+  `-pc_hpddm_levels_1_pc_type` other than `asm`, D_i only weights the coarse space.
+  Do not preweight U_i. PETSc uses the supplied weights verbatim;
   the caller supplies the partition-of-unity property and the local transmission operators.
   The scaled vectors must have zero extension supported sufficiently inside the overlap that
   A R_i^T D_i has no nonzero rows outside the subdomain. For finite elements, make the PoU vanish
