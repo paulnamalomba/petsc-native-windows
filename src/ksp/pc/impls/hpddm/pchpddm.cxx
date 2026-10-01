@@ -3326,7 +3326,7 @@ static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
 /*@
   PCHPDDMSetDeflationMatScaling - Sets a diagonal partition of unity for supplied deflation vectors and, by default, the fine-level Schwarz correction.
 
-  Logically Collective
+  Logically Collective; `scaling` must be `NULL` on all processes or on none
 
   Input Parameters:
 + pc      - the preconditioner
@@ -3339,24 +3339,28 @@ static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
   vector must follow the supplied deflation `IS` ordering and contain finite, real, nonnegative
   values. PETSc retains a reference; do not change the entries after this call. `PCReset()` and
   replacing the deflation matrix discard the scaling, which must then be installed again.
+
   This currently requires two levels with at least one deflation vector globally (individual
-  processes may supply zero vectors), an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` operator,
-  and `-pc_hpddm_define_subdomains true`. Internal harmonic, block-splitting, and Neumann auxiliary
+  processes may supply zero vectors), an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` Pmat, and
+  `-pc_hpddm_define_subdomains true`. Internal harmonic, block-splitting, and Neumann auxiliary
   problems are not supported, and `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the supplied
   overlap.
-  With local unweighted deflation vectors U_i and D_i = diag(scaling), the global coarse basis is
-  Z = [R_i^T D_i U_i]. This routine makes `PC_ASM_WEIGHTED` the default fine-level `PCASMType`, so
-  that the same D_i weights the fine correction sum_i R_i^T D_i A_i^{-1} R_i through
-  `PCASMWeightedSetScaling()`. Forwarding the weights from `PCHPDDM` requires one local subdomain
-  per process. With another fine-level preconditioner, for example `-pc_hpddm_levels_1_pc_asm_type basic` or a
-  `-pc_hpddm_levels_1_pc_type` other than `asm`, D_i only weights the coarse space.
-  Do not preweight U_i. PETSc uses the supplied weights verbatim;
-  the caller supplies the partition-of-unity property and the local transmission operators.
-  The scaled vectors must have zero extension supported sufficiently inside the overlap that
-  A R_i^T D_i has no nonzero rows outside the subdomain. For finite elements, make the PoU vanish
-  on the elements touching the artificial boundary. This condition is required by the local
-  coarse-operator assembly and is not checked here. `PCApplyTranspose()` and
-  `PCMatApplyTranspose()` with this scaling are currently unsupported for complex scalars.
+
+  With local unweighted deflation vectors $U_i$ and $D_i = \text{diag}(scaling)$, the global coarse
+  basis is $Z = [R_i^T D_i U_i]$; do not preweight $U_i$. By default, a fine-level `PCASM` uses
+  `PC_ASM_WEIGHTED`, and the same $D_i$ then weights the fine correction
+  $\sum_i R_i^T D_i A_i^{-1} R_i$ through `PCASMWeightedSetScaling()`, which requires one local
+  subdomain per process. With any other fine-level configuration, for example
+  `-pc_hpddm_levels_1_pc_asm_type basic` or a `-pc_hpddm_levels_1_pc_type` other than `asm`,
+  $D_i$ only weights the coarse space.
+
+  PETSc uses the supplied weights verbatim and does not check the partition-of-unity property.
+  $D_i$ must vanish on every subdomain row that the operator couples to a row outside the
+  subdomain, so that $A R_i^T D_i$ has no nonzero rows outside it. For finite elements, make the
+  partition of unity vanish on the elements touching the artificial boundary. The local
+  coarse-operator assembly relies on this condition, which is not checked here.
+  `PCApplyTranspose()` and `PCMatApplyTranspose()` with this scaling are currently unsupported
+  for complex scalars.
 
 .seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetDeflationMat()`, `PCASMWeightedSetScaling()`, `PCHPDDMSetCoarseCorrectionType()`
 @*/
