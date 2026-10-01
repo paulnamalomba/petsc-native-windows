@@ -3246,35 +3246,6 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U, Vec scaling)
-{
-  PC_HPDDM *data = (PC_HPDDM *)pc->data;
-
-  PetscFunctionBegin;
-  if (scaling) {
-    const PetscScalar *array;
-    PetscMPIInt        size;
-    PetscInt           n, m;
-    PetscBool          valid = PETSC_TRUE;
-
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)scaling), &size));
-    PetscCheck(size == 1, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Deflation scaling must have a single-process communicator");
-    PetscCall(VecGetSize(scaling, &n));
-    PetscCall(ISGetLocalSize(is, &m));
-    PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Deflation scaling has size %" PetscInt_FMT ", expected %" PetscInt_FMT, n, m);
-    PetscCall(VecGetArrayRead(scaling, &array));
-    for (PetscInt i = 0; i < n; ++i) valid = PetscBool(valid && PetscImaginaryPart(array[i]) == 0.0 && PetscRealPart(array[i]) >= 0.0 && !PetscIsInfOrNanScalar(array[i]));
-    PetscCall(VecRestoreArrayRead(scaling, &array));
-    PetscCheck(valid, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Deflation scaling must contain finite, real, nonnegative entries");
-    PetscCall(PetscObjectReference((PetscObject)scaling));
-  }
-  /* the scaling follows the ordering of is, so it cannot outlive the deflation space it is supplied with */
-  PetscCall(VecDestroy(&data->scaling));
-  PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, U, PETSC_TRUE));
-  data->scaling = scaling;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 /*@
   PCHPDDMSetDeflationMat - Sets the deflation space used to assemble a coarser operator, and optionally a diagonal partition of unity for it.
 
@@ -3325,6 +3296,35 @@ PetscErrorCode PCHPDDMSetDeflationMat(PC pc, IS is, Mat U, Vec scaling)
   PetscValidHeaderSpecific(U, MAT_CLASSID, 3);
   if (scaling) PetscValidHeaderSpecific(scaling, VEC_CLASSID, 4);
   PetscTryMethod(pc, "PCHPDDMSetDeflationMat_C", (PC, IS, Mat, Vec), (pc, is, U, scaling));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U, Vec scaling)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  if (scaling) {
+    const PetscScalar *array;
+    PetscMPIInt        size;
+    PetscInt           n, m;
+    PetscBool          valid = PETSC_TRUE;
+
+    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)scaling), &size));
+    PetscCheck(size == 1, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Deflation scaling must have a single-process communicator");
+    PetscCall(VecGetSize(scaling, &n));
+    PetscCall(ISGetLocalSize(is, &m));
+    PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Deflation scaling has size %" PetscInt_FMT ", expected %" PetscInt_FMT, n, m);
+    PetscCall(VecGetArrayRead(scaling, &array));
+    for (PetscInt i = 0; i < n; ++i) valid = PetscBool(valid && PetscImaginaryPart(array[i]) == 0.0 && PetscRealPart(array[i]) >= 0.0 && !PetscIsInfOrNanScalar(array[i]));
+    PetscCall(VecRestoreArrayRead(scaling, &array));
+    PetscCheck(valid, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Deflation scaling must contain finite, real, nonnegative entries");
+    PetscCall(PetscObjectReference((PetscObject)scaling));
+  }
+  /* the scaling follows the ordering of is, so it cannot outlive the deflation space it is supplied with */
+  PetscCall(VecDestroy(&data->scaling));
+  PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, U, PETSC_TRUE));
+  data->scaling = scaling;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
