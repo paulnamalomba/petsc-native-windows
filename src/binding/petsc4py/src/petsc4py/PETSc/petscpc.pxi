@@ -342,7 +342,8 @@ cdef extern from * nogil:
     PetscErrorCode PCHPDDMSetCoarseCorrectionType(PetscPC, PetscPCHPDDMCoarseCorrectionType)
     PetscErrorCode PCHPDDMGetCoarseCorrectionType(PetscPC, PetscPCHPDDMCoarseCorrectionType*)
     PetscErrorCode PCHPDDMGetSTShareSubKSP(PetscPC, PetscBool*)
-    PetscErrorCode PCHPDDMSetDeflationMat(PetscPC, PetscIS, PetscMat, PetscVec)
+    PetscErrorCode PCHPDDMSetDeflationMat(PetscPC, PetscIS, PetscMat)
+    PetscErrorCode PCHPDDMSetDeflationMatScaling(PetscPC, PetscVec)
 
     # --- SPAI ---
     PetscErrorCode PCSPAISetEpsilon(PetscPC, PetscReal)

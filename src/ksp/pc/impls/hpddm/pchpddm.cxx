@@ -76,6 +76,7 @@ static PetscErrorCode PCDestroy_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSTShareSubKSP_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSTShareSubKSP_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMat_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMatScaling_C", nullptr));
   PetscCall(PetscObjectCompose((PetscObject)pc, "_PCHPDDM_Schur", nullptr));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3247,24 +3248,63 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
 }
 
 /*@
-  PCHPDDMSetDeflationMat - Sets the deflation space used to assemble a coarser operator, and optionally a diagonal scaling for it.
+  PCHPDDMSetDeflationMat - Sets the deflation space used to assemble a coarser operator.
 
-  Logically Collective; `scaling` must be `NULL` on all processes or on none
+  Logically Collective
 
   Input Parameters:
-+ pc      - preconditioner context
-. is      - index set of the local deflation matrix
-. U       - deflation sequential matrix stored as a `MATSEQDENSE`
-- scaling - local diagonal scaling, or `NULL` to use the default scaling
++ pc - preconditioner context
+. is - index set of the local deflation matrix
+- U  - deflation sequential matrix stored as a `MATSEQDENSE`
 
   Level: advanced
 
   Notes:
   `PCReset()` and further calls to this routine discard the previous deflation space and scaling.
+  Use `PCHPDDMSetDeflationMatScaling()` after this routine to supply a diagonal scaling.
 
-  A `scaling` is a single-process vector that follows the ordering of `is`, like the rows of `U`, with
-  finite, real, nonnegative values. PETSc retains a reference; do not change the entries after this
-  call. A `scaling` currently requires two levels with at least one deflation vector globally
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetDeflationMatScaling()`, `PCDeflationSetSpace()`, `PCMGSetRestriction()`
+@*/
+PetscErrorCode PCHPDDMSetDeflationMat(PC pc, IS is, Mat U)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidHeaderSpecific(is, IS_CLASSID, 2);
+  PetscValidHeaderSpecific(U, MAT_CLASSID, 3);
+  PetscTryMethod(pc, "PCHPDDMSetDeflationMat_C", (PC, IS, Mat), (pc, is, U));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  /* The scaling follows the ordering of is, so it cannot outlive the deflation space it is supplied with. */
+  PetscCall(VecDestroy(&data->scaling));
+  PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, U, PETSC_TRUE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMSetDeflationMatScaling - Sets a diagonal scaling for supplied deflation vectors and, by default, the fine-level Schwarz correction.
+
+  Logically Collective; `scaling` must be `NULL` on all processes or on none
+
+  Input Parameters:
++ pc      - preconditioner context
+- scaling - local diagonal scaling, or `NULL` to restore the default scaling before setup
+
+  Level: advanced
+
+  Notes:
+  Call `PCHPDDMSetDeflationMat()` first, then this routine before `PCSetUp()`. The single-process
+  vector must follow the supplied deflation `IS` ordering, like the rows of the deflation matrix,
+  and contain finite, real, nonnegative values. PETSc retains a reference; do not change the entries
+  after this call. `PCReset()` and replacing the deflation matrix discard the scaling, which must
+  then be installed again.
+
+  Custom scaling currently requires two levels with at least one deflation vector globally
   (individual processes may supply zero vectors), an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` Pmat,
   and `-pc_hpddm_define_subdomains true`. Internal harmonic, block-splitting, and Neumann auxiliary
   problems are not supported, and `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the supplied
@@ -3283,37 +3323,37 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
   subdomain, so that $A R_i^T D_i$ has no nonzero rows outside it. For finite elements, make the
   scaling vanish on the elements touching the artificial boundary. The local
   coarse-operator assembly relies on this condition, which is not checked here.
-  `PCApplyTranspose()` and `PCMatApplyTranspose()` with a `scaling` are currently unsupported
+  `PCApplyTranspose()` and `PCMatApplyTranspose()` with this scaling are currently unsupported
   for complex scalars.
 
-.seealso: [](ch_ksp), `PCHPDDM`, `PCASMWeightedSetScaling()`, `PCHPDDMSetCoarseCorrectionType()`, `PCDeflationSetSpace()`, `PCMGSetRestriction()`
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetDeflationMat()`, `PCASMWeightedSetScaling()`, `PCHPDDMSetCoarseCorrectionType()`
 @*/
-PetscErrorCode PCHPDDMSetDeflationMat(PC pc, IS is, Mat U, Vec scaling)
+PetscErrorCode PCHPDDMSetDeflationMatScaling(PC pc, Vec scaling)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
-  PetscValidHeaderSpecific(is, IS_CLASSID, 2);
-  PetscValidHeaderSpecific(U, MAT_CLASSID, 3);
-  if (scaling) PetscValidHeaderSpecific(scaling, VEC_CLASSID, 4);
-  PetscTryMethod(pc, "PCHPDDMSetDeflationMat_C", (PC, IS, Mat, Vec), (pc, is, U, scaling));
+  if (scaling) PetscValidHeaderSpecific(scaling, VEC_CLASSID, 2);
+  PetscTryMethod(pc, "PCHPDDMSetDeflationMatScaling_C", (PC, Vec), (pc, scaling));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U, Vec scaling)
+static PetscErrorCode PCHPDDMSetDeflationMatScaling_HPDDM(PC pc, Vec scaling)
 {
   PC_HPDDM *data = (PC_HPDDM *)pc->data;
 
   PetscFunctionBegin;
+  PetscCheck(!pc->setupcalled, PetscObjectComm((PetscObject)pc), PETSC_ERR_ORDER, "Set deflation scaling before PCSetUp(); reset and reinstall the deflation matrix to change it afterward");
   if (scaling) {
     const PetscScalar *array;
     PetscMPIInt        size;
     PetscInt           n, m;
     PetscBool          valid = PETSC_TRUE;
 
+    PetscCheck(data->deflation && data->is, PetscObjectComm((PetscObject)pc), PETSC_ERR_ORDER, "Call PCHPDDMSetDeflationMat() before PCHPDDMSetDeflationMatScaling()");
     PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)scaling), &size));
     PetscCheck(size == 1, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Deflation scaling must have a single-process communicator");
     PetscCall(VecGetSize(scaling, &n));
-    PetscCall(ISGetLocalSize(is, &m));
+    PetscCall(ISGetLocalSize(data->is, &m));
     PetscCheck(n == m, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Deflation scaling has size %" PetscInt_FMT ", expected %" PetscInt_FMT, n, m);
     PetscCall(VecGetArrayRead(scaling, &array));
     for (PetscInt i = 0; i < n; ++i) valid = PetscBool(valid && PetscImaginaryPart(array[i]) == 0.0 && PetscRealPart(array[i]) >= 0.0 && !PetscIsInfOrNanScalar(array[i]));
@@ -3321,9 +3361,7 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U, Vec scal
     PetscCheck(valid, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Deflation scaling must contain finite, real, nonnegative entries");
     PetscCall(PetscObjectReference((PetscObject)scaling));
   }
-  /* the scaling follows the ordering of is, so it cannot outlive the deflation space it is supplied with */
   PetscCall(VecDestroy(&data->scaling));
-  PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, U, PETSC_TRUE));
   data->scaling = scaling;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3427,7 +3465,7 @@ PetscErrorCode HPDDMLoadDL_Private(PetscBool *found)
    See also {cite}`dolean2015introduction`, {cite}`al2022robust`, {cite}`al2022robustpd`, and {cite}`nataf2022recent`
 
 .seealso: [](ch_ksp), `PCCreate()`, `PCSetType()`, `PCType`, `PC`, `PCHPDDMSetAuxiliaryMat()`, `MATIS`, `PCBDDC`, `PCDEFLATION`, `PCTELESCOPE`, `PCASM`,
-          `PCHPDDMSetCoarseCorrectionType()`, `PCHPDDMHasNeumannMat()`, `PCHPDDMSetRHSMat()`, `PCHPDDMSetDeflationMat()`, `PCHPDDMSetSTShareSubKSP()`,
+          `PCHPDDMSetCoarseCorrectionType()`, `PCHPDDMHasNeumannMat()`, `PCHPDDMSetRHSMat()`, `PCHPDDMSetDeflationMat()`, `PCHPDDMSetDeflationMatScaling()`, `PCHPDDMSetSTShareSubKSP()`,
           `PCHPDDMGetSTShareSubKSP()`, `PCHPDDMGetCoarseCorrectionType()`, `PCHPDDMGetComplexities()`
 M*/
 PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
@@ -3463,6 +3501,7 @@ PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSTShareSubKSP_C", PCHPDDMSetSTShareSubKSP_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSTShareSubKSP_C", PCHPDDMGetSTShareSubKSP_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMat_C", PCHPDDMSetDeflationMat_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetDeflationMatScaling_C", PCHPDDMSetDeflationMatScaling_HPDDM));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
