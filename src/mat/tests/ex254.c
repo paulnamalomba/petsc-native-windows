@@ -111,7 +111,7 @@ int main(int argc, char **args)
   if (!isHypre) {
     Mat         D;
     PetscInt    rstart, rend, remote_col, ncoo, *coo_i, *coo_j;
-    PetscScalar readback;
+    PetscScalar readback, *coo_v;
 
     PetscCall(MatCreate(PETSC_COMM_WORLD, &D));
     PetscCall(MatSetSizes(D, PETSC_DECIDE, PETSC_DECIDE, M, N));
@@ -143,10 +143,18 @@ int main(int argc, char **args)
 
     PetscCall(MatGetValue(D, rstart, remote_col, &readback));
     if (readback != 5.0) PetscCall(PetscPrintf(PETSC_COMM_SELF, "MatSetValues() after MatSetPreallocationCOO() gave %g, expected 5\n", (double)PetscRealPart(readback)));
+
+    /* MatSetValues() above only wrote into the preallocated nonzero pattern, so MatSetValuesCOO() remains usable */
+    PetscCall(PetscMalloc1(ncoo, &coo_v));
+    for (PetscInt k = 0; k < ncoo; k++) coo_v[k] = (k % 2) ? 7.0 : 0.0;
+    PetscCall(MatSetValuesCOO(D, coo_v, INSERT_VALUES));
+    PetscCall(PetscFree(coo_v));
+    PetscCall(MatGetValue(D, rstart, remote_col, &readback));
+    if (readback != 7.0) PetscCall(PetscPrintf(PETSC_COMM_SELF, "MatSetValuesCOO() after MatSetValues() gave %g, expected 7\n", (double)PetscRealPart(readback)));
     PetscCall(MatDestroy(&D));
   }
 
-  /* Test aij->diag on COO matrix are correctly set up */
+  /* Test that aij->diag is set up correctly on COO matrices */
   if (!isHypre) { // TODO: MATHYPRE currently does not support MatSetValues
     PetscCall(MatShift(A, 2.0));
     PetscCall(MatShift(B, 2.0));
