@@ -49,7 +49,7 @@ static PetscInt SubdomainRow(PetscMPIInt p, PetscInt i)
   Partition-of-unity weight of process p at a global row. Process 0 weights its rows 0-5 by 1, 1, 1, 0.65, 0.35, 0,
   and process 1 weights its rows 2-7 by the complements 0, 0.35, 0.65, 1, 1, 1. The weights sum to one on every row
   and vanish outside each subdomain. They also vanish on the subdomain row that A couples to the outside (row 5 for
-  process 0, row 2 for process 1), as PCHPDDMSetDeflationMatScaling() requires.
+  process 0, row 2 for process 1), as PCHPDDMSetScaling() requires.
 */
 static PetscScalar Weight(PetscMPIInt p, PetscInt row)
 {
@@ -95,7 +95,7 @@ static PetscErrorCode CreateOperator(Mat *A)
 }
 
 /*
-  Inputs of PCHPDDMSetDeflationMat() and PCHPDDMSetDeflationMatScaling(), as a user would build them: the subdomain IS,
+  Inputs of PCHPDDMSetDeflationMat() and PCHPDDMSetScaling(), as a user would build them: the subdomain IS,
   the local deflation matrix U (one column, or none on process 0 with -empty_rank0), and the local weights D. All three
   list the subdomain rows in reverse order, unlike the sorted order used internally by PCASM, so that the test also
   checks how PCHPDDM reorders the weights.
@@ -391,12 +391,12 @@ int main(int argc, char **argv)
       if (pass == 2) PetscCall(PCReset(pc));
       PetscCall(CreateDeflation(empty_rank0, &is, &U, &D));
       PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-      PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
+      PetscCall(PCHPDDMSetScaling(pc, D));
       if (pass == 0) {
-        PetscCall(PCHPDDMSetDeflationMatScaling(pc, NULL));
-        PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
+        PetscCall(PCHPDDMSetScaling(pc, NULL));
+        PetscCall(PCHPDDMSetScaling(pc, D));
         PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-        PetscCall(PCHPDDMSetDeflationMatScaling(pc, D));
+        PetscCall(PCHPDDMSetScaling(pc, D));
       }
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
       PetscCall(ISDestroy(&is));

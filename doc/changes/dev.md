@@ -70,7 +70,7 @@
 ```{rubric} PC:
 ```
 
-- Add `PCHPDDMSetDeflationMatScaling()` to supply a `Vec` of scaling for the custom coarse space. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the scaling is forwarded accordingly.
+- Add `PCHPDDMSetScaling()` to supply a `Vec` of scaling for the custom coarse space. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the scaling is forwarded accordingly.
 
 ```{rubric} KSP:
 ```
