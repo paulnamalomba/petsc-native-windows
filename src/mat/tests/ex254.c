@@ -148,9 +148,15 @@ int main(int argc, char **args)
     PetscCall(PetscMalloc1(ncoo, &coo_v));
     for (PetscInt k = 0; k < ncoo; k++) coo_v[k] = (k % 2) ? 7.0 : 0.0;
     PetscCall(MatSetValuesCOO(D, coo_v, INSERT_VALUES));
-    PetscCall(PetscFree(coo_v));
     PetscCall(MatGetValue(D, rstart, remote_col, &readback));
     if (readback != 7.0) PetscCall(PetscPrintf(PETSC_COMM_SELF, "MatSetValuesCOO() after MatSetValues() gave %g, expected 7\n", (double)PetscRealPart(readback)));
+
+    /* Zeroing no rows leaves the nonzero pattern, and so MatSetValuesCOO(), intact */
+    PetscCall(MatZeroRows(D, 0, NULL, 1.0, NULL, NULL));
+    PetscCall(MatSetValuesCOO(D, coo_v, ADD_VALUES));
+    PetscCall(PetscFree(coo_v));
+    PetscCall(MatGetValue(D, rstart, remote_col, &readback));
+    if (readback != 14.0) PetscCall(PetscPrintf(PETSC_COMM_SELF, "MatSetValuesCOO() after an empty MatZeroRows() gave %g, expected 14\n", (double)PetscRealPart(readback)));
     PetscCall(MatDestroy(&D));
   }
 
