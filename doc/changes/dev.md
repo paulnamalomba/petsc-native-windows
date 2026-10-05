@@ -70,8 +70,12 @@
 ```{rubric} PC:
 ```
 
+- Add batched `PCMatApply()` and `PCMatApplyTranspose()` for `PCJACOBI`, using one device BLAS call for CUDA and HIP dense matrices
+
 ```{rubric} KSP:
 ```
+
+- Add CUDA support for GMRES in `KSPHPDDM` at PETSc scalar precision, avoiding host staging of Krylov vectors when the matrix and preconditioner run on the GPU
 
 ```{rubric} SNES:
 ```

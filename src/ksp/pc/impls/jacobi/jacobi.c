@@ -65,6 +65,13 @@ typedef struct {
 
 static PetscErrorCode PCReset_Jacobi(PC);
 
+#if defined(PETSC_HAVE_CUDA)
+PETSC_INTERN PetscErrorCode PCMatApply_Jacobi_CUDA(Vec, Mat, Mat);
+#endif
+#if defined(PETSC_HAVE_HIP)
+PETSC_INTERN PetscErrorCode PCMatApply_Jacobi_HIP(Vec, Mat, Mat);
+#endif
+
 static PetscErrorCode PCJacobiSetType_Jacobi(PC pc, PCJacobiType type)
 {
   PC_Jacobi   *j = (PC_Jacobi *)pc->data;
@@ -361,6 +368,47 @@ static PetscErrorCode PCApply_Jacobi(PC pc, Vec x, Vec y)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode PCMatApply_Jacobi(PC pc, Mat X, Mat Y)
+{
+  PC_Jacobi *jac = (PC_Jacobi *)pc->data;
+#if defined(PETSC_HAVE_CUDA) || defined(PETSC_HAVE_HIP)
+  PetscErrorCode (*apply)(Vec, Mat, Mat) = NULL;
+  PetscBool xiscupm, yiscupm, diagiscupm, xbound, ybound, diagbound;
+  MatType   xtype;
+#endif
+
+  PetscFunctionBegin;
+  if (!jac->diag) PetscCall(PCSetUp_Jacobi_NonSymmetric(pc));
+#if defined(PETSC_HAVE_CUDA) || defined(PETSC_HAVE_HIP)
+  PetscCall(MatGetType(X, &xtype));
+  PetscCall(PetscObjectTypeCompare((PetscObject)Y, xtype, &yiscupm));
+  if (yiscupm) {
+  #if defined(PETSC_HAVE_CUDA)
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)X, &xiscupm, MATSEQDENSECUDA, MATMPIDENSECUDA, ""));
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)jac->diag, &diagiscupm, VECSEQCUDA, VECMPICUDA, ""));
+    if (xiscupm && diagiscupm) apply = PCMatApply_Jacobi_CUDA;
+  #endif
+  #if defined(PETSC_HAVE_HIP)
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)X, &xiscupm, MATSEQDENSEHIP, MATMPIDENSEHIP, ""));
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)jac->diag, &diagiscupm, VECSEQHIP, VECMPIHIP, ""));
+    if (xiscupm && diagiscupm) apply = PCMatApply_Jacobi_HIP;
+  #endif
+  }
+  if (apply) {
+    PetscCall(MatBoundToCPU(X, &xbound));
+    PetscCall(MatBoundToCPU(Y, &ybound));
+    PetscCall(VecBoundToCPU(jac->diag, &diagbound));
+    if (!xbound && !ybound && !diagbound) {
+      PetscCall((*apply)(jac->diag, X, Y));
+      PetscFunctionReturn(PETSC_SUCCESS);
+    }
+  }
+#endif
+  PetscCall(MatCopy(X, Y, SAME_NONZERO_PATTERN));
+  PetscCall(MatDiagonalScale(Y, jac->diag, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /*
    PCApplySymmetricLeftOrRight_Jacobi - Applies the left or right part of a
    symmetric preconditioner to a vector.
@@ -537,6 +585,8 @@ PETSC_EXTERN PetscErrorCode PCCreate_Jacobi(PC pc)
       not needed.
   */
   pc->ops->apply               = PCApply_Jacobi;
+  pc->ops->matapply            = PCMatApply_Jacobi;
+  pc->ops->matapplytranspose   = PCMatApply_Jacobi;
   pc->ops->applytranspose      = PCApply_Jacobi;
   pc->ops->setup               = PCSetUp_Jacobi;
   pc->ops->reset               = PCReset_Jacobi;
