@@ -138,6 +138,20 @@ int main(int argc, char **argv)
       PetscCall(MatNorm(D, types[t], &nd));
       PetscCheck(PetscIsCloseAtTol(nd, nc, PETSC_SMALL, 0.0), PETSC_COMM_WORLD, PETSC_ERR_PLIB, "NORM_%s of -A is %g, but %g for a MATAIJ copy of A", NormTypes[types[t]], (double)nd, (double)nc);
     }
+    PetscCall(MatHasOperation(D, MATOP_GET_ROW_SUM_ABS, &flg));
+    if (flg) {
+      Vec vc, vd;
+
+      PetscCall(MatCreateVecs(C, NULL, &vc));
+      PetscCall(MatCreateVecs(D, NULL, &vd));
+      PetscCall(MatGetRowSumAbs(C, vc));
+      PetscCall(MatGetRowSumAbs(D, vd));
+      PetscCall(VecAXPY(vd, -1.0, vc));
+      PetscCall(VecNorm(vd, NORM_INFINITY, &nd));
+      PetscCheck(nd <= PETSC_SMALL, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "MatGetRowSumAbs() of -A differs by %g from that of a MATAIJ copy of A", (double)nd);
+      PetscCall(VecDestroy(&vd));
+      PetscCall(VecDestroy(&vc));
+    }
     PetscCall(MatDestroy(&D));
     PetscCall(MatDestroy(&C));
   }
