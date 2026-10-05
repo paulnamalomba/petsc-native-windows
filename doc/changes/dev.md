@@ -64,6 +64,7 @@
 - Add `-mat_spd` to set `MAT_SPD` from the options database in `MatSetFromOptions()`
 - Change `MatSetOption()` to error when a symmetry-related option contradicts an already known property
 - Change `MatSetValuesCOO()` for `MATAIJ` and its device subtypes to generate an error when the nonzero pattern has changed since `MatSetPreallocationCOO()`, for example because `MatSetValues()` inserted a new nonzero; values were previously written into wrong locations in such a sequence of events
+- Change `MatAXPY()` with `DIFFERENT_NONZERO_PATTERN` for `MATSEQAIJ` and `MATMPIAIJ` to add in place when the nonzeros of `X` are a subset of those of `Y`, keeping the nonzero pattern, nonzero state, and options such as `MAT_SYMMETRIC` of `Y`
 
 ```{rubric} MatCoarsen:
 ```
