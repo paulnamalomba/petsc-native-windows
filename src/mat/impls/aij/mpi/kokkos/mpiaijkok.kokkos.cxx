@@ -1754,6 +1754,25 @@ static PetscErrorCode MatNorm_MPIAIJKokkos(Mat mat, NormType type, PetscReal *no
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+// A row of mat spans both the diagonal block A and the off-diagonal block B, so one kernel sums both
+static PetscErrorCode MatGetRowSumAbs_MPIAIJKokkos(Mat mat, Vec v)
+{
+  Mat_MPIAIJ           *aij = static_cast<Mat_MPIAIJ *>(mat->data);
+  PetscInt              n;
+  PetscScalarKokkosView vv;
+
+  PetscFunctionBegin;
+  PetscCall(VecGetLocalSize(v, &n));
+  PetscCheck(n == mat->rmap->n, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Nonconforming matrix and vector");
+  PetscCall(PetscLogGpuTimeBegin());
+  PetscCall(VecGetKokkosViewWrite(v, &vv));
+  PetscCall(MatSeqAIJKokkosGetRowAbsSums_Private(aij->A, aij->B, vv));
+  PetscCall(VecRestoreKokkosViewWrite(v, &vv));
+  PetscCall(PetscLogGpuTimeEnd());
+  PetscCall(PetscLogGpuFlops(static_cast<Mat_SeqAIJ *>(aij->A->data)->nz + static_cast<Mat_SeqAIJ *>(aij->B->data)->nz));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PETSC_INTERN PetscErrorCode MatProductSetFromOptions_MPIAIJ_MPIDense(Mat);
 
 static PetscErrorCode MatSetOps_MPIAIJKokkos(Mat B)
@@ -1768,6 +1787,7 @@ static PetscErrorCode MatSetOps_MPIAIJKokkos(Mat B)
   B->ops->destroy               = MatDestroy_MPIAIJKokkos;
   B->ops->shift                 = MatShift_MPIAIJKokkos;
   B->ops->norm                  = MatNorm_MPIAIJKokkos;
+  B->ops->getrowsumabs          = MatGetRowSumAbs_MPIAIJKokkos;
   B->ops->getcurrentmemtype     = MatGetCurrentMemType_MPIAIJ;
   B->ops->bindtocpu             = MatBindToCPU_SeqAIJKokkos;
 
