@@ -97,6 +97,10 @@ on function names in comments.
   (CMake via pkg-config is an alternative, but a makefile is the default.)
 - Build and run THROUGH the makefile; capture logs; iterate on compile/runtime
   errors until clean.
+- **Never pass a deprecated option**, in your own diagnostic runs as well as the
+  recorded run command: PETSc prints the notice with `PetscPrintf()`, so it lands
+  on **stdout** and corrupts the output a consumer parses. Use the replacement the
+  warning names (e.g. `-ts_time_step`, never `-ts_dt`); do not just silence it.
 
 ## Final cleanup (once, after the code is correct)
 Formatting is orthogonal to correctness, so do NOT run it inside the
