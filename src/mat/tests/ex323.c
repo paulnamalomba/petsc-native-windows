@@ -1,0 +1,126 @@
+static const char help[] = "Test CUDA/HIP matrix storage and value updates.\n";
+
+#include <petscmat.h>
+#include <petscdevice.h>
+#if PetscDefined(HAVE_CUDA)
+  #include <petscdevice_cuda.h>
+#endif
+#if PetscDefined(HAVE_HIP)
+  #include <petscdevice_hip.h>
+#endif
+
+static PetscErrorCode TestSELL(PetscDeviceType type, PetscDeviceContext dctx)
+{
+  Mat                A, B;
+  Vec                x, y, z;
+  const PetscScalar *a;
+  const PetscScalar  expected[] = {3, 3, 5, 9, 5, 8, 10};
+#if PetscDefined(USE_LOG) && PetscDefined(HAVE_DEVICE)
+  PetscLogEvent      event;
+  PetscEventPerfInfo before, after;
+  MatInfo            info;
+#endif
+
+  PetscFunctionBeginUser;
+#if PetscDefined(USE_LOG) && PetscDefined(HAVE_DEVICE)
+  PetscCall(PetscLogDefaultBegin());
+  PetscCall(PetscLogEventRegister("SELLUpdate", MAT_CLASSID, &event));
+#endif
+  PetscCall(PetscDeviceContextSynchronize(dctx));
+  PetscCall(MatCreate(PETSC_COMM_SELF, &A));
+  PetscCall(MatSetSizes(A, 32, 32, 32, 32));
+  PetscCall(MatSetType(A, MATSEQSELL));
+  PetscCall(MatSetUp(A));
+  for (PetscInt i = 0; i < 32; ++i) PetscCall(MatSetValue(A, i, i, 2, INSERT_VALUES));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatConvert(A, type == PETSC_DEVICE_CUDA ? MATSEQSELLCUDA : MATSEQSELLHIP, MAT_INPLACE_MATRIX, &A));
+  PetscCall(MatSetFromOptions(A));
+  PetscCall(MatCreateVecs(A, &x, &y));
+  PetscCall(VecDuplicate(y, &z));
+  PetscCall(VecSet(x, 1));
+  PetscCall(VecSet(y, 1));
+  // Destroying a duplicate before its first upload must release its backend data.
+  PetscCall(MatDuplicate(A, MAT_COPY_VALUES, &B));
+  PetscCall(MatDestroy(&B));
+  // MatMultAdd() must also work before any multiply has initialized the device arrays.
+  PetscCall(MatDuplicate(A, MAT_COPY_VALUES, &B));
+  PetscCall(MatSetFromOptions(B));
+  for (size_t stage = 0; stage < PETSC_STATIC_ARRAY_LENGTH(expected); ++stage) {
+    Mat C = stage == 0 ? A : B;
+
+#if PetscDefined(USE_LOG) && PetscDefined(HAVE_DEVICE)
+    PetscCall(PetscLogEventGetPerfInfo(PETSC_DETERMINE, event, &before));
+    PetscCall(PetscLogEventBegin(event, C, 0, 0, 0));
+#endif
+    if (stage == 2) {
+      PetscCall(MatScale(A, 2));
+      PetscCall(MatCopy(A, B, SAME_NONZERO_PATTERN));
+      PetscCall(MatScale(A, 0.5));
+    } else if (stage == 3) {
+      PetscCall(MatSetOption(C, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE));
+      PetscCall(MatStoreValues(C));
+      PetscCall(MatScale(C, 2));
+    } else if (stage == 4) PetscCall(MatRetrieveValues(C));
+    else if (stage == 5) {
+      PetscCall(MatSetOption(C, MAT_NEW_NONZERO_LOCATIONS, PETSC_TRUE));
+      PetscCall(MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+      for (PetscInt i = 0; i < 32; ++i) PetscCall(MatSetValue(C, i, (i + 1) % 32, 3, INSERT_VALUES));
+      PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY));
+      PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));
+    } else if (stage == 6) {
+      for (PetscInt i = 0; i < 32; ++i) PetscCall(MatSetValue(C, i, i, 6, INSERT_VALUES));
+      PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY));
+      PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));
+    }
+    PetscCall(MatMultAdd(C, x, y, z));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+#if PetscDefined(USE_LOG) && PetscDefined(HAVE_DEVICE)
+    PetscCall(PetscLogEventEnd(event, C, 0, 0, 0));
+    if (stage == 2 || stage == 3 || stage == 4 || stage == 6) {
+      PetscCall(PetscLogEventGetPerfInfo(PETSC_DETERMINE, event, &after));
+      PetscCall(MatGetInfo(C, MAT_LOCAL, &info));
+      PetscCheck(after.CpuToGpuSize - before.CpuToGpuSize == info.nz_used * sizeof(PetscScalar), PETSC_COMM_SELF, PETSC_ERR_PLIB, "SELL values-only update stage %zu uploaded %g bytes instead of %g", stage, after.CpuToGpuSize - before.CpuToGpuSize, info.nz_used * sizeof(PetscScalar));
+    }
+#endif
+    PetscCall(VecGetArrayRead(z, &a));
+    for (PetscInt i = 0; i < 32; ++i) PetscCheck(a[i] == expected[stage], PETSC_COMM_SELF, PETSC_ERR_PLIB, "SELL MatMultAdd() stage %zu returned an incorrect entry %" PetscInt_FMT, stage, i);
+    PetscCall(VecRestoreArrayRead(z, &a));
+  }
+  PetscCall(MatDestroy(&B));
+  PetscCall(VecDestroy(&z));
+  PetscCall(VecDestroy(&y));
+  PetscCall(VecDestroy(&x));
+  PetscCall(MatDestroy(&A));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+int main(int argc, char **argv)
+{
+  PetscDeviceContext dctx;
+  PetscDeviceType    type;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscInitialize(&argc, &argv, NULL, help));
+  PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+  PetscCall(PetscDeviceContextGetDeviceType(dctx, &type));
+  PetscCall(TestSELL(type, dctx));
+  PetscCall(PetscFinalize());
+  return 0;
+}
+
+/*TEST
+
+  testset:
+    nsize: {{1 2}}
+    output_file: output/empty.out
+    test:
+      suffix: cuda
+      requires: cuda
+      args: -default_device_type cuda -mat_sell_spmv_cuda_kernel 1
+    test:
+      suffix: hip
+      requires: hip
+      args: -default_device_type hip -mat_sell_spmv_hip_kernel 1
+
+TEST*/
