@@ -1,12 +1,13 @@
   0 TAO,  Function value: 1.95262,  Residual: 0.794468
   0 TAO,  Function value: 0.956287,  Residual: 0.206556
   1 TAO,  Function value: 0.882116,  Residual: 0.12537
-  2 TAO,  Function value: 0.855085,  Residual: 0.0220737
-  3 TAO,  Function value: 0.852475,  Residual: 0.0287703
-  4 TAO,  Function value: 0.850011,  Residual: 0.00385325
-  5 TAO,  Function value: 0.849937,  Residual: 0.000146559
-  6 TAO,  Function value: 0.849937,  Residual: 3.75591e-07
-  7 TAO,  Function value: 0.849937,  Residual: 1.60304e-12
+  2 TAO,  Function value: 0.856375,  Residual: 0.0370789
+  3 TAO,  Function value: 0.851516,  Residual: 0.0102431
+  4 TAO,  Function value: 0.850076,  Residual: 0.0044819
+  5 TAO,  Function value: 0.850035,  Residual: 0.00684835
+  6 TAO,  Function value: 0.849937,  Residual: 7.94125e-05
+  7 TAO,  Function value: 0.849937,  Residual: 2.51014e-07
+  8 TAO,  Function value: 0.849937,  Residual: 4.71519e-13
 Tao Object: 1 MPI process
   type: bntr
     Tao Object: (tao_bnk_cg_) 1 MPI process
@@ -33,13 +34,13 @@ Tao Object: 1 MPI process
       total number of iterations=0,                              (max: 2000)
       Solver never run
     CG steps: 0
-    Newton steps: 7
+    Newton steps: 8
     Scaled gradient steps: 0
     Gradient steps: 0
     KSP termination reasons:
       atol: 0
-      rtol: 3
-      ctol: 4
+      rtol: 4
+      ctol: 7
       negc: 0
       dtol: 0
       iter: 0
@@ -65,14 +66,14 @@ Tao Object: 1 MPI process
     Mat Object: 1 MPI process
       type: submatrix
       rows=10, cols=10
-  total KSP iterations: 45
+  total KSP iterations: 72
   Active Set subset type: subvec
   convergence tolerances: gatol=1e-08,   grtol=1e-08,    steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=1.60304e-12
+  Residual in Function/Gradient:=4.71519e-13
   Objective value=0.849937
-  total number of iterations=7,                          (max: 50)
-  total number of function/gradient evaluations=21,      (max: unlimited)
-  total number of Hessian evaluations=8
+  total number of iterations=8,                          (max: 50)
+  total number of function/gradient evaluations=26,      (max: unlimited)
+  total number of Hessian evaluations=9
   Solution converged:    ||g(X)|| <= gatol
 Vec Object: 1 MPI process
   type: seq
