@@ -1,6 +1,6 @@
 #pragma once
 
-#include <petsc/private/cupmblasinterface.hpp>
+#include <petsc/private/cupmsparseinterface.hpp>
 #include <petsc/private/petscadvancedmacros.h>
 
 namespace Petsc
@@ -50,7 +50,7 @@ struct SolverInterfaceImpl;
 
 #if PetscDefined(HAVE_CUDA)
 template <>
-struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::CUDA> : BlasInterface<DeviceType::CUDA> {
+struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::CUDA> : SparseInterface<DeviceType::CUDA> {
   // typedefs
   using cupmSolverHandle_t    = cusolverDnHandle_t;
   using cupmSolverError_t     = cusolverStatus_t;
@@ -166,7 +166,7 @@ struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::
 
 #if PetscDefined(HAVE_HIP)
 template <>
-struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::HIP> : BlasInterface<DeviceType::HIP> {
+struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::HIP> : SparseInterface<DeviceType::HIP> {
   // typedefs
   using cupmSolverHandle_t    = hipsolverHandle_t;
   using cupmSolverError_t     = hipsolverStatus_t;
@@ -222,7 +222,7 @@ struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL SolverInterfaceImpl<DeviceType::
 #endif
 
 #define PETSC_CUPMSOLVER_IMPL_CLASS_HEADER(T) \
-  PETSC_CUPMBLAS_INHERIT_INTERFACE_TYPEDEFS_USING(T); \
+  PETSC_CUPMSPARSE_INHERIT_INTERFACE_TYPEDEFS_USING(T); \
   /* introspection */ \
   using ::Petsc::device::cupm::impl::SolverInterfaceImpl<T>::cupmSolverGetErrorName; \
   /* types */ \
