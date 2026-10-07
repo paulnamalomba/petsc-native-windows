@@ -408,6 +408,7 @@ static inline PetscErrorCode PetscDeviceContextGetOptionalNullContext_Internal(P
 
 /* Experimental API -- it will eventually become public */
 PETSC_EXTERN PetscErrorCode PetscDeviceRegisterMemory(const void *PETSC_RESTRICT, PetscMemType, size_t);
+PETSC_INTERN PetscErrorCode PetscDeviceContextRecordMemoryAccess_Private(PetscDeviceContext, PetscObjectId);
 PETSC_EXTERN PetscErrorCode PetscDeviceGetAttribute(PetscDevice, PetscDeviceAttribute, void *);
 #if PetscDefined(DEVICELANGUAGE_CXX)
 PETSC_EXTERN PetscErrorCode PetscDeviceContextMarkIntentFromID(PetscDeviceContext, PetscObjectId, PetscMemoryAccessMode, const char name[]);
