@@ -162,14 +162,18 @@ else
   new_session() { python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"; }
 fi
 
-# Report whether a TCP port has no listener. lsof is present on macOS and on most
-# Linux boxes; ss (iproute2) covers Linux installs without lsof. In the interactive
-# shell `ss` is aliased to start_ssh, so call the binary by its path.
+# port_free reports whether a TCP port has no listener; port_pids lists the PIDs
+# of its listeners (newline-separated, empty if none). Both share one backend so
+# they never disagree. lsof is present on macOS and on most Linux boxes; ss
+# (iproute2) covers Linux installs without lsof. In the interactive shell `ss` is
+# aliased to start_ssh, so call the binary by its path.
 if command -v lsof >/dev/null 2>&1; then
   port_free() { ! lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+  port_pids() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null; }
 elif [ -x /usr/sbin/ss ] || [ -x /usr/bin/ss ]; then
   SS=$([ -x /usr/sbin/ss ] && echo /usr/sbin/ss || echo /usr/bin/ss)
   port_free() { ! $SS -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
+  port_pids() { $SS -ltnp 2>/dev/null | grep -E "[:.]$1 " | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u; }
 else
   die "need lsof or ss to check ports; install one and retry"
 fi
@@ -325,16 +329,23 @@ start_purple() {                         # start_purple <config>
   PDESIM_CONFIG=$c \
     new_session uv run python "$PURPLE" > "/tmp/pdesim_purple_c$c.log" 2>&1 &
   PURPLE_PID=$!
+  # Advisory only: new_session()'s setsid() may not have run yet, so this can read
+  # the inherited (script) group. stop_purple re-reads the pgid when it actually
+  # matters, and reaps by port regardless.
   PURPLE_PGID=$(ps -o pgid= -p "$PURPLE_PID" 2>/dev/null | tr -d ' ')
   say "started Purple (config=$c) pid=$PURPLE_PID pgid=${PURPLE_PGID:-?}"
 }
 
 stop_purple() {
   [ -z "$PURPLE_PID" ] && return 0
-  # Signal the group when setsid gave us a distinct one; falling back to our own
-  # group would kill this script.
-  local target=$PURPLE_PID
-  if [ -n "$PURPLE_PGID" ] && [ "$PURPLE_PGID" != "$MY_PGID" ]; then target=-$PURPLE_PGID; fi
+  # Re-read the pgid now rather than trusting start_purple's snapshot: by this
+  # point setsid() has long since run, so the launcher's real group is readable.
+  # Signal that group when it is distinct from ours; killing our own group would
+  # take down this script.
+  local pgid target
+  pgid=$(ps -o pgid= -p "$PURPLE_PID" 2>/dev/null | tr -d ' ')
+  target=$PURPLE_PID
+  if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then target=-$pgid; fi
   kill -TERM "$target" 2>/dev/null
   for _ in $(seq 1 20); do
     kill -0 "$PURPLE_PID" 2>/dev/null || break
@@ -346,13 +357,46 @@ stop_purple() {
   fi
   wait "$PURPLE_PID" 2>/dev/null
   PURPLE_PID=""; PURPLE_PGID=""
-  # The A2A server can outlive the launcher, so confirm the port really freed
-  # before the next config tries to bind it.
-  for _ in $(seq 1 30); do
+  port_free "$PURPLE_PORT" && return 0
+  # `uv run` can place the A2A server in a process group of its own, escaping the
+  # group kill above. Reap by port (ours only, matched on the pdesim_purple.py
+  # command line) so 9002 is free for the next config instead of being left for
+  # the next run's preflight to clean up.
+  reap_orphan_purple && port_free "$PURPLE_PORT" && return 0
+  say "WARNING: port $PURPLE_PORT still bound after teardown"
+}
+
+# A run killed uncleanly (Ctrl-C before setsid, SIGKILL, a crash) can leave its
+# Purple alive, holding $PURPLE_PORT and blocking the next run's preflight. Reap
+# such an orphan, but ONLY when the listener is one of our own Purples: match the
+# pdesim_purple.py path in its command line so an unrelated listener (an editor's
+# port forwarder, another service) is never touched and still fails the preflight.
+reap_orphan_purple() {
+  local pid pgid ours=0
+  for pid in $(port_pids "$PURPLE_PORT"); do
+    ps -p "$pid" -o command= 2>/dev/null | grep -qF "$PURPLE" || continue
+    ours=1
+    pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')
+    say "reaping orphaned Purple on port $PURPLE_PORT (pid=$pid pgid=${pgid:-?})"
+    # Kill the whole group when it is its own, matching stop_purple; never signal
+    # our own group, which would take down this script.
+    if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then kill -TERM "-$pgid" 2>/dev/null; else kill -TERM "$pid" 2>/dev/null; fi
+    for _ in $(seq 1 10); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      say "orphan $pid ignored SIGTERM; sending SIGKILL"
+      if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then kill -KILL "-$pgid" 2>/dev/null; else kill -KILL "$pid" 2>/dev/null; fi
+    fi
+  done
+  [ "$ours" -eq 1 ] || return 0
+  # Confirm the port actually freed before the caller's preflight re-checks it.
+  for _ in $(seq 1 15); do
     port_free "$PURPLE_PORT" && return 0
     sleep 1
   done
-  say "WARNING: port $PURPLE_PORT still bound after teardown"
+  return 1
 }
 
 # Ctrl-C and errors must not leave a Purple generating in the background.
@@ -369,9 +413,15 @@ say "archive -> $ARCHIVE"
 # Resolve the problem terms now: a typo should fail here, not after a server is up.
 uv run main.py problems "$PROBLEMS" || exit 1
 
-# Ports must be clear, or `launch` binds nothing and every compile fails.
+# Ports must be clear, or `launch` binds nothing and every compile fails. On
+# $PURPLE_PORT a busy port may be one of our own orphaned Purples from a run that
+# died without teardown; reap that before giving up. 8080 and 9001 are bound by
+# `launch`, never by us, so a listener there is always someone else's — fail.
 for p in 8080 9001 $PURPLE_PORT; do
-  port_free "$p" || { say "ERROR: port $p is already in use"; exit 1; }
+  port_free "$p" && continue
+  if [ "$p" = "$PURPLE_PORT" ] && reap_orphan_purple && port_free "$p"; then continue; fi
+  say "ERROR: port $p is already in use"
+  exit 1
 done
 
 for c in $CONFIG_LIST; do
