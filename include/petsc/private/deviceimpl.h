@@ -230,6 +230,7 @@ struct _DeviceContextOps {
   PetscErrorCode (*createevent)(PetscDeviceContext, PetscEvent);                                                                // optional
   PetscErrorCode (*recordevent)(PetscDeviceContext, PetscEvent);                                                                // optional
   PetscErrorCode (*waitforevent)(PetscDeviceContext, PetscEvent);                                                               // optional
+  PetscErrorCode (*delay)(PetscDeviceContext, PetscReal);                                                                       // optional
 };
 
 struct _p_PetscDeviceContext {
