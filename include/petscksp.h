@@ -63,6 +63,7 @@ typedef const char *KSPType;
 #define KSPLGMRES     "lgmres"
 #define KSPDGMRES     "dgmres"
 #define KSPPGMRES     "pgmres"
+#define KSPSGMRES     "sgmres"
 #define KSPTCQMR      "tcqmr"
 #define KSPBCGS       "bcgs"
 #define KSPIBCGS      "ibcgs"

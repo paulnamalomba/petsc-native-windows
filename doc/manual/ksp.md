@@ -256,6 +256,53 @@ user *must* call
 KSPSetInitialGuessNonzero(KSP ksp,PetscBool flg);
 ```
 
+(sec_sketchedgmres)=
+
+### Sketched GMRES
+
+For a general nonsymmetric system `KSPGMRES` minimizes the residual over the Krylov subspace, which is
+optimal but, at restart dimension $m$, spends $O(m^2 n)$ work and $m$ orthogonalizations building the
+Arnoldi basis; this orthogonalization dominates the cost once $m$ is large. `KSPSGMRES` {cite}`nakatsukasa2024randomized`
+reduces that cost: it builds the Krylov basis with a *truncated* Arnoldi recurrence that orthogonalizes
+each new vector against only the previous `-ksp_sgmres_trunc` vectors (default 2), and then solves the
+GMRES least-squares problem not with the full basis but in a randomly sketched subspace of dimension
+`-ksp_sgmres_sketch_factor` times the restart. Orthogonalization then costs $O(\texttt{trunc}\cdot m\cdot n)$
+rather than $O(m^2 n)$. The sketched problem reproduces the true GMRES problem only while the Krylov
+basis stays well-conditioned, so the method targets nonsymmetric systems that are not severely
+ill-conditioned; the restart is set with `-ksp_sgmres_restart`.
+
+Because the sketched correction is slightly less effective per step than the exact GMRES minimizer,
+`KSPSGMRES` needs somewhat more iterations to reach a given tolerance, but each iteration is much
+cheaper. The tutorial `src/ksp/ksp/tutorials/ex91.c` solves a 3D convection-diffusion problem (110,592
+unknowns, Jacobi preconditioning, relative tolerance $10^{-8}$) and lets both methods be compared with
+`-log_view`. The following measurements were taken on a single process:
+
+| Method | restart | Iterations | Orthogonalization flops | Total flops | Time (s) |
+| --- | --- | --- | --- | --- | --- |
+| `KSPGMRES`  |  60 | 338 | 4.45e9 | 5.09e9 | 2.03 |
+| `KSPSGMRES` |  60 | 480 | 5.28e8 | 1.43e9 | 2.85 |
+| `KSPGMRES`  | 120 | 224 | 5.67e9 | 6.09e9 | 1.99 |
+| `KSPSGMRES` | 120 | 360 | 3.97e8 | 1.07e9 | 2.10 |
+
+`KSPSGMRES` performs 3.6 to 5.7 times fewer floating-point operations than `KSPGMRES` to reach the same
+tolerance, and the orthogonalization work alone drops by roughly 8 to 14 times; the advantage grows
+with the restart dimension because the orthogonalization that it avoids grows as $m^2$. Running both
+methods for a fixed subspace dimension of 120 (one cycle, no restart) makes the per-step picture
+explicit: `KSPGMRES` reaches a relative residual of $7.4\times10^{-4}$ using $3.24\times10^{9}$
+orthogonalization flops, while `KSPSGMRES` reaches $1.0\times10^{-3}$ using only $1.32\times10^{8}$, a
+factor of roughly 24 fewer for essentially the same residual reduction.
+
+The flop counts above are reported by `-log_view` and are independent of the build. The timings,
+however, were obtained with a debugging (unoptimized) PETSc build, so they are not representative: in
+that build the extra sparse matrix-vector products from the higher iteration count, together with an
+unoptimized sketch kernel, offset the orthogonalization saving, and `KSPSGMRES` is competitive only at
+the larger restart. Realizing the flop advantage as wall-clock time requires an optimized build
+(`--with-debugging=0`) and remains limited by the additional matrix-vector products. Two further
+caveats guide use: `-ksp_sgmres_trunc 0` selects a monomial basis that minimizes communication but is
+numerically fragile, and at small restart dimensions `KSPSGMRES` can stagnate on nonsymmetric problems
+where restarted `KSPGMRES` still converges; enlarging the restart or `-ksp_sgmres_sketch_factor`
+restores convergence, so a restart larger than the `KSPGMRES` default is recommended.
+
 (sec_ksppc)=
 
 ### Preconditioning within KSP

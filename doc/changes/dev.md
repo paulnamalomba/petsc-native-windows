@@ -63,6 +63,8 @@
 ```{rubric} KSP:
 ```
 
+- Add `KSPSGMRES`, a sketched GMRES method that solves the GMRES least-squares problem in a randomly sketched subspace, reducing orthogonalization cost for general nonsymmetric systems that are not severely ill-conditioned
+
 ```{rubric} SNES:
 ```
 
