@@ -4,6 +4,7 @@
 static auto               rootDeviceType = PETSC_DEVICE_CONTEXT_DEFAULT_DEVICE_TYPE;
 static auto               rootStreamType = PETSC_DEVICE_CONTEXT_DEFAULT_STREAM_TYPE;
 static PetscDeviceContext globalContext  = nullptr;
+static PetscDeviceContext rootContext    = nullptr;
 
 /* when PetscDevice initializes PetscDeviceContext eagerly the type of device created should
  * match whatever device is eagerly initialized */
@@ -58,9 +59,10 @@ static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
       PetscDeviceType dtype;
 
       PetscFunctionBegin;
-      PetscCall(PetscDeviceContextGetDeviceType(globalContext, &dtype));
-      PetscCall(PetscInfo(globalContext, "Destroying global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
-      PetscCall(PetscDeviceContextDestroy(&globalContext));
+      PetscCall(PetscDeviceContextGetDeviceType(rootContext, &dtype));
+      PetscCall(PetscInfo(rootContext, "Destroying global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
+      PetscCall(PetscDeviceContextDestroy(&rootContext));
+      globalContext  = nullptr;
       rootDeviceType = PETSC_DEVICE_CONTEXT_DEFAULT_DEVICE_TYPE;
       rootStreamType = PETSC_DEVICE_CONTEXT_DEFAULT_STREAM_TYPE;
       PetscFunctionReturn(PETSC_SUCCESS);
@@ -70,6 +72,7 @@ static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
     PetscCall(PetscDeviceInitializePackage());
     PetscCall(PetscRegisterFinalize(std::move(finalizer)));
     PetscCall(PetscDeviceContextCreate(&globalContext));
+    rootContext = globalContext;
     PetscCall(PetscInfo(globalContext, "Initializing global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
     pobj = PetscObjectCast(globalContext);
     PetscCall(PetscObjectSetName(pobj, "global root"));
