@@ -4951,7 +4951,10 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
+        PetscCall(PetscObjectReference((PetscObject)x));
         PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &x));
+        PetscCall(VecDestroy(&xcreated));
+        xcreated = x;
         PetscCall(DMAdaptorDestroy(&adaptor));
         incall = PETSC_FALSE;
       }
@@ -4971,7 +4974,10 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
         PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
+        PetscCall(PetscObjectReference((PetscObject)x));
         PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &x));
+        PetscCall(VecDestroy(&xcreated));
+        xcreated = x;
         PetscCall(DMAdaptorDestroy(&adaptor));
         incall = PETSC_FALSE;
       }
