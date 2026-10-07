@@ -641,13 +641,18 @@ inline PetscErrorCode SfInterface<T>::LinkDestroy_MPI(PetscSF, PetscSFLink link)
 template <device::cupm::DeviceType T>
 inline PetscErrorCode SfInterface<T>::LinkSetUp(PetscSF sf, PetscSFLink link, MPI_Datatype unit) noexcept
 {
-  PetscInt  nSignedChar = 0, nUnsignedChar = 0, nInt = 0, nPetscInt = 0, nPetscReal = 0;
-  PetscBool is2Int, is2PetscInt;
+  PetscInt nSignedChar = 0, nUnsignedChar = 0, nInt = 0, nPetscInt = 0, nPetscReal = 0;
 #if PetscDefined(HAVE_COMPLEX)
   PetscInt nPetscComplex = 0;
 #endif
+  PetscBool          is2Int, is2PetscInt;
+  cupmStream_t      *stream;
+  PetscDeviceContext dctx;
 
   PetscFunctionBegin;
+  PetscCall(PetscDeviceContextGetCurrentContextAssertType_Internal(&dctx, PETSC_DEVICE_CUPM()));
+  PetscCall(PetscDeviceContextGetStreamHandle(dctx, (void **)&stream));
+  link->stream = *stream;
   if (link->deviceinited) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(MPIPetsc_Type_compare_contig(unit, MPI_SIGNED_CHAR, &nSignedChar));
   PetscCall(MPIPetsc_Type_compare_contig(unit, MPI_UNSIGNED_CHAR, &nUnsignedChar));
@@ -780,14 +785,6 @@ inline PetscErrorCode SfInterface<T>::LinkSetUp(PetscSF sf, PetscSFLink link, MP
   }
   link->maxResidentThreadsPerGPU = sf->maxResidentThreadsPerGPU;
 
-  {
-    cupmStream_t      *stream;
-    PetscDeviceContext dctx;
-
-    PetscCall(PetscDeviceContextGetCurrentContextAssertType_Internal(&dctx, PETSC_DEVICE_CUPM()));
-    PetscCall(PetscDeviceContextGetStreamHandle(dctx, (void **)&stream));
-    link->stream = *stream;
-  }
   link->Destroy      = LinkDestroy_MPI;
   link->SyncDevice   = LinkSyncDevice;
   link->SyncStream   = LinkSyncStream;
