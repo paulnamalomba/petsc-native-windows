@@ -10,7 +10,7 @@
 # Nothing is deleted: prior results and study dirs move into $ARCHIVE.
 #
 # Usage: ./run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
-#                        [-i|--progress SECS] [-b|--bench DIR]
+#                        [-i|--progress SECS] [-b|--bench DIR] [-o|--output DIR]
 #
 # PETSC_DIR and PETSC_ARCH must both be set: they select the PETSc build, and the
 # pde-sim binding and artifacts/ are taken from PETSC_DIR. The bench repo is a
@@ -23,6 +23,8 @@
 #   -m, --model NAME     model the Purple generates with, as PDESIM_CLAUDE_MODEL
 #                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
 #   -i, --progress SECS  seconds between progress lines, 0 to silence (default 30)
+#   -o, --output DIR     where Green writes results, as main.py --output takes it
+#                        (default $BENCH/output/pdesim_<timestamp>, one per run)
 #
 # -p takes a glob, so -p '*' is the full matrix: ./run_pdesim.sh -p '*' -c 1,2,3
 #
@@ -31,8 +33,10 @@
 # The bare id takes the 200K default, and a pde-sim run has been seen to peak at
 # ~220K tokens of context, so the 1M form is what avoids mid-run compaction.
 #
-# This produces Green's result JSONs under $BENCH/output; building a report from
-# them is a separate step.
+# Each run writes to its own output directory, so results never collide with an
+# earlier run's and nothing has to be parked first. Green puts the aggregate JSON
+# there, one per config, beside the code/ and scores/ trees it writes per variant.
+# Building a report from them is a separate step.
 #
 # Logs: this script to stdout, per-config detail to /tmp/pdesim_{purple,launch}_c<N>.log
 set -u
@@ -42,6 +46,8 @@ CONFIGS=1
 MODEL=claudeopus48
 PROGRESS_EVERY=30
 BENCH=${PETSCAGENT_BENCH:-$HOME/petscagent-bench}
+OUTPUT=
+RUN_ID=$(date +%Y%m%d-%H%M%S)
 
 usage() {
   cat <<'EOF'
@@ -58,6 +64,8 @@ Usage: run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
   -i, --progress SECS  seconds between progress lines, 0 to silence (default: 30)
   -b, --bench DIR      petscagent-bench repo root
                              (default: $PETSCAGENT_BENCH, else ~/petscagent-bench)
+  -o, --output DIR     where Green writes results, as main.py --output takes it
+                       (default: $BENCH/output/pdesim_<timestamp>, one per run)
   -h, --help           this message
 
 PETSC_DIR and PETSC_ARCH select the PETSc build to run against. Both must be set
@@ -86,6 +94,8 @@ while [ $# -gt 0 ]; do
     --progress=*) PROGRESS_EVERY=${1#*=}; shift ;;
     -b | --bench) [ $# -ge 2 ] || die "$1 needs a value"; BENCH=$2; shift 2 ;;
     --bench=*) BENCH=${1#*=}; shift ;;
+    -o | --output) [ $# -ge 2 ] || die "$1 needs a value"; OUTPUT=$2; shift 2 ;;
+    --output=*) OUTPUT=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
     *) echo "run_pdesim.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -101,6 +111,8 @@ CONFIG_LIST=$(echo "$CONFIGS" | tr ',' ' ')
 case $PROGRESS_EVERY in
   "" | *[!0-9]*) die "--progress wants a whole number of seconds, got '$PROGRESS_EVERY'" ;;
 esac
+# Unset is fine — the default applies below — but a blank value is a typo.
+case $OUTPUT in "") ;; *[![:space:]]*) ;; *) die "--output is empty" ;; esac
 
 # The PETSc build is whichever one the environment selects: choosing a root or an
 # arch here would quietly run against a build the caller did not pick.
@@ -119,7 +131,13 @@ BENCH=$abs
 PURPLE=$PETSC_DIR/.agents/pde-sim/bindings/petscagent-bench/pdesim_purple.py
 ARTIFACTS=$PETSC_DIR/artifacts
 CASE_INDEX=$PETSC_DIR/.agents/pde-sim/components/case-index.json
-ARCHIVE=$PETSC_DIR/artifacts_runs/run_$(date +%Y%m%d-%H%M%S)
+ARCHIVE=$PETSC_DIR/artifacts_runs/run_$RUN_ID
+# One output directory per invocation, so a run's results stand alone without
+# having to park the previous run's out of the way first. Green creates it and
+# writes the aggregate JSON plus its code/ and scores/ trees there, one set per
+# config (the configs differ in their model slug, pdesim-<model>-c<N>, so they
+# share a directory without colliding). Same stamp as $ARCHIVE, to pair them.
+OUTPUT=${OUTPUT:-$BENCH/output/pdesim_$RUN_ID}
 [ -f "$PURPLE" ] || die "no pde-sim binding under PETSC_DIR=$PETSC_DIR (looked for $PURPLE)"
 [ -f "$PETSC_DIR/$PETSC_ARCH/lib/petsc/conf/petscvariables" ] ||
   die "PETSC_ARCH=$PETSC_ARCH is not a configured build of $PETSC_DIR"
@@ -321,10 +339,10 @@ trap 'echo; say "interrupted - stopping Purple"; stop_progress; stop_purple; exi
 trap 'stop_progress; stop_purple; rm -rf "$DONE_DIR"' EXIT
 
 cd "$BENCH" || exit 1
-mkdir -p "$ARCHIVE" output
+mkdir -p "$ARCHIVE" "$OUTPUT"
 
 say "=== $PROBLEMS x configs $CONFIGS on model $MODEL ==="
-say "output  -> $(readlink -f "$BENCH/output")"
+say "output  -> $(readlink -f "$OUTPUT")"
 say "archive -> $ARCHIVE"
 
 # Resolve the problem terms now: a typo should fail here, not after a server is up.
@@ -334,19 +352,6 @@ uv run main.py problems "$PROBLEMS" || exit 1
 for p in 8080 9001 $PURPLE_PORT; do
   port_free "$p" || { say "ERROR: port $p is already in use"; exit 1; }
 done
-
-# Park prior results for these configs so this run's output stands alone. Green
-# takes its run index from the highest -runN across the result JSON, runs/, and
-# the legacy sources/ (src/green_agent/agent.py), so parking only the JSON would
-# leave a surviving runs/ tree to push this run to -run2. Park all three, and
-# keep their layout so the archive can be restored over output/ as it was.
-shopt -s nullglob
-for c in $CONFIG_LIST; do
-  stash "prior_output"         "$BENCH"/output/pdesim-*-c"$c"-judged-by-*.json
-  stash "prior_output/runs"    "$BENCH"/output/runs/pdesim-*-c"$c"-judged-by-*
-  stash "prior_output/sources" "$BENCH"/output/sources/pdesim-*-c"$c"-judged-by-*
-done
-shopt -u nullglob
 
 for c in $CONFIG_LIST; do
   say "===== CONFIG $c ====="
@@ -373,7 +378,7 @@ for c in $CONFIG_LIST; do
 
   start_progress "$c"
   uv run main.py launch --purple-url "$PURPLE_URL" --problems "$PROBLEMS" \
-    > "/tmp/pdesim_launch_c$c.log" 2>&1
+    --output "$OUTPUT" > "/tmp/pdesim_launch_c$c.log" 2>&1
   rc=$?                                  # capture before stop_progress clobbers it
   stop_progress
   # Catch whatever finished after the watcher's last look, and cover -i 0.
@@ -388,4 +393,4 @@ for c in $CONFIG_LIST; do
 done
 
 say "=== complete ==="
-say "results:"; ls -1 "$BENCH"/output/pdesim-*.json 2>/dev/null
+say "results:"; ls -1 "$OUTPUT"/*.json 2>/dev/null
