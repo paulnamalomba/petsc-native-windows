@@ -1237,6 +1237,15 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
     return
 
 #-----------------------------------------------------------------------------------------------------
+  def configureArchMakefile(self):
+    with open(os.path.join(self.arch.arch, 'GNUmakefile'), 'w') as fd:
+      fd.write('PETSC_ARCH={0}\n'.format(self.arch.arch))
+      fd.write('\n')
+      fd.write('all:\n') # default target
+      fd.write('%:\n') # rule for all targets
+      fd.write('\t+@$(MAKE) -C .. --no-print-directory $@\n')
+
+#-----------------------------------------------------------------------------------------------------
   def configureDefaultArch(self):
     conffile = os.path.join('lib','petsc','conf', 'petscvariables')
     if self.framework.argDB['with-default-arch']:
@@ -1386,6 +1395,7 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
     self.executeTest(self.configureDarwin)
     self.executeTest(self.configureWin32)
     self.executeTest(self.configureCygwinBrokenPipe)
+    self.executeTest(self.configureArchMakefile)
     self.executeTest(self.configureDefaultArch)
     self.executeTest(self.configureScript)
     self.executeTest(self.configureInstall)
