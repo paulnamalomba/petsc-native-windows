@@ -335,6 +335,11 @@ struct PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL BlasInterfaceImpl<DeviceType::HI
   PETSC_CUPMBLAS_ALIAS_FUNCTION(GetPointerMode)
   PETSC_CUPMBLAS_ALIAS_FUNCTION(SetPointerMode)
 
+  /* rocBLAS host-result reductions on nonblocking streams are unreliable before ROCm 6.1.0.
+     PETSc relies on the upstream fix to avoid additional result-buffer and synchronization
+     code for these older releases.
+     Affected result copies: https://github.com/ROCm/rocBLAS/blob/rocm-5.4.3/library/src/blas1/reduction_strided_batched.hpp#L247-L256
+     Upstream fix: https://github.com/ROCm/rocBLAS/blob/develop_deprecated/CHANGELOG.md#rocblas-410-for-rocm-61 */
   // level 1 BLAS
   PETSC_CUPMBLAS_ALIAS_BLAS_FUNCTION(STANDARD, axpy)
   PETSC_CUPMBLAS_ALIAS_BLAS_FUNCTION(STANDARD, copy)
