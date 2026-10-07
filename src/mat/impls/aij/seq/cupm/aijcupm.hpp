@@ -380,14 +380,18 @@ struct MatSeqAIJCUSPARSE_CUPM : device::cupm::impl::CUPMObject<T> {
     PetscInt            *i, *j;
     PetscContainer       container_h;
     MatCOOStruct_SeqAIJ *coo_h, *coo_d;
+    cupmStream_t         stream;
+    PetscDeviceContext   dctx;
 
     PetscFunctionBegin;
+    PetscCall(GetHandles_(&dctx, &stream));
     PetscCall(PetscGetMemType(coo_i, &mtype));
     if (PetscMemTypeDevice(mtype)) {
       dev_ij = PETSC_TRUE;
       PetscCall(PetscMalloc2(coo_n, &i, coo_n, &j));
-      PetscCallCUPM(cupmMemcpy(i, coo_i, coo_n * sizeof(PetscInt), cupmMemcpyDeviceToHost));
-      PetscCallCUPM(cupmMemcpy(j, coo_j, coo_n * sizeof(PetscInt), cupmMemcpyDeviceToHost));
+      PetscCallCUPM(cupmMemcpyAsync(i, coo_i, coo_n * sizeof(PetscInt), cupmMemcpyDeviceToHost, stream));
+      PetscCallCUPM(cupmMemcpyAsync(j, coo_j, coo_n * sizeof(PetscInt), cupmMemcpyDeviceToHost, stream));
+      PetscCall(PetscDeviceContextSynchronize(dctx));
     } else {
       i = coo_i;
       j = coo_j;
@@ -404,9 +408,10 @@ struct MatSeqAIJCUSPARSE_CUPM : device::cupm::impl::CUPMObject<T> {
     PetscCall(PetscMalloc1(1, &coo_d));
     *coo_d = *coo_h; /* shallow copy; device fields amended below */
     PetscCallCUPM(cupmMalloc((void **)&coo_d->jmap, (coo_h->nz + 1) * sizeof(PetscCount)));
-    PetscCallCUPM(cupmMemcpy(coo_d->jmap, coo_h->jmap, (coo_h->nz + 1) * sizeof(PetscCount), cupmMemcpyHostToDevice));
+    PetscCallCUPM(cupmMemcpyAsync(coo_d->jmap, coo_h->jmap, (coo_h->nz + 1) * sizeof(PetscCount), cupmMemcpyHostToDevice, stream));
     PetscCallCUPM(cupmMalloc((void **)&coo_d->perm, coo_h->Atot * sizeof(PetscCount)));
-    PetscCallCUPM(cupmMemcpy(coo_d->perm, coo_h->perm, coo_h->Atot * sizeof(PetscCount), cupmMemcpyHostToDevice));
+    PetscCallCUPM(cupmMemcpyAsync(coo_d->perm, coo_h->perm, coo_h->Atot * sizeof(PetscCount), cupmMemcpyHostToDevice, stream));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
 
     PetscCall(PetscObjectContainerCompose((PetscObject)mat, "__PETSc_MatCOOStruct_Device", coo_d, MatSeqAIJCUSPARSE_CUPM::COOStructDestroy));
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -424,8 +429,10 @@ struct MatSeqAIJCUSPARSE_CUPM : device::cupm::impl::CUPMObject<T> {
     PetscContainer       container;
     MatCOOStruct_SeqAIJ *coo;
     cupmStream_t         stream;
+    PetscDeviceContext   dctx;
 
     PetscFunctionBegin;
+    PetscCall(GetHandles_(&dctx, &stream));
     if (!dev->mat) PetscCall(Policy::CopyToGPU(A));
 
     PetscCall(PetscObjectQuery((PetscObject)A, "__PETSc_MatCOOStruct_Device", (PetscObject *)&container));
@@ -434,14 +441,15 @@ struct MatSeqAIJCUSPARSE_CUPM : device::cupm::impl::CUPMObject<T> {
     PetscCall(PetscGetMemType(v, &memtype));
     if (PetscMemTypeHost(memtype)) { /* copy host values to device */
       PetscCallCUPM(cupmMalloc((void **)&v1, coo->n * sizeof(PetscScalar)));
-      PetscCallCUPM(cupmMemcpy((void *)v1, v, coo->n * sizeof(PetscScalar), cupmMemcpyHostToDevice));
+      PetscCallCUPM(cupmMemcpyAsync((void *)v1, v, coo->n * sizeof(PetscScalar), cupmMemcpyHostToDevice, stream));
+      // The caller may reuse the host values after this call returns.
+      PetscCall(PetscDeviceContextSynchronize(dctx));
       PetscCall(PetscLogCpuToGpu(coo->n * sizeof(PetscScalar)));
     }
 
     if (imode == INSERT_VALUES) PetscCall(GetArrayWrite(A, &Aa));
     else PetscCall(GetArray(A, &Aa));
 
-    PetscCall(GetHandles_(&stream));
     PetscCall(PetscLogGpuTimeBegin());
     if (Annz) {
       PetscCallCUPM(cupmLaunchKernel(MatAddCOOValues, (unsigned int)((Annz + 255) / 256), 256u, (size_t)0, stream, v1, Annz, coo->jmap, coo->perm, imode, Aa));
@@ -454,8 +462,10 @@ struct MatSeqAIJCUSPARSE_CUPM : device::cupm::impl::CUPMObject<T> {
 
     if (PetscMemTypeHost(memtype)) {
       void *v1_device = (void *)v1;
-      PetscCallCUPM(cupmFree(v1_device));
+
+      PetscCallCUPM(cupmFreeAsync(v1_device, stream));
     }
+    PetscCall(PetscDeviceContextSynchronizeIfWithBarrier_Internal(dctx));
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
