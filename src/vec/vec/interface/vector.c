@@ -524,8 +524,10 @@ PetscErrorCode VecPointwiseSignAsync_Private(Vec y, Vec x, VecSignMode sign_type
   PetscCall(VecGetOffloadMask(x, &mask));
   is_host = PetscOffloadHost(mask) ? PETSC_TRUE : PETSC_FALSE;
   if (!is_host) PetscCall(PetscObjectQueryFunction((PetscObject)y, VEC_ASYNC_FN_NAME("PointwiseSign"), &async_fn));
-  if (async_fn) PetscCall((*async_fn)(y, x, sign_type, dctx));
-  else {
+  if (async_fn) {
+    if (!dctx) PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall((*async_fn)(y, x, sign_type, dctx));
+  } else {
     PetscInt n;
 
     PetscCall(VecGetLocalSize(y, &n));
