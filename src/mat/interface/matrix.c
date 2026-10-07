@@ -10686,6 +10686,44 @@ PetscErrorCode MatRARt(Mat A, Mat R, MatReuse scall, PetscReal fill, Mat *C)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+   Computes D = A * B or A^T * B (ptype is MATPRODUCT_AB or MATPRODUCT_AtB) into an existing D that only the caller uses. For a dense D the
+   product stays attached to D, so that later calls only run its numeric phase, whereas MatMatMult() and MatTransposeMatMult() with
+   MAT_REUSE_MATRIX set up and clear the product on every call into a dense D that has none. Any other D goes through those calls.
+
+   The product is set up again for another product type, another A, or a change of the nonzero pattern of A, while another B is only bound to
+   it. The nonzero state of A is compared without a reduction, since the parallel AIJ and BAIJ types make it the same on all processes during
+   assembly
+*/
+PetscErrorCode MatProductComputeWithMat_Private(Mat A, Mat B, MatProductType ptype, Mat D)
+{
+  Mat_Product     *product = D->product;
+  PetscObjectState state;
+  PetscBool        flg;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectBaseTypeCompareAny((PetscObject)D, &flg, MATSEQDENSE, MATMPIDENSE, ""));
+  if (!flg) { /* only a dense result can be given without a product, MatMatMult() and MatTransposeMatMult() reuse the product of any other */
+    if (ptype == MATPRODUCT_AB) PetscCall(MatMatMult(A, B, MAT_REUSE_MATRIX, PETSC_CURRENT, &D));
+    else PetscCall(MatTransposeMatMult(A, B, MAT_REUSE_MATRIX, PETSC_CURRENT, &D));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(MatGetNonzeroState(A, &state));
+  if (!product || product->type != ptype || product->A != A || product->Anonzerostate != state) {
+    PetscCall(PetscInfo(D, "Setting up the %s product into the supplied dense matrix\n", MatProductTypes[ptype]));
+    PetscCall(MatProductCreateWithMat(A, B, NULL, D));
+    D->product->api_user = PETSC_TRUE;
+    PetscCall(MatProductSetType(D, ptype));
+    PetscCall(MatProductSetFromOptions(D));
+    PetscCall(MatProductSymbolic(D));
+  } else {
+    PetscCall(PetscInfo(D, "Reusing the %s product attached to the supplied dense matrix\n", MatProductTypes[ptype]));
+    if (product->B != B) PetscCall(MatProductReplaceMats(NULL, B, NULL, D));
+  }
+  PetscCall(MatProductNumeric(D));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode MatProduct_Private(Mat A, Mat B, MatReuse scall, PetscReal fill, MatProductType ptype, Mat *C)
 {
   PetscBool flg = PETSC_TRUE;
