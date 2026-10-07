@@ -129,6 +129,7 @@ PETSC_INTERN PetscErrorCode DMSwarmDataBucketView(MPI_Comm, DMSwarmDataBucket, c
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketAddPoint(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketRemovePoint(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketRemovePointAtIndex(const DMSwarmDataBucket, const PetscInt);
+PETSC_INTERN PetscErrorCode DMSwarmDataBucketRemovePoints_Internal(DMSwarmDataBucket, PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketCompact(DMSwarmDataBucket, PetscInt, const PetscInt[]);
 
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketDuplicateFields(DMSwarmDataBucket, DMSwarmDataBucket *);

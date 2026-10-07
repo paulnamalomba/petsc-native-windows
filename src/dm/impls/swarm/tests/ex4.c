@@ -549,6 +549,13 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_2d_1
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of bsi_2d_1: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex4_bsi_2d_1.out
      test:
        suffix: bsi_2d_2
        args: -ts_basicsymplectic_type 2
@@ -567,6 +574,13 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_3d_1
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of bsi_3d_1: must reproduce the host expected output
+     test:
+       suffix: bsi_3d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex4_bsi_3d_1.out
      test:
        suffix: bsi_3d_2
        args: -ts_basicsymplectic_type 2
@@ -588,6 +602,13 @@ int main(int argc, char **argv)
      test:
        suffix: im_2d
        args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1
+
+     # Device-resident twin of im_2d: must reproduce the host expected output
+     test:
+       suffix: im_2d_backend_hip
+       requires: hip
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1 -dm_swarm_backend hip
+       output_file: output/ex4_im_2d.out
      test:
        suffix: im_3d
        args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 1,1,1 -dm_plex_box_lower -1,-1,-1 -dm_plex_box_upper 1,1,1
@@ -603,6 +624,13 @@ int main(int argc, char **argv)
      test:
        suffix: dg_2d
        args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1
+
+     # Device-resident twin of dg_2d: must reproduce the host expected output
+     test:
+       suffix: dg_2d_backend_hip
+       requires: hip
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1 -dm_swarm_backend hip
+       output_file: output/ex4_dg_2d.out
      test:
        suffix: dg_3d
        args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 1,1,1 -dm_plex_box_lower -1,-1,-1 -dm_plex_box_upper 1,1,1

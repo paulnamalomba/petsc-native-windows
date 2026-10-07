@@ -197,8 +197,10 @@ static PetscErrorCode CreateSwarm(DM dm, DM *sw, AppCtx *user)
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "w_q", 1, PETSC_SCALAR));
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "x_q", 2, PETSC_SCALAR));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
-  PetscCall(DMSwarmInsertPointsUsingCellDM(*sw, DMSWARMPIC_LAYOUT_GAUSS, Npc));
+  /* Options must be consumed before DMSwarmInsertPointsUsingCellDM() triggers DMSetUp(), so that
+     -dm_swarm_backend can still be honored (it is a hard error after setup) */
   PetscCall(DMSetFromOptions(*sw));
+  PetscCall(DMSwarmInsertPointsUsingCellDM(*sw, DMSWARMPIC_LAYOUT_GAUSS, Npc));
 
   PetscCall(DMSwarmGetLocalSize(*sw, &Np));
   PetscCall(DMSwarmGetField(*sw, DMSwarmPICField_coor, NULL, NULL, (void **)&coords));
@@ -437,22 +439,85 @@ int main(int argc, char *argv[])
       suffix: tri_fe_f0
       args: -field 0
 
+    # Device-resident twin of tri_fe_f0: must reproduce the host expected output
+    test:
+      suffix: tri_fe_f0_backend_hip
+      requires: hip
+      args: -field 0 -dm_swarm_backend hip
+      output_file: output/ex11_tri_fe_f0.out
+
     test:
       suffix: tri_fe_f1
       args: -field 1
 
+    # Device-resident twin of tri_fe_f1: must reproduce the host expected output
+    test:
+      suffix: tri_fe_f1_backend_hip
+      requires: hip
+      args: -field 1 -dm_swarm_backend hip
+      output_file: output/ex11_tri_fe_f1.out
+
     test:
       suffix: tri_fe_grad
       args: -field 0 -grad -gptof_ksp_type lsqr -gptof_pc_type none -gptof_ksp_rtol 1e-10
+
+    # Device-resident twin of tri_fe_grad: must reproduce the host expected output
+    test:
+      suffix: tri_fe_grad_backend_hip
+      requires: hip
+      args: -field 0 -grad -gptof_ksp_type lsqr -gptof_pc_type none -gptof_ksp_rtol 1e-10 -dm_swarm_backend hip
+      output_file: output/ex11_tri_fe_grad.out
+
+    # tri_fe_f0 with HIP vectors and particle mass matrix (-dm_mat_type); under the hip backend the mass matrix values are
+    # computed on the device, which must reproduce the host expected output
+    test:
+      suffix: tri_fe_f0_dm_mat
+      requires: hip
+      args: -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse
+      output_file: output/ex11_tri_fe_f0.out
+
+    test:
+      suffix: tri_fe_f0_dm_mat_backend_hip
+      requires: hip
+      args: -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse -dm_swarm_backend hip
+      output_file: output/ex11_tri_fe_f0.out
+
+    # quad_fe_f0 with HIP vectors and particle mass matrix (-dm_mat_type); under the hip backend the mass matrix values are
+    # computed on the device, which must reproduce the host expected output
+    test:
+      suffix: quad_fe_f0_dm_mat
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse
+      output_file: output/ex11_quad_fe_f0.out
+
+    test:
+      suffix: quad_fe_f0_dm_mat_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse -dm_swarm_backend hip
+      output_file: output/ex11_quad_fe_f0.out
 
     # -gptof_ksp_converged_reason -gptof_ksp_lsqr_monitor to see the divergence solve
     test:
       suffix: quad_fe_f0
       args: -dm_plex_simplex 0 -field 0
 
+    # Device-resident twin of quad_fe_f0: must reproduce the host expected output
+    test:
+      suffix: quad_fe_f0_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_swarm_backend hip
+      output_file: output/ex11_quad_fe_f0.out
+
     test:
       suffix: quad_fe_f1
       args: -dm_plex_simplex 0 -field 1
+
+    # Device-resident twin of quad_fe_f1: must reproduce the host expected output
+    test:
+      suffix: quad_fe_f1_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 1 -dm_swarm_backend hip
+      output_file: output/ex11_quad_fe_f1.out
 
   testset:
     requires: triangle
@@ -464,16 +529,72 @@ int main(int argc, char *argv[])
       suffix: tri_fv_f0
       args: -field 0
 
+    # Device-resident twin of tri_fv_f0: must reproduce the host expected output
+    test:
+      suffix: tri_fv_f0_backend_hip
+      requires: hip
+      args: -field 0 -dm_swarm_backend hip
+      output_file: output/ex11_tri_fv_f0.out
+
     test:
       suffix: tri_fv_f1
       args: -field 1
+
+    # Device-resident twin of tri_fv_f1: must reproduce the host expected output
+    test:
+      suffix: tri_fv_f1_backend_hip
+      requires: hip
+      args: -field 1 -dm_swarm_backend hip
+      output_file: output/ex11_tri_fv_f1.out
+
+    # tri_fv_f0 with HIP vectors and particle mass matrix (-dm_mat_type); under the hip backend the mass matrix values are
+    # computed on the device, which must reproduce the host expected output
+    test:
+      suffix: tri_fv_f0_dm_mat
+      requires: hip
+      args: -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse
+      output_file: output/ex11_tri_fv_f0.out
+
+    test:
+      suffix: tri_fv_f0_dm_mat_backend_hip
+      requires: hip
+      args: -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse -dm_swarm_backend hip
+      output_file: output/ex11_tri_fv_f0.out
+
+    # quad_fv_f0 with HIP vectors and particle mass matrix (-dm_mat_type); under the hip backend the mass matrix values are
+    # computed on the device, which must reproduce the host expected output
+    test:
+      suffix: quad_fv_f0_dm_mat
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse
+      output_file: output/ex11_quad_fv_f0.out
+
+    test:
+      suffix: quad_fv_f0_dm_mat_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type hip -dm_mat_type aijhipsparse -dm_swarm_backend hip
+      output_file: output/ex11_quad_fv_f0.out
 
     test:
       suffix: quad_fv_f0
       args: -dm_plex_simplex 0 -field 0
 
+    # Device-resident twin of quad_fv_f0: must reproduce the host expected output
+    test:
+      suffix: quad_fv_f0_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 0 -dm_swarm_backend hip
+      output_file: output/ex11_quad_fv_f0.out
+
     test:
       suffix: quad_fv_f1
       args: -dm_plex_simplex 0 -field 1
+
+    # Device-resident twin of quad_fv_f1: must reproduce the host expected output
+    test:
+      suffix: quad_fv_f1_backend_hip
+      requires: hip
+      args: -dm_plex_simplex 0 -field 1 -dm_swarm_backend hip
+      output_file: output/ex11_quad_fv_f1.out
 
 TEST*/

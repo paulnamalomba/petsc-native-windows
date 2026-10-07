@@ -199,10 +199,11 @@ static PetscErrorCode CreateSwarm(DM dm, AppCtx *user, DM *sw)
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "initVelocity", dim, PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "E_field", dim, PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
+  /* consume options (notably -dm_swarm_backend) before the sizing/initialization calls below trigger DMSetUp() */
+  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSwarmComputeLocalSizeFromOptions(*sw));
   PetscCall(DMSwarmInitializeCoordinates(*sw));
   PetscCall(DMSwarmInitializeVelocitiesFromOptions(*sw, v0));
-  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSetApplicationContext(*sw, user));
   PetscCall(PetscObjectSetName((PetscObject)*sw, "Particles"));
   PetscCall(DMViewFromOptions(*sw, NULL, "-sw_view"));
@@ -1153,6 +1154,13 @@ int main(int argc, char **argv)
      test:
        suffix: none_bsi_2d_1
        args: -ts_basicsymplectic_type 1 -em_type none -error
+
+     # Device-resident twin of none_bsi_2d_1: must reproduce the host expected output
+     test:
+       suffix: none_bsi_2d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -em_type none -error -dm_swarm_backend hip
+       output_file: output/ex6_none_bsi_2d_1.out
      test:
        suffix: none_bsi_2d_2
        args: -ts_basicsymplectic_type 2 -em_type none -error
@@ -1165,6 +1173,13 @@ int main(int argc, char **argv)
      test:
        suffix: coulomb_bsi_2d_1
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of coulomb_bsi_2d_1: must reproduce the host expected output
+     test:
+       suffix: coulomb_bsi_2d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex6_coulomb_bsi_2d_1.out
      test:
        suffix: coulomb_bsi_2d_2
        args: -ts_basicsymplectic_type 2
@@ -1186,6 +1201,25 @@ int main(int argc, char **argv)
      test:
        suffix: poisson_bsi_2d_1
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of poisson_bsi_2d_1: must reproduce the host expected output
+     test:
+       suffix: poisson_bsi_2d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex6_poisson_bsi_2d_1.out
+     # poisson_bsi_2d_1 with HIP vectors and particle mass matrix (-dm_mat_type); under the hip backend the mass matrix
+     # values of every step are computed on the device, which must reproduce the host expected output
+     test:
+       suffix: poisson_bsi_2d_1_dm_mat
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_vec_type hip -dm_mat_type aijhipsparse
+       output_file: output/ex6_poisson_bsi_2d_1.out
+     test:
+       suffix: poisson_bsi_2d_1_dm_mat_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_vec_type hip -dm_mat_type aijhipsparse -dm_swarm_backend hip
+       output_file: output/ex6_poisson_bsi_2d_1.out
      test:
        suffix: poisson_bsi_2d_2
        args: -ts_basicsymplectic_type 2
@@ -1213,6 +1247,13 @@ int main(int argc, char **argv)
      test:
        suffix: dg_2d_average
        args: -ts_type discgrad -ts_discgrad_type average -snes_type qn
+
+     # Device-resident twin of dg_2d_average: must reproduce the host expected output
+     test:
+       suffix: dg_2d_average_backend_hip
+       requires: hip
+       args: -ts_type discgrad -ts_discgrad_type average -snes_type qn -dm_swarm_backend hip
+       output_file: output/ex6_dg_2d_average.out
      test:
        suffix: dg_2d_gonzalez
        args: -ts_type discgrad -ts_discgrad_type gonzalez -snes_fd -snes_type newtonls -snes_fd -pc_type lu
@@ -1232,6 +1273,14 @@ int main(int argc, char **argv)
        suffix: bsi_2d_mesh_1_par_2
        nsize: 2
        args: -ts_basicsymplectic_type 4
+
+     # Device-resident twin of bsi_2d_mesh_1_par_2: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_mesh_1_par_2_backend_hip
+       requires: hip
+       nsize: 2
+       args: -ts_basicsymplectic_type 4 -dm_swarm_backend hip
+       output_file: output/ex6_bsi_2d_mesh_1_par_2.out
      test:
        suffix: bsi_2d_mesh_1_par_3
        nsize: 3
@@ -1240,6 +1289,14 @@ int main(int argc, char **argv)
        suffix: bsi_2d_mesh_1_par_4
        nsize: 4
        args: -ts_basicsymplectic_type 4 -dm_swarm_num_particles 0,0,2,0
+
+     # Device-resident twin of bsi_2d_mesh_1_par_4: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_mesh_1_par_4_backend_hip
+       requires: hip
+       nsize: 4
+       args: -ts_basicsymplectic_type 4 -dm_swarm_num_particles 0,0,2,0 -dm_swarm_backend hip
+       output_file: output/ex6_bsi_2d_mesh_1_par_4.out
 
    testset:
      requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)

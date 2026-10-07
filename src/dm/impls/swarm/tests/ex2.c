@@ -5,6 +5,7 @@ static char help[] = "Tests L2 projection with DMSwarm using delta function part
 #include <petscdmswarm.h>
 #include <petscds.h>
 #include <petscksp.h>
+#include <petscdevice.h>
 #include <petsc/private/petscfeimpl.h>
 typedef struct {
   PetscReal L[3];             /* Dimensions of the mesh bounding box */
@@ -14,6 +15,8 @@ typedef struct {
   PetscInt  k;                /* Mode number for test function */
   PetscReal momentTol;        /* Tolerance for checking moment conservation */
   PetscBool shape;
+  PetscInt  numProjections;        /* Number of timed particle to field projections, which replace the projection tests */
+  PetscInt  numReverseProjections; /* Number of timed field to particle projections, after the particle to field ones */
   PetscErrorCode (*func)(PetscInt, PetscReal, const PetscReal[], PetscInt, PetscScalar *, void *);
 } AppCtx;
 
@@ -53,12 +56,14 @@ static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
   PetscBool flag;
 
   PetscFunctionBeginUser;
-  options->particlesPerCell = 1;
-  options->k                = 1;
-  options->particleRelDx    = 1.e-20;
-  options->meshRelDx        = 1.e-20;
-  options->momentTol        = 100. * PETSC_MACHINE_EPSILON;
-  options->shape            = PETSC_FALSE;
+  options->particlesPerCell      = 1;
+  options->k                     = 1;
+  options->particleRelDx         = 1.e-20;
+  options->meshRelDx             = 1.e-20;
+  options->momentTol             = 100. * PETSC_MACHINE_EPSILON;
+  options->shape                 = PETSC_FALSE;
+  options->numProjections        = 0;
+  options->numReverseProjections = 0;
 
   PetscOptionsBegin(comm, "", "L2 Projection Options", "DMPLEX");
   PetscCall(PetscOptionsBool("-shape", "Test linear function projection", "ex2.c", options->shape, &options->shape, NULL));
@@ -81,6 +86,8 @@ static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
     }
   }
   PetscCall(PetscOptionsReal("-moment_tol", "Tolerance for moment checks", "ex2.c", options->momentTol, &options->momentTol, NULL));
+  PetscCall(PetscOptionsBoundedInt("-num_projections", "Number of timed particle to field projections, which replace the projection tests", "ex2.c", options->numProjections, &options->numProjections, NULL, 0));
+  PetscCall(PetscOptionsBoundedInt("-num_reverse_projections", "Number of timed field to particle projections, run after the particle to field ones", "ex2.c", options->numReverseProjections, &options->numReverseProjections, NULL, 0));
   PetscOptionsEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -439,6 +446,57 @@ static PetscErrorCode TestL2ProjectionFieldToParticles(DM dm, DM sw, Vec fhat, A
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Time the particle to field projection. The first projection, which also sets up the device and
+  the discretization, is the checked one of TestL2ProjectionParticlesToField(); every timed one then
+  runs in the "Swarm Projection" logging stage, so that -log_view reports its cost apart from the
+  setup. The device is synchronized and the ranks are lined up before each timed projection, and the
+  device is synchronized again before leaving the stage, so the stage measures exactly the
+  projection: the assembly of the field and particle mass matrices, the right-hand side M_p^T w, and
+  the mass matrix solve.
+
+  With -num_reverse_projections, the field to particle projection of the resulting field is then
+  timed in the same way in the "Swarm Reverse Projection" stage, after the checked one of
+  TestL2ProjectionFieldToParticles(). Every reverse projection assembles both mass matrices, forms
+  M_f u_f, and solves M_p^T u_p = M_f u_f for the particle weights, which needs a solver for the
+  rectangular M_p such as -ftop_ksp_type lsqr. Each one starts from the same field, so all do the
+  same work.
+*/
+static PetscErrorCode BenchmarkL2ProjectionParticlesToField(DM dm, DM sw, Vec fhat, AppCtx *user)
+{
+  const char        *fieldnames[1] = {"w_q"};
+  Vec                fields[1]     = {fhat};
+  PetscDeviceContext dctx;
+  PetscLogStage      stage;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscLogStageRegister("Swarm Projection", &stage));
+  PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+  PetscCall(TestL2ProjectionParticlesToField(dm, sw, fhat, user));
+  for (PetscInt i = 0; i < user->numProjections; ++i) {
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    PetscCallMPI(MPI_Barrier(PetscObjectComm((PetscObject)dm)));
+    PetscCall(PetscLogStagePush(stage));
+    PetscCall(DMSwarmProjectFields(sw, dm, 1, fieldnames, fields, SCATTER_FORWARD));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    PetscCall(PetscLogStagePop());
+  }
+  PetscCall(PetscPrintf(PetscObjectComm((PetscObject)dm), "%" PetscInt_FMT " timed projections\n", user->numProjections));
+  if (!user->numReverseProjections) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(PetscLogStageRegister("Swarm Reverse Projection", &stage));
+  PetscCall(TestL2ProjectionFieldToParticles(dm, sw, fhat, user));
+  for (PetscInt i = 0; i < user->numReverseProjections; ++i) {
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    PetscCallMPI(MPI_Barrier(PetscObjectComm((PetscObject)dm)));
+    PetscCall(PetscLogStagePush(stage));
+    PetscCall(DMSwarmProjectFields(sw, dm, 1, fieldnames, fields, SCATTER_REVERSE));
+    PetscCall(PetscDeviceContextSynchronize(dctx));
+    PetscCall(PetscLogStagePop());
+  }
+  PetscCall(PetscPrintf(PetscObjectComm((PetscObject)dm), "%" PetscInt_FMT " timed reverse projections\n", user->numReverseProjections));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Interpolate the gradient of an FEM (FVM) field. Code repurposed from DMPlexComputeGradientClementInterpolant */
 static PetscErrorCode InterpolateGradient(DM dm, Vec locX, Vec locC)
 {
@@ -665,9 +723,12 @@ int main(int argc, char *argv[])
 
     PetscCall(CreateParticles(dm, &sw, &user));
     PetscCall(DMGetGlobalVector(dm, &fhat));
-    PetscCall(TestL2ProjectionParticlesToField(dm, sw, fhat, &user));
-    PetscCall(TestL2ProjectionFieldToParticles(dm, sw, fhat, &user));
-    PetscCall(TestFieldGradientProjection(dm, sw, &user));
+    if (user.numProjections || user.numReverseProjections) PetscCall(BenchmarkL2ProjectionParticlesToField(dm, sw, fhat, &user));
+    else {
+      PetscCall(TestL2ProjectionParticlesToField(dm, sw, fhat, &user));
+      PetscCall(TestL2ProjectionFieldToParticles(dm, sw, fhat, &user));
+      PetscCall(TestFieldGradientProjection(dm, sw, &user));
+    }
     PetscCall(DMRestoreGlobalVector(dm, &fhat));
   } else {
     PetscCall(CreateParticles_Shape(dm, &sw, &user));
@@ -737,17 +798,60 @@ int main(int argc, char *argv[])
     nsize: 2
     args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type hip -mat_type aijhipsparse -ptof_ksp_type cg -ptof_pc_type asm -ptof_sub_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
+
+  # Device-resident twin of proj_quad_hip_parallel: must reproduce the host expected output
+  test:
+    suffix: proj_quad_hip_parallel_backend_hip
+    requires: triangle hip
+    nsize: 2
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type hip -mat_type aijhipsparse -ptof_ksp_type cg -ptof_pc_type asm -ptof_sub_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_parallel.out
+
+  # proj_quad_hip_parallel with the particle mass matrix assembled through MatSetValues() instead of COO,
+  # and with -dm_mat_type so that the particle mass matrix is also mpiaijhipsparse (-mat_type does not reach it)
+  testset:
+    requires: triangle hip
+    nsize: 2
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type hip -ptof_ksp_type cg -ptof_pc_type asm -ptof_sub_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_parallel.out
+    test:
+      suffix: proj_quad_hip_parallel_mass_legacy
+      args: -mat_type aijhipsparse -dm_swarm_mass_coo 0
+    test:
+      suffix: proj_quad_hip_parallel_dm_mat
+      args: -dm_mat_type aijhipsparse
+    test:
+      suffix: proj_quad_hip_parallel_dm_mat_backend_hip
+      args: -dm_mat_type aijhipsparse -dm_swarm_backend hip
   test:
     suffix: proj_tri_5P
     requires: triangle
     args: -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
 
+  # Device-resident twin of proj_tri_5P: must reproduce the host expected output
+  test:
+    suffix: proj_tri_5P_backend_hip
+    requires: triangle hip
+    args: -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_5P.out
+
   test:
     suffix: proj_quad_5P
     requires: triangle
     args: -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
+
+  # Device-resident twin of proj_quad_5P: must reproduce the host expected output
+  test:
+    suffix: proj_quad_5P_backend_hip
+    requires: triangle hip
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_5P.out
 
   test:
     suffix: proj_tri_mdx
@@ -817,6 +921,14 @@ int main(int argc, char *argv[])
     args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
 
+  # Device-resident twin of proj_tri_3d_mdx: must reproduce the host expected output
+  test:
+    suffix: proj_tri_3d_mdx_backend_hip
+    requires: ctetgen hip
+    args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d_mdx.out
+
   test:
     suffix: proj_tri_3d_mdx_5P
     requires: ctetgen
@@ -828,6 +940,14 @@ int main(int argc, char *argv[])
     requires: ctetgen
     args: -dm_plex_dim 3 -dm_plex_box_faces 2,2,2 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
     filter: grep -v marker | grep -v atomic | grep -v usage
+
+  # Device-resident twin of proj_tri_3d_mdx_2_faces: must reproduce the host expected output
+  test:
+    suffix: proj_tri_3d_mdx_2_faces_backend_hip
+    requires: ctetgen hip
+    args: -dm_plex_dim 3 -dm_plex_box_faces 2,2,2 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend hip
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d_mdx_2_faces.out
 
   test:
     suffix: proj_tri_3d_mdx_5P_2_faces
@@ -904,4 +1024,26 @@ int main(int argc, char *argv[])
           -petscspace_degree 1 -petscfe_default_quadrature_order 1\
           -pc_type redundant -dm_swarm_backend hip
     output_file: output/ex2_proj_shape_linear_quad_2d_mdx.out
+
+  # Benchmark mode at a small size: the fixed-load rank sweep setup of the projection benchmark, with
+  # one 4x4x2 slab of Q2 hexahedra per rank, timing both projection directions. The twins solve on the
+  # device, the last one also with the particle mass matrix values computed on the device, and must
+  # reproduce the host moments.
+  testset:
+    nsize: 4
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,8 -dm_plex_box_upper 1,1,2\
+          -petscpartitioner_type simple -petscspace_degree 2 -particlesPerCell 8 -num_projections 2\
+          -ptof_ksp_type cg -ptof_pc_type jacobi -ptof_ksp_rtol 1e-14 -moment_tol 1e-10\
+          -num_reverse_projections 1 -ftop_ksp_type lsqr -ftop_pc_type none -ftop_ksp_rtol 1e-14
+    output_file: output/ex2_proj_bench_np4.out
+    test:
+      suffix: proj_bench_np4
+    test:
+      suffix: proj_bench_np4_dm_mat
+      requires: hip
+      args: -dm_vec_type hip -dm_mat_type aijhipsparse
+    test:
+      suffix: proj_bench_np4_dm_mat_backend_hip
+      requires: hip
+      args: -dm_swarm_backend hip -dm_vec_type hip -dm_mat_type aijhipsparse
 TEST*/

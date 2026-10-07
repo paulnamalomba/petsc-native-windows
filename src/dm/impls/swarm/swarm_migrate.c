@@ -82,6 +82,7 @@ PetscErrorCode DMSwarmMigrate_Push_Basic(DM dm, PetscBool remove_sent_points)
   if (remove_sent_points) {
     DMSwarmDataField gfield;
 
+    PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
     PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, DMSwarmField_rank, &gfield));
     PetscCall(DMSwarmDataFieldGetAccess(gfield));
     PetscCall(DMSwarmDataFieldGetEntries(gfield, (void **)&rankval));
@@ -104,6 +105,7 @@ PetscErrorCode DMSwarmMigrate_Push_Basic(DM dm, PetscBool remove_sent_points)
     }
     PetscCall(DMSwarmDataFieldRestoreEntries(gfield, (void **)&rankval));
     PetscCall(DMSwarmDataFieldRestoreAccess(gfield));
+    PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
   }
   PetscCall(DMSwarmDataExBegin(de));
   PetscCall(DMSwarmDataExEnd(de));
@@ -207,7 +209,9 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     PetscCall(PetscInfo(dm, "DMSwarmMigrate: packed %" PetscInt_FMT " points for %d neighbours on the device\n", nsent, mynneigh));
     if (remove_sent_points) {
       /* packing precedes removal exactly as in the host fork, which packs from the original layout before removing */
+      PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(DMSwarmDataBucketCompact(swarm->db, nsent, sentlist_d));
+      PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " sent points on the device\n", nsent));
     }
     PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
@@ -251,6 +255,7 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     DMSwarmDataField PField;
 
     PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, cellid, &PField));
+    PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
     PetscCall(DMSwarmDataFieldGetEntries(PField, (void **)&p_cellid));
     /* remove points which left processor */
     PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints, NULL, NULL));
@@ -263,6 +268,7 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
         p--;                                                                   /* check replacement point */
       }
     }
+    PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
   }
   PetscCall(DMSwarmDataBucketGetSizes(swarm->db, npoints_prior_migration, NULL, NULL));
   PetscCall(DMSwarmDataExBegin(de));
@@ -432,6 +438,7 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
 
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints_curr, NULL, NULL));
       if (remove_sent_points) {
+        PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
         for (p = 0; p < npoints_curr; p++) {
           if (p_cellid[p] == DMLOCATEPOINT_POINT_NOT_FOUND) {
             /* kill point */
@@ -441,6 +448,7 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
             p--;                                                                        /* check replacement point */
           }
         }
+        PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       }
     }
 #if PetscDefined(HAVE_HIP)
@@ -450,12 +458,14 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
       PetscInt     nsent = 0;
       PetscMemType mti   = PETSC_MEMTYPE_HOST;
 
+      PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints_curr, NULL, NULL));
       PetscCall(DMSwarmGetFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmSentListCreate_HIP(0, npoints_curr, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
       PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmDataBucketCompact(swarm->db, nsent, sentlist_d));
       PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
+      PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " sent points on the device\n", nsent));
     }
 #endif
@@ -536,6 +546,7 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
 
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints2, NULL, NULL));
       if (remove_sent_points) {
+        PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
         for (p = npoints_prior_migration; p < npoints2; p++) {
           if (p_cellid[p] == DMLOCATEPOINT_POINT_NOT_FOUND) {
             /* kill point */
@@ -545,6 +556,7 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
             p--;                                                                    /* check replacement point */
           }
         }
+        PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       }
     }
 #if PetscDefined(HAVE_HIP)
@@ -558,12 +570,14 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
       PetscInt     nsent = 0;
       PetscMemType mti   = PETSC_MEMTYPE_HOST;
 
+      PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints2, NULL, NULL));
       PetscCall(DMSwarmGetFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmSentListCreate_HIP(npoints_prior_migration, npoints2, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
       PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmDataBucketCompact(swarm->db, nsent, sentlist_d));
       PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
+      PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " unlocated received points on the device\n", nsent));
     }
 #endif

@@ -66,10 +66,11 @@ static PetscErrorCode CreateSwarm(DM dm, AppCtx *user, DM *sw)
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "initCoordinates", dim, PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(*sw, "initVelocity", dim, PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(*sw));
+  /* consume options (notably -dm_swarm_backend) before the sizing/initialization calls below trigger DMSetUp() */
+  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSwarmComputeLocalSizeFromOptions(*sw));
   PetscCall(DMSwarmInitializeCoordinates(*sw));
   PetscCall(DMSwarmInitializeVelocitiesFromOptions(*sw, v0));
-  PetscCall(DMSetFromOptions(*sw));
   PetscCall(DMSetApplicationContext(*sw, user));
   PetscCall(PetscObjectSetName((PetscObject)*sw, "Particles"));
   PetscCall(DMViewFromOptions(*sw, NULL, "-sw_view"));
@@ -578,6 +579,13 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_2d_1
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of bsi_2d_1: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex5_bsi_2d_1.out
      test:
        suffix: bsi_2d_2
        args: -ts_basicsymplectic_type 2
@@ -598,6 +606,13 @@ int main(int argc, char **argv)
        suffix: im_2d_0
        args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5
 
+     # Device-resident twin of im_2d_0: must reproduce the host expected output
+     test:
+       suffix: im_2d_0_backend_hip
+       requires: hip
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 -dm_swarm_backend hip
+       output_file: output/ex5_im_2d_0.out
+
    testset:
      requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
      args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 10,10 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 -petscpartitioner_type simple \
@@ -607,10 +622,25 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_2d_mesh_1
        args: -ts_basicsymplectic_type 1 -error
+
+     # Device-resident twin of bsi_2d_mesh_1: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_mesh_1_backend_hip
+       requires: hip
+       args: -ts_basicsymplectic_type 1 -error -dm_swarm_backend hip
+       output_file: output/ex5_bsi_2d_mesh_1.out
      test:
        suffix: bsi_2d_mesh_1_par_2
        nsize: 2
        args: -ts_basicsymplectic_type 1
+
+     # Device-resident twin of bsi_2d_mesh_1_par_2: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_mesh_1_par_2_backend_hip
+       requires: hip
+       nsize: 2
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex5_bsi_2d_mesh_1_par_2.out
      test:
        suffix: bsi_2d_mesh_1_par_3
        nsize: 3
@@ -619,6 +649,14 @@ int main(int argc, char **argv)
        suffix: bsi_2d_mesh_1_par_4
        nsize: 4
        args: -ts_basicsymplectic_type 1 -dm_swarm_num_particles 0,0,2,0
+
+     # Device-resident twin of bsi_2d_mesh_1_par_4: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_mesh_1_par_4_backend_hip
+       requires: hip
+       nsize: 4
+       args: -ts_basicsymplectic_type 1 -dm_swarm_num_particles 0,0,2,0 -dm_swarm_backend hip
+       output_file: output/ex5_bsi_2d_mesh_1_par_4.out
 
    testset:
      requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
@@ -629,6 +667,13 @@ int main(int argc, char **argv)
      test:
        suffix: bsi_2d_multiple_1
        args: -ts_type basicsymplectic -ts_basicsymplectic_type 1
+
+     # Device-resident twin of bsi_2d_multiple_1: must reproduce the host expected output
+     test:
+       suffix: bsi_2d_multiple_1_backend_hip
+       requires: hip
+       args: -ts_type basicsymplectic -ts_basicsymplectic_type 1 -dm_swarm_backend hip
+       output_file: output/ex5_bsi_2d_multiple_1.out
      test:
        suffix: bsi_2d_multiple_2
        args: -ts_type basicsymplectic -ts_basicsymplectic_type 2

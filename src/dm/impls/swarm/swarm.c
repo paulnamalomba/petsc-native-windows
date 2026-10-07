@@ -11,6 +11,7 @@
 #include "../src/dm/impls/swarm/data_ex.h"
 #include <petscdmlabel.h>
 #include <petscsection.h>
+#include "../src/dm/impls/swarm/swarmfebasis.h"
 
 PetscLogEvent DMSWARM_Migrate, DMSWARM_SetSizes, DMSWARM_AddPoints, DMSWARM_RemovePoints, DMSWARM_Sort;
 PetscLogEvent DMSWARM_DataExchangerTopologySetup, DMSWARM_DataExchangerBegin, DMSWARM_DataExchangerEnd;
@@ -391,8 +392,14 @@ static PetscErrorCode DMSwarmCreateVectorFromField_Private(DM dm, const char fie
       entries, so the host array is the only valid copy - exactly what CPU means to the Vec.
       The constructor itself set PETSC_OFFLOAD_BOTH (or CPU when the mirror is empty because
       the field has no entries), which is wrong whenever one residence is stale.
+
+      A field without a device mirror (data_d NULL, only possible when it has no entries) also
+      maps to CPU: the constructor allocates the Vec's device struct only for a non-NULL device
+      array, so a PETSC_OFFLOAD_GPU mask (left behind by a device write through an earlier
+      empty wrap) would make the next host access dereference the missing struct. Residence is
+      vacuous for an empty field, so CPU is exact.
     */
-    (*vec)->offloadmask = PetscOffloadUnallocated(gfield->offloadmask) ? PETSC_OFFLOAD_CPU : gfield->offloadmask;
+    (*vec)->offloadmask = (PetscOffloadUnallocated(gfield->offloadmask) || !gfield->data_d) ? PETSC_OFFLOAD_CPU : gfield->offloadmask;
   } else SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "No support for creating Vecs from a DMSwarm with %s particle storage", PetscMemTypeToString(swarm->db->memtype));
 
   PetscCall(PetscSNPrintf(name, PETSC_MAX_PATH_LEN - 1, "DMSwarmSharedField_%s", fieldname));
@@ -750,6 +757,187 @@ PetscErrorCode DMSwarmFillMassMatrix(DM dmc, DM dmf, Mat mass, PetscInt rStart, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Whether DMSwarmComputeMassMatrixCOO_Private() computes the values on the device; numF is the common closure size of the cells
+   with particles (-1 if there are none) when uniform is true. The decision is collective. */
+static PetscErrorCode DMSwarmMassCOOUseDevice_Private(DM dmc, DM dmf, Mat mass, PetscObject disc, PetscInt Nc, PetscInt numF, PetscBool uniform, PetscBool *onDevice)
+{
+  PetscFunctionBegin;
+  *onDevice = PETSC_FALSE;
+#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+  {
+    DM_Swarm      *swarm = (DM_Swarm *)dmc->data;
+    DMSwarmCellDM  celldm;
+    DMSwarmSort    sort;
+    DMSwarmFEBasis basis;
+    const char   **coordFields;
+    PetscInt       dim, cdim, cStart, cEnd, Nfc, ok;
+    PetscBool      isHIP;
+
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, &isHIP, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
+    PetscCall(DMSwarmGetCellDMActive(dmc, &celldm));
+    PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+    PetscCall(DMSwarmCellDMGetSort(celldm, &sort));
+    PetscCall(DMGetDimension(dmf, &dim));
+    PetscCall(DMGetCoordinateDim(dmf, &cdim));
+    PetscCall(DMPlexGetHeightStratum(dmf, 0, &cStart, &cEnd));
+    ok = swarm->backend == DMSWARM_BACKEND_HIP && isHIP && Nc == 1 && Nfc == 1 && dim == cdim && cStart == 0 && sort->ncells == cEnd && PetscMemTypeDevice(sort->memtype) && uniform;
+    if (ok) {
+      PetscCall(DMSwarmFEBasisGet_Internal(disc, &basis));
+      ok = basis->supported && basis->dim == dim && (numF < 0 || basis->pdim == numF);
+    }
+    if (ok) {
+      PetscInt bs;
+
+      PetscCall(DMSwarmGetFieldInfo(dmc, coordFields[0], &bs, NULL));
+      ok = bs == dim;
+    }
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &ok, 1, MPIU_INT, MPI_MIN, PetscObjectComm((PetscObject)mass)));
+    *onDevice = ok ? PETSC_TRUE : PETSC_FALSE;
+  }
+#endif
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Single-field COO version of DMSwarmPreallocateMassMatrix() + DMSwarmFillMassMatrix(). Each cell with particles contributes the
+   row-major element matrix that DMSwarmFillMassMatrix() passes to MatSetValues(), so the COO entries are ordered by cell, particle
+   in the sort CSR, particle component, and closure index. No (i,j) pair repeats, so every value is stored once as 0.0 + (0.0 + B w)
+   and the assembled matrix is bitwise identical to the MatSetValues() path. Negative closure indices (constrained dofs) are ignored by
+   MatSetPreallocationCOO(), as they are by MatSetValues().
+
+   With the HIP backend and a HIP matrix, the values are computed on the device from the device particle coordinates, sort CSR, and cell
+   geometry, and passed to MatSetValuesCOO() from device memory. Every cell then has the same closure size numF, so the values of the
+   particle in sort CSR slot q start at q * numF in both paths. The (i,j) pattern is built on the host in either case, since
+   MatSetPreallocationCOO() runs on the host for HIP matrices as well. */
+static PetscErrorCode DMSwarmComputeMassMatrixCOO_Private(DM dmc, DM dmf, Mat mass, PetscBool useDeltaFunction)
+{
+  DMSwarmCellDM   celldm;
+  PetscDS         ds;
+  PetscSection    fsection, globalFSection;
+  PetscLayout     rLayout;
+  PetscObject     obj;
+  PetscClassId    id;
+  PetscTabulation Tcoarse;
+  PetscCount      ncoo = 0, n = 0;
+  PetscInt        dim, cStart, cEnd, Nc, Nfc, locRows, rStart, maxC = 0, numF = -1;
+  PetscInt       *coo_i, *coo_j, *bs;
+  const char    **coordFields;
+  PetscReal       v0[3], J[9], invJ[9], detJ = 1.0, v0ref[3] = {-1.0, -1.0, -1.0};
+  PetscReal      *xi = NULL;
+  PetscReal     **coordVals;
+  PetscScalar    *vals    = NULL;
+  PetscBool       uniform = PETSC_TRUE, onDevice = PETSC_FALSE;
+
+  PetscFunctionBegin;
+  PetscCall(DMGetCoordinateDim(dmf, &dim));
+  PetscCall(DMPlexGetHeightStratum(dmf, 0, &cStart, &cEnd));
+  PetscCall(DMGetLocalSection(dmf, &fsection));
+  PetscCall(DMGetGlobalSection(dmf, &globalFSection));
+  PetscCall(DMGetDS(dmf, &ds));
+  PetscCall(PetscDSGetDiscretization(ds, 0, &obj));
+  PetscCall(PetscObjectGetClassId(obj, &id));
+  if (id == PETSCFE_CLASSID) PetscCall(PetscFEGetNumComponents((PetscFE)obj, &Nc));
+  else PetscCall(PetscFVGetNumComponents((PetscFV)obj, &Nc));
+  PetscCall(MatGetLocalSize(mass, &locRows, NULL));
+  PetscCall(PetscLayoutCreateFromSizes(PetscObjectComm((PetscObject)mass), locRows, PETSC_DECIDE, 1, &rLayout));
+  PetscCall(PetscLayoutGetRange(rLayout, &rStart, NULL));
+  PetscCall(PetscLayoutDestroy(&rLayout));
+  PetscCall(DMSwarmGetCellDMActive(dmc, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+
+  PetscCall(DMSwarmSortGetAccess(dmc));
+  for (PetscInt cell = cStart; cell < cEnd; ++cell) {
+    PetscInt *findices, *cindices;
+    PetscInt  numFIndices, numCIndices;
+
+    PetscCall(DMSwarmSortGetPointsPerCell(dmc, cell, &numCIndices, &cindices));
+    if (numCIndices) {
+      PetscCall(DMPlexGetClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+      ncoo += (PetscCount)numCIndices * Nc * numFIndices;
+      maxC = PetscMax(maxC, numCIndices);
+      if (numF < 0) numF = numFIndices;
+      else if (numF != numFIndices) uniform = PETSC_FALSE;
+      PetscCall(DMPlexRestoreClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+    }
+    PetscCall(DMSwarmSortRestorePointsPerCell(dmc, cell, &numCIndices, &cindices));
+  }
+  PetscCall(DMSwarmMassCOOUseDevice_Private(dmc, dmf, mass, obj, Nc, numF, uniform, &onDevice));
+  PetscCall(PetscInfo(dmc, "Particle mass matrix values computed on the %s\n", onDevice ? "device" : "host"));
+  PetscCall(PetscMalloc2(ncoo, &coo_i, ncoo, &coo_j));
+  if (!onDevice) {
+    PetscCall(PetscMalloc3(ncoo, &vals, maxC * dim, &xi, Nfc, &coordVals));
+    PetscCall(PetscMalloc1(Nfc, &bs));
+    for (PetscInt i = 0; i < Nfc; ++i) PetscCall(DMSwarmGetField(dmc, coordFields[i], &bs[i], NULL, (void **)&coordVals[i]));
+  }
+  for (PetscInt cell = cStart; cell < cEnd; ++cell) {
+    PetscInt *findices, *cindices;
+    PetscInt  numFIndices, numCIndices;
+
+    PetscCall(DMSwarmSortGetPointsPerCell(dmc, cell, &numCIndices, &cindices));
+    if (numCIndices) {
+      PetscCall(DMPlexGetClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+      if (!onDevice) {
+        /* TODO: Use DMField instead of assuming affine */
+        PetscCall(DMPlexComputeCellGeometryFEM(dmf, cell, NULL, v0, J, invJ, &detJ));
+        for (PetscInt j = 0; j < numCIndices; ++j) {
+          PetscReal xr[8];
+          PetscInt  off = 0;
+
+          for (PetscInt i = 0; i < Nfc; ++i) {
+            for (PetscInt b = 0; b < bs[i]; ++b, ++off) xr[off] = coordVals[i][cindices[j] * bs[i] + b];
+          }
+          PetscCheck(off == dim, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "The total block size of coordinates is %" PetscInt_FMT " != %" PetscInt_FMT " the DM coordinate dimension", off, dim);
+          CoordinatesRealToRef(dim, dim, v0ref, v0, invJ, xr, &xi[j * dim]);
+        }
+        if (id == PETSCFE_CLASSID) PetscCall(PetscFECreateTabulation((PetscFE)obj, 1, numCIndices, xi, 0, &Tcoarse));
+        else PetscCall(PetscFVCreateTabulation((PetscFV)obj, 1, numCIndices, xi, 0, &Tcoarse));
+      }
+      for (PetscInt j = 0; j < numCIndices; ++j) {
+        for (PetscInt c = 0; c < Nc; ++c) {
+          for (PetscInt k = 0; k < numFIndices; ++k, ++n) {
+            if (!onDevice) {
+              /* B[(p*pdim + i)*Nc + c] is the value at point p for basis function i and component c */
+              vals[n] = 0.0;
+              if (k % Nc == c && k / Nc < numFIndices / Nc) vals[n] += Tcoarse->T[0][(j * numFIndices + k) * Nc + c] * (useDeltaFunction ? 1.0 : detJ);
+            }
+            coo_i[n] = cindices[j] * Nc + c + rStart;
+            coo_j[n] = findices[k];
+          }
+        }
+      }
+      if (!onDevice) PetscCall(PetscTabulationDestroy(&Tcoarse));
+      PetscCall(DMPlexRestoreClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+    }
+    PetscCall(DMSwarmSortRestorePointsPerCell(dmc, cell, &numCIndices, &cindices));
+  }
+  PetscCall(MatSetPreallocationCOO(mass, ncoo, coo_i, coo_j));
+  PetscCall(PetscFree2(coo_i, coo_j));
+  if (onDevice) {
+#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+    DMSwarmSort         sort;
+    DMSwarmFEBasis      basis;
+    DMSwarmCellGeometry geom;
+    PetscMemType        mtype;
+    const PetscReal    *coords;
+
+    PetscCall(DMSwarmCellDMGetSort(celldm, &sort));
+    PetscCheck(ncoo == (PetscCount)sort->npoints * numF || !sort->npoints, PETSC_COMM_SELF, PETSC_ERR_PLIB, "COO size %" PetscCount_FMT " does not match %" PetscInt_FMT " sorted particles", ncoo, sort->npoints);
+    PetscCall(DMSwarmFEBasisGetDevice_Internal(obj, &basis));
+    PetscCall(DMSwarmCellGeometryGetDevice_Internal(dmf, &geom));
+    PetscCall(DMSwarmGetFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
+    PetscCheck(PetscMemTypeDevice(mtype), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Particle coordinates are not in device memory");
+    PetscCall(DMSwarmMassMatrixSetValuesCOO_Internal_HIP(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction));
+    PetscCall(DMSwarmRestoreFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
+#endif
+  } else {
+    PetscCall(MatSetValuesCOO(mass, vals, INSERT_VALUES));
+    for (PetscInt i = 0; i < Nfc; ++i) PetscCall(DMSwarmRestoreField(dmc, coordFields[i], &bs[i], NULL, (void **)&coordVals[i]));
+    PetscCall(PetscFree3(vals, xi, coordVals));
+    PetscCall(PetscFree(bs));
+  }
+  PetscCall(DMSwarmSortRestoreAccess(dmc));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* This creates a "mass matrix" between a finite element and particle space. If a finite element interpolant is given by
 
      \hat f = \sum_i f_i \phi_i
@@ -771,16 +959,22 @@ PetscErrorCode DMSwarmFillMassMatrix(DM dmc, DM dmf, Mat mass, PetscInt rStart, 
 */
 static PetscErrorCode DMSwarmComputeMassMatrix_Private(DM dmc, DM dmf, Mat mass, PetscBool useDeltaFunction, PetscCtx ctx)
 {
+  DM_Swarm     *swarm = (DM_Swarm *)dmc->data;
   DMSwarmCellDM celldm;
-  PetscInt      rStart, maxC = 0;
-  PetscInt      Nfc;
+  PetscDS       ds;
+  PetscInt      rStart, maxC = 0, Nf, Nfc;
+  PetscInt     *bs;
   const char  **coordFields;
   PetscReal   **coordVals;
-  PetscInt     *bs;
 
   PetscFunctionBegin;
+  PetscCall(DMGetDS(dmf, &ds));
+  PetscCall(PetscDSGetNumFields(ds, &Nf));
+  if (swarm->mass_coo && Nf == 1) {
+    PetscCall(DMSwarmComputeMassMatrixCOO_Private(dmc, dmf, mass, useDeltaFunction));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   PetscCall(DMSwarmPreallocateMassMatrix(dmc, dmf, mass, &rStart, &maxC, ctx));
-
   PetscCall(DMSwarmGetCellDMActive(dmc, &celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
   PetscCall(PetscMalloc2(Nfc, &coordVals, Nfc, &bs));
@@ -788,7 +982,6 @@ static PetscErrorCode DMSwarmComputeMassMatrix_Private(DM dmc, DM dmf, Mat mass,
   PetscCall(DMSwarmFillMassMatrix(dmc, dmf, mass, rStart, maxC, useDeltaFunction, Nfc, bs, coordVals, ctx));
   for (PetscInt i = 0; i < Nfc; ++i) PetscCall(DMSwarmRestoreField(dmc, coordFields[i], &bs[i], NULL, (void **)&coordVals[i]));
   PetscCall(PetscFree2(coordVals, bs));
-
   PetscCall(MatAssemblyBegin(mass, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(mass, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -2117,6 +2310,23 @@ static PetscErrorCode DMSwarmRestoreFieldNative_Private(DM dm, const char fieldn
 
   On the host backend this returns the same array as `DMSwarmGetField()` and `mtype` is `PETSC_MEMTYPE_HOST`. On a device backend the returned pointer addresses device memory, with stale device entries first refreshed from the host if needed, making this the primitive for user-written device kernels; use `DMSwarmGetField()` when a host pointer is required.
 
+  Example Usage:
+  A user kernel pushing the particle coordinates with the velocity field, dispatching on the memory type so the same code runs on every backend (see `src/dm/impls/swarm/tests/ex14.hip.cxx` for the complete example, including the HIP kernel)
+.vb
+  PetscCall(DMSwarmGetFieldAndMemType(sw, DMSwarmPICField_coor, NULL, NULL, &mtype, (void **)&x));
+  PetscCall(DMSwarmGetFieldAndMemType(sw, "velocity", NULL, NULL, NULL, (void **)&v));
+  if (PetscMemTypeHost(mtype)) {
+    for (PetscInt p = 0; p < Np; ++p) PushPoint(&ctx, &x[p * dim], &v[p * dim]);
+  } else {
+    hipLaunchKernelGGL(PushKernel, dim3((Np + 255) / 256), dim3(256), 0, PetscDefaultHipStream, ctx, Np, x, v);
+    PetscCallHIP(hipStreamSynchronize(PetscDefaultHipStream));
+  }
+  PetscCall(DMSwarmRestoreFieldAndMemType(sw, "velocity", NULL, NULL, NULL, (void **)&v));
+  PetscCall(DMSwarmRestoreFieldAndMemType(sw, DMSwarmPICField_coor, NULL, NULL, &mtype, (void **)&x));
+  PetscCall(DMSwarmMigrate(sw, PETSC_TRUE));
+.ve
+  Under a device backend the fields stay device-resident across the push and the migration, so the loop moves no field data between host and device.
+
 .seealso: `DM`, `DMSWARM`, `DMSwarmRestoreFieldAndMemType()`, `DMSwarmGetFieldReadAndMemType()`, `DMSwarmGetFieldWriteAndMemType()`, `DMSwarmGetField()`
 @*/
 PetscErrorCode DMSwarmGetFieldAndMemType(DM dm, const char fieldname[], PetscInt *blocksize, PetscDataType *type, PetscMemType *mtype, void **data) PeNS
@@ -3103,6 +3313,7 @@ static PetscErrorCode DMSetFromOptions_Swarm(DM dm, PetscOptionItems PetscOption
   PetscCall(PetscOptionsEnum("-dm_swarm_remap_type", "Remap algorithm", "DMSwarmSetRemapType", DMSwarmRemapTypeNames, (PetscEnum)swarm->remap_type, (PetscEnum *)&swarm->remap_type, NULL));
   PetscCall(PetscOptionsEnum("-dm_swarm_backend", "Storage backend for particle data", "DMSwarmSetBackend", DMSwarmBackendTypeNames, (PetscEnum)backend, (PetscEnum *)&backend, &flg));
   if (flg) PetscCall(DMSwarmSetBackend(dm, backend));
+  PetscCall(PetscOptionsBool("-dm_swarm_mass_coo", "Assemble the particle mass matrix in COO format", "DMCreateMassMatrix", swarm->mass_coo, &swarm->mass_coo, NULL));
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3309,6 +3520,7 @@ PETSC_EXTERN PetscErrorCode DMCreate_Swarm(DM dm)
   swarm->collect_type                   = DMSWARM_COLLECT_BASIC;
   swarm->backend                        = DMSWARM_BACKEND_HOST;
   swarm->migrate_error_on_missing_point = PETSC_FALSE;
+  swarm->mass_coo                       = PETSC_TRUE;
   swarm->collect_view_active            = PETSC_FALSE;
   swarm->collect_view_reset_nlocal      = -1;
   PetscCall(DMInitialize_Swarm(dm));

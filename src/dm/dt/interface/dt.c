@@ -1052,6 +1052,90 @@ const char       PKDCitation[] = "@article{Kirby2010,\n"
                                  "  year={2010},\n"
                                  "  publisher={ACM New York, NY, USA}\n}\n";
 
+/*
+  PetscDTPKDRecurrence_Internal - The point-independent part of PetscDTPKDEvalJet(): for each PKD polynomial, in graded
+  order, the variable of its three-term recurrence, the polynomials it recurs on, the recurrence coefficients, and the
+  normalization applied after the recurrence
+
+  Input Parameters:
++ dim    - the number of variables
+- degree - the degree of the polynomial space
+
+  Output Parameters:
++ dvar   - [Ndeg] the variable d of the recurrence, unused for the constant polynomial
+. m1idx  - [Ndeg] the polynomial one degree lower in variable d, or -1 for the constant polynomial
+. m2idx  - [Ndeg] the polynomial two degrees lower in variable d, or -1 if there is none
+. cnm1   - [Ndeg] Jacobi recurrence coefficient of thetanm1
+. cnm1x  - [Ndeg] Jacobi recurrence coefficient of thetanm1x
+. cnm2   - [Ndeg] Jacobi recurrence coefficient of thetanm2
+- scales - [Ndeg] normalization of each polynomial
+
+  Note:
+  Ndeg = (dim + degree choose dim). The arrays are what PetscDTPKDEvalJet() uses, so that a device evaluation of the
+  same recurrence reproduces it bitwise.
+*/
+PetscErrorCode PetscDTPKDRecurrence_Internal(PetscInt dim, PetscInt degree, PetscInt dvar[], PetscInt m1idx[], PetscInt m2idx[], PetscReal cnm1[], PetscReal cnm1x[], PetscReal cnm2[], PetscReal scales[])
+{
+  PetscInt  Ndeg;
+  PetscInt *degtup;
+  PetscReal initscale, scaleexp;
+
+  PetscFunctionBegin;
+  PetscCall(PetscDTBinomialInt(degree + dim, degree, &Ndeg));
+  PetscCall(PetscMalloc1(dim, &degtup));
+  initscale = 1.;
+  if (dim > 1) {
+    PetscCall(PetscDTBinomial(dim, 2, &scaleexp));
+    initscale = PetscPowReal(2., scaleexp * 0.5);
+  }
+  for (PetscInt degidx = 0; degidx < Ndeg; degidx++) {
+    PetscInt  d, e, n, degsum;
+    PetscReal alpha, norm;
+
+    PetscCall(PetscDTIndexToGradedOrder(dim, degidx, degtup));
+    for (d = dim - 1; d >= 0; d--)
+      if (degtup[d]) break;
+    dvar[degidx]  = d;
+    m1idx[degidx] = -1;
+    m2idx[degidx] = -1;
+    cnm1[degidx] = cnm1x[degidx] = cnm2[degidx] = 0.;
+    if (d < 0) { /* constant is 1 everywhere, all derivatives are zero */
+      scales[degidx] = initscale;
+      for (e = 0; e < dim; e++) {
+        PetscCall(PetscDTJacobiNorm(e, 0., 0, &norm));
+        scales[degidx] /= norm;
+      }
+      continue;
+    }
+    n = degtup[d];
+    degtup[d]--;
+    PetscCall(PetscDTGradedOrderToIndex(dim, degtup, &m1idx[degidx]));
+    if (degtup[d] > 0) {
+      degtup[d]--;
+      PetscCall(PetscDTGradedOrderToIndex(dim, degtup, &m2idx[degidx]));
+      degtup[d]++;
+    }
+    degtup[d]++;
+    for (e = 0, degsum = 0; e < d; e++) degsum += degtup[e];
+    alpha = 2 * degsum + d;
+    PetscDTJacobiRecurrence_Internal(n, alpha, 0., cnm1[degidx], cnm1x[degidx], cnm2[degidx]);
+
+    scales[degidx] = initscale;
+    for (e = 0, degsum = 0; e < dim; e++) {
+      PetscReal ealpha;
+      PetscReal enorm;
+
+      ealpha = 2 * degsum + e;
+      for (PetscInt f = 0; f < degsum; f++) scales[degidx] *= 2.;
+      PetscCall(PetscDTJacobiNorm(ealpha, 0., degtup[e], &enorm));
+      scales[degidx] /= enorm;
+      degsum += degtup[e];
+    }
+  }
+  PetscCall(PetscFree(degtup));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /*@
   PetscDTPKDEvalJet - Evaluate the jet (function and derivatives) of the Proriol-Koornwinder-Dubiner (PKD) basis for
   the space of polynomials up to a given degree.
@@ -1090,67 +1174,26 @@ PetscErrorCode PetscDTPKDEvalJet(PetscInt dim, PetscInt npoints, const PetscReal
 {
   PetscInt   degidx, kidx, d, pt;
   PetscInt   Nk, Ndeg;
-  PetscInt  *ktup, *degtup;
-  PetscReal *scales, initscale, scaleexp;
+  PetscInt  *ktup, *dvar, *m1s, *m2s;
+  PetscReal *scales, *cnm1s, *cnm1xs, *cnm2s;
 
   PetscFunctionBegin;
   PetscCall(PetscCitationsRegister(PKDCitation, &PKDCite));
   PetscCall(PetscDTBinomialInt(dim + k, k, &Nk));
   PetscCall(PetscDTBinomialInt(degree + dim, degree, &Ndeg));
-  PetscCall(PetscMalloc2(dim, &degtup, dim, &ktup));
-  PetscCall(PetscMalloc1(Ndeg, &scales));
-  initscale = 1.;
-  if (dim > 1) {
-    PetscCall(PetscDTBinomial(dim, 2, &scaleexp));
-    initscale = PetscPowReal(2., scaleexp * 0.5);
-  }
+  PetscCall(PetscMalloc1(dim, &ktup));
+  PetscCall(PetscMalloc7(Ndeg, &dvar, Ndeg, &m1s, Ndeg, &m2s, Ndeg, &cnm1s, Ndeg, &cnm1xs, Ndeg, &cnm2s, Ndeg, &scales));
+  PetscCall(PetscDTPKDRecurrence_Internal(dim, degree, dvar, m1s, m2s, cnm1s, cnm1xs, cnm2s, scales));
   for (degidx = 0; degidx < Ndeg; degidx++) {
-    PetscInt  e;
-    PetscInt  m1idx = -1, m2idx = -1;
-    PetscInt  n;
-    PetscInt  degsum;
-    PetscReal alpha;
-    PetscReal cnm1, cnm1x, cnm2;
-    PetscReal norm;
+    PetscInt  e, m1idx = m1s[degidx], m2idx = m2s[degidx];
+    PetscReal cnm1 = cnm1s[degidx], cnm1x = cnm1xs[degidx], cnm2 = cnm2s[degidx];
 
-    PetscCall(PetscDTIndexToGradedOrder(dim, degidx, degtup));
-    for (d = dim - 1; d >= 0; d--)
-      if (degtup[d]) break;
+    d = dvar[degidx];
     if (d < 0) { /* constant is 1 everywhere, all derivatives are zero */
-      scales[degidx] = initscale;
-      for (e = 0; e < dim; e++) {
-        PetscCall(PetscDTJacobiNorm(e, 0., 0, &norm));
-        scales[degidx] /= norm;
-      }
       for (PetscInt i = 0; i < npoints; i++) p[degidx * Nk * npoints + i] = 1.;
       for (PetscInt i = 0; i < (Nk - 1) * npoints; i++) p[(degidx * Nk + 1) * npoints + i] = 0.;
       continue;
     }
-    n = degtup[d];
-    degtup[d]--;
-    PetscCall(PetscDTGradedOrderToIndex(dim, degtup, &m1idx));
-    if (degtup[d] > 0) {
-      degtup[d]--;
-      PetscCall(PetscDTGradedOrderToIndex(dim, degtup, &m2idx));
-      degtup[d]++;
-    }
-    degtup[d]++;
-    for (e = 0, degsum = 0; e < d; e++) degsum += degtup[e];
-    alpha = 2 * degsum + d;
-    PetscDTJacobiRecurrence_Internal(n, alpha, 0., cnm1, cnm1x, cnm2);
-
-    scales[degidx] = initscale;
-    for (e = 0, degsum = 0; e < dim; e++) {
-      PetscReal ealpha;
-      PetscReal enorm;
-
-      ealpha = 2 * degsum + e;
-      for (PetscInt f = 0; f < degsum; f++) scales[degidx] *= 2.;
-      PetscCall(PetscDTJacobiNorm(ealpha, 0., degtup[e], &enorm));
-      scales[degidx] /= enorm;
-      degsum += degtup[e];
-    }
-
     for (pt = 0; pt < npoints; pt++) {
       /* compute the multipliers */
       PetscReal thetanm1, thetanm1x, thetanm2;
@@ -1211,8 +1254,8 @@ PetscErrorCode PetscDTPKDEvalJet(PetscInt dim, PetscInt npoints, const PetscReal
 
     for (PetscInt i = 0; i < Nk * npoints; i++) p[degidx * Nk * npoints + i] *= scale;
   }
-  PetscCall(PetscFree(scales));
-  PetscCall(PetscFree2(degtup, ktup));
+  PetscCall(PetscFree7(dvar, m1s, m2s, cnm1s, cnm1xs, cnm2s, scales));
+  PetscCall(PetscFree(ktup));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

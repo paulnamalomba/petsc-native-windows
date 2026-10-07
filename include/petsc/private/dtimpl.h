@@ -18,3 +18,5 @@ struct _p_PetscQuadrature {
 #endif
 
 PETSC_EXTERN PetscBool PetscDTGaussQuadratureNewton_Internal;
+
+PETSC_INTERN PetscErrorCode PetscDTPKDRecurrence_Internal(PetscInt, PetscInt, PetscInt[], PetscInt[], PetscInt[], PetscReal[], PetscReal[], PetscReal[], PetscReal[]);

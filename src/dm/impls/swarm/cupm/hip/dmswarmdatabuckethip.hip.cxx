@@ -26,9 +26,12 @@ struct EqualsTarget {
   swap-with-last removal order through its closed form. The sent mask and its deterministic
   exclusive prefix sum enumerate the ascending sent slots < m and the descending surviving tail
   points >= m (the scan is the only thrust piece, so it lives in this TU like the sort build);
-  a sparse scatter then moves only the filled holes' records, and the size bookkeeping replays
-  exactly the per-point DMSwarmDataBucketRemovePoint() shrinks of the host loop through the
-  bucket ops dispatch, so L, buffer and allocated end bit-identical to the host backend.
+  a sparse scatter then moves only the filled holes' records, and the size bookkeeping of the
+  host loop's per-point DMSwarmDataBucketRemovePoint() shrinks is applied at once by
+  DMSwarmDataBucketRemovePoints_Internal(), so L, buffer, allocated and the zeroed tail end
+  bit-identical to the host backend with at most one reallocation of each device mirror. The
+  scratch arrays are allocated and freed in stream order on the stream all compaction work runs
+  on, which avoids the device-wide synchronization of hipFree().
 */
 static PetscErrorCode DMSwarmDataBucketCompact_HIP(DMSwarmDataBucket db, PetscInt nsent, const PetscInt *sentlist)
 {
@@ -41,10 +44,10 @@ static PetscErrorCode DMSwarmDataBucketCompact_HIP(DMSwarmDataBucket db, PetscIn
   /* untouched survivors must be device valid before the device copy becomes authoritative */
   for (PetscInt f = 0; f < db->nfields; ++f) PetscCall(impl::DMSwarmDataBucket_CUPM<DeviceType::HIP>::FieldToDevice(db->field[f]));
   if (m > 0 && db->nfields > 0) {
-    PetscCallHIP(hipMalloc((void **)&mask, (size_t)n * sizeof(*mask)));
-    PetscCallHIP(hipMalloc((void **)&scan, (size_t)n * sizeof(*scan)));
-    PetscCallHIP(hipMalloc((void **)&holes, (size_t)nsent * sizeof(*holes)));
-    PetscCallHIP(hipMalloc((void **)&srcs, (size_t)nsent * sizeof(*srcs)));
+    PetscCallHIP(hipMallocAsync((void **)&mask, (size_t)n * sizeof(*mask), PetscDefaultHipStream));
+    PetscCallHIP(hipMallocAsync((void **)&scan, (size_t)n * sizeof(*scan), PetscDefaultHipStream));
+    PetscCallHIP(hipMallocAsync((void **)&holes, (size_t)nsent * sizeof(*holes), PetscDefaultHipStream));
+    PetscCallHIP(hipMallocAsync((void **)&srcs, (size_t)nsent * sizeof(*srcs), PetscDefaultHipStream));
     PetscCall(cupm_bucket.CompactMask(db, nsent, sentlist, mask));
     /* the FieldToDevice()/CompactMask() calls above initialized the device, so the default stream exists */
     {
@@ -57,13 +60,13 @@ static PetscErrorCode DMSwarmDataBucketCompact_HIP(DMSwarmDataBucket db, PetscIn
     PetscCallHIP(hipMemcpyAsync(&nholes, scan + m, sizeof(nholes), hipMemcpyDeviceToHost, PetscDefaultHipStream));
     PetscCallHIP(hipStreamSynchronize(PetscDefaultHipStream));
     PetscCall(cupm_bucket.CompactScatter(db, nsent, nholes, mask, scan, holes, srcs));
-    PetscCallHIP(hipFree(mask));
-    PetscCallHIP(hipFree(scan));
-    PetscCallHIP(hipFree(holes));
-    PetscCallHIP(hipFree(srcs));
+    PetscCallHIP(hipFreeAsync(mask, PetscDefaultHipStream));
+    PetscCallHIP(hipFreeAsync(scan, PetscDefaultHipStream));
+    PetscCallHIP(hipFreeAsync(holes, PetscDefaultHipStream));
+    PetscCallHIP(hipFreeAsync(srcs, PetscDefaultHipStream));
   }
-  /* replay the host loop's per-point shrinks through the ops dispatch for bit-identical size bookkeeping */
-  for (PetscInt i = 0; i < nsent; ++i) PetscCall(DMSwarmDataBucketRemovePoint(db));
+  /* the size bookkeeping of the host loop's per-point shrinks, applied at once */
+  PetscCall(DMSwarmDataBucketRemovePoints_Internal(db, nsent));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -84,7 +87,7 @@ PETSC_INTERN PetscErrorCode DMSwarmSentListCreate_HIP(PetscInt start, PetscInt e
   *nsent      = 0;
   *sentlist_d = NULL;
   if (n <= 0) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCallHIP(hipMalloc((void **)&list, (size_t)n * sizeof(*list)));
+  PetscCallHIP(hipMallocAsync((void **)&list, (size_t)n * sizeof(*list), PetscDefaultHipStream));
   {
     const auto first = thrust::counting_iterator<PetscInt>(start);
     const auto last  = thrust::counting_iterator<PetscInt>(end);
@@ -99,11 +102,14 @@ PETSC_INTERN PetscErrorCode DMSwarmSentListCreate_HIP(PetscInt start, PetscInt e
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Release a device send list built by DMSwarmSentListCreate_HIP(); hipFree() of NULL is a no-op */
+/*
+  Release a device send list built by DMSwarmSentListCreate_HIP(), in stream order on the stream
+  it was built on; every consumer synchronizes before returning, so the list is no longer in use
+*/
 PETSC_INTERN PetscErrorCode DMSwarmSentListDestroy_HIP(PetscInt **sentlist_d)
 {
   PetscFunctionBegin;
-  PetscCallHIP(hipFree(*sentlist_d));
+  if (*sentlist_d) PetscCallHIP(hipFreeAsync(*sentlist_d, PetscDefaultHipStream));
   *sentlist_d = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

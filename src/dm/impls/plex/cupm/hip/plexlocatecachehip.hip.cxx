@@ -35,9 +35,10 @@ PETSC_INTERN PetscErrorCode DMPlexLocationCacheUpload_HIP(DMPlexLocationCache ca
 . cellids_d - [npoints] cell ids in device memory; on input the initial guesses (DMLOCATEPOINT_POINT_NOT_FOUND
               for none), on output the located cell or DMLOCATEPOINT_POINT_NOT_FOUND
 
-  Note:
+  Notes:
   Whether the grid hash or the brute-force scan is used follows DM_Plex->useHashLocation, exactly
-  like the host path.
+  like the host path. The work is logged in the DMPlexLocatePoints event of DMLocatePoints_Plex(),
+  so -log_view compares host and device point location under one name.
 */
 PETSC_INTERN PetscErrorCode DMPlexLocatePointsInPlace_Internal_HIP(DM dm, PetscInt npoints, PetscInt bs, const PetscReal coords_d[], PetscInt cellids_d[])
 {
@@ -45,9 +46,11 @@ PETSC_INTERN PetscErrorCode DMPlexLocatePointsInPlace_Internal_HIP(DM dm, PetscI
   DMPlexLocationCache cache;
 
   PetscFunctionBegin;
+  PetscCall(PetscLogEventBegin(DMPLEX_LocatePoints, 0, 0, 0, 0));
   PetscCall(DMPlexGetLocationCacheDevice_Internal(dm, &cache));
   PetscCheck(bs >= cache->cdim, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONG, "Block size for point coordinates %" PetscInt_FMT " must be the mesh coordinate dimension %" PetscInt_FMT, bs, cache->cdim);
   if (npoints > 0) PetscCall(cupm_cache.LocatePoints(cache, mesh->useHashLocation, npoints, bs, coords_d, cellids_d));
   PetscCall(PetscInfo(dm, "[DMPlexLocatePointsInPlace_Internal_HIP] npoints %" PetscInt_FMT " located on device (%s)\n", npoints, mesh->useHashLocation ? "hash" : "brute-force"));
+  PetscCall(PetscLogEventEnd(DMPLEX_LocatePoints, 0, 0, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

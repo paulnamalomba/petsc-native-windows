@@ -75,6 +75,7 @@ typedef struct {
   DMSwarmBackendType backend;
 
   PetscBool migrate_error_on_missing_point;
+  PetscBool mass_coo; /* assemble the particle mass matrix with MatSetValuesCOO() instead of MatSetValues() */
 
   PetscBool collect_view_active;
   PetscInt  collect_view_reset_nlocal;

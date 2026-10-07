@@ -827,6 +827,51 @@ PetscErrorCode DMSwarmDataBucketRemovePoint(DMSwarmDataBucket db)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Remove the last n points, leaving the bucket exactly as n successive calls of
+  DMSwarmDataBucketRemovePoint() would. Every one of those calls keeps the leading entries,
+  shrinks the arrays to L + buffer once the unused space exceeds twice the buffer, and zeros
+  the vacated slot (when the buffer is nonzero), so only the size arithmetic of
+  DMSwarmDataBucketSetSizes_Host() is replayed here: the arrays are then reallocated at most once,
+  to the final allocated size, and the vacated slots that survive it are zeroed at once. The
+  values of L, buffer and allocated and the array contents are identical to the loop, but a
+  device backend, which has no realloc(), copies each field at most once instead of on every
+  other removal. Should the replay reach the growth branch, which a consistent bucket never
+  does, the loop itself is run.
+*/
+PetscErrorCode DMSwarmDataBucketRemovePoints_Internal(DMSwarmDataBucket db, PetscInt n)
+{
+  PetscInt  L, allocated, end;
+  PetscBool any_active_fields;
+
+  PetscFunctionBegin;
+  PetscCheck(n >= 0 && n <= db->L, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of points to remove %" PetscInt_FMT " must lie in [0, %" PetscInt_FMT "]", n, db->L);
+  PetscCheck(db->finalised != PETSC_FALSE, PETSC_COMM_SELF, PETSC_ERR_USER, "You must call DMSwarmDataBucketFinalize() before DMSwarmDataBucketRemovePoints_Internal()");
+  PetscCall(DMSwarmDataBucketQueryForActiveFields(db, &any_active_fields));
+  PetscCheck(!any_active_fields, PETSC_COMM_SELF, PETSC_ERR_USER, "Cannot safely re-size as at least one DMSwarmDataField is currently being accessed");
+  if (!n) PetscFunctionReturn(PETSC_SUCCESS);
+  allocated = db->allocated;
+  for (L = db->L - 1; L >= db->L - n; --L) {
+    if (L + db->buffer > allocated) break;
+    if (allocated - L > 2 * db->buffer) allocated = L + db->buffer;
+  }
+  if (L >= db->L - n) {
+    for (PetscInt i = 0; i < n; ++i) PetscCall(DMSwarmDataBucketRemovePoint(db));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  L   = db->L - n;
+  end = PetscMin(db->L, allocated);
+  if (allocated != db->allocated) {
+    for (PetscInt f = 0; f < db->nfields; ++f) PetscCall((*db->ops.fieldalloc)(db->field[f], allocated));
+  }
+  if (db->buffer > 0 && end > L) {
+    for (PetscInt f = 0; f < db->nfields; ++f) PetscCall((*db->ops.fieldzerorange)(db->field[f], L, end));
+  }
+  db->L         = L;
+  db->allocated = allocated;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /*  Should be redone to user PetscViewer */
 static PetscErrorCode DMSwarmDataBucketView_stdout(MPI_Comm comm, DMSwarmDataBucket db)
 {
