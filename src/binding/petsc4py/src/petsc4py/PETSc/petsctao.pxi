@@ -181,6 +181,7 @@ cdef extern from * nogil:
     PetscErrorCode TaoSetJacobianDesignRoutine(PetscTAO, PetscMat, PetscTaoJacobianDesign*, void*)
     PetscErrorCode TaoGetLMVMMatrix(PetscTAO, PetscMat*)
     PetscErrorCode TaoSetLMVMMatrix(PetscTAO, PetscMat)
+    PetscErrorCode TaoGetDualVariables(PetscTAO, PetscVec*, PetscVec*)
 
     PetscErrorCode TaoSetEqualityConstraintsRoutine(PetscTAO, PetscVec, PetscTaoEqualityConstraints*, void*)
     PetscErrorCode TaoGetEqualityConstraintsRoutine(PetscTAO, PetscVec*, PetscTaoEqualityConstraints**, void**)

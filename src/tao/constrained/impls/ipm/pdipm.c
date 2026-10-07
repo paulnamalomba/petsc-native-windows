@@ -15,22 +15,33 @@
 */
 static PetscErrorCode TaoPDIPMEvaluateFunctionsAndJacobians(Tao tao, Vec x)
 {
-  TAO_PDIPM *pdipm = (TAO_PDIPM *)tao->data;
+  TAO_PDIPM         *pdipm = (TAO_PDIPM *)tao->data;
+  PetscScalar       *xarr;
+  const PetscScalar *Xarr;
 
   PetscFunctionBegin;
+  /* Copy subvector X.x to pdipm->x */
+  PetscCall(VecGetArray(pdipm->x, &xarr));
+  PetscCall(VecGetArrayRead(pdipm->X, &Xarr));
+
+  PetscCall(PetscMemcpy(xarr, Xarr, pdipm->nx * sizeof(PetscScalar)));
+  PetscCall(VecRestoreArray(pdipm->x, &xarr));
+  PetscCall(VecRestoreArrayRead(pdipm->X, &Xarr));
+
   /* Compute user objective function and gradient */
-  PetscCall(TaoComputeObjectiveAndGradient(tao, x, &pdipm->obj, tao->gradient));
+  // PetscCall(TaoComputeHessian(tao, tao->x, tao->hessian, tao->hessian_pre));
+  PetscCall(TaoComputeObjectiveAndGradient(tao, pdipm->x, &pdipm->obj, tao->gradient));
 
   /* Equality constraints and Jacobian */
   if (pdipm->Ng) {
-    PetscCall(TaoComputeEqualityConstraints(tao, x, tao->constraints_equality));
-    PetscCall(TaoComputeJacobianEquality(tao, x, tao->jacobian_equality, tao->jacobian_equality_pre));
+    PetscCall(TaoComputeEqualityConstraints(tao, pdipm->x, tao->constraints_equality));
+    PetscCall(TaoComputeJacobianEquality(tao, pdipm->x, tao->jacobian_equality, tao->jacobian_equality_pre));
   }
 
   /* Inequality constraints and Jacobian */
   if (pdipm->Nh) {
-    PetscCall(TaoComputeInequalityConstraints(tao, x, tao->constraints_inequality));
-    PetscCall(TaoComputeJacobianInequality(tao, x, tao->jacobian_inequality, tao->jacobian_inequality_pre));
+    PetscCall(TaoComputeInequalityConstraints(tao, pdipm->x, tao->constraints_inequality));
+    PetscCall(TaoComputeJacobianInequality(tao, pdipm->x, tao->jacobian_inequality, tao->jacobian_inequality_pre));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -280,6 +291,7 @@ static PetscErrorCode TaoSNESJacobian_PDIPM(SNES snes, Vec X, Mat J, Mat Jpre, P
   const PetscInt    *aj, *ranges, *Jranges, *rranges, *cranges;
   const PetscScalar *Xarr, *aa;
   PetscScalar        vals[2];
+  PetscScalar       *xarr;
   PetscInt           proc, nx_all, *nce_all = pdipm->nce_all;
 
   PetscFunctionBegin;
@@ -360,9 +372,13 @@ static PetscErrorCode TaoSNESJacobian_PDIPM(SNES snes, Vec X, Mat J, Mat Jpre, P
     PetscCall(MatTranspose(tao->jacobian_inequality, MAT_REUSE_MATRIX, &pdipm->jac_inequality_trans));
   }
 
-  PetscCall(VecPlaceArray(pdipm->x, Xarr));
+  /* Copy subvector X.x to pdipm->x */
+  PetscCall(VecGetArray(pdipm->x, &xarr));
+
+  PetscCall(PetscMemcpy(xarr, Xarr, pdipm->nx * sizeof(PetscScalar)));
+  PetscCall(VecRestoreArray(pdipm->x, &xarr));
+
   PetscCall(TaoComputeHessian(tao, pdipm->x, tao->hessian, tao->hessian_pre));
-  PetscCall(VecResetArray(pdipm->x));
 
   PetscCall(MatGetOwnershipRange(tao->hessian, &rjstart, NULL));
   for (i = 0; i < pdipm->nx; i++) {
@@ -441,7 +457,7 @@ static PetscErrorCode TaoSNESFunction_PDIPM(SNES snes, Vec X, Vec F, PetscCtx ct
 {
   Tao                tao   = (Tao)ctx;
   TAO_PDIPM         *pdipm = (TAO_PDIPM *)tao->data;
-  PetscScalar       *Farr;
+  PetscScalar       *Farr, *xarr;
   Vec                x, L1;
   PetscInt           i;
   const PetscScalar *Xarr, *carr, *zarr, *larr;
@@ -451,6 +467,12 @@ static PetscErrorCode TaoSNESFunction_PDIPM(SNES snes, Vec X, Vec F, PetscCtx ct
 
   PetscCall(VecGetArrayRead(X, &Xarr));
   PetscCall(VecGetArrayWrite(F, &Farr));
+
+  /* Copy subvector X.x to pdipm->x */
+  PetscCall(VecGetArray(pdipm->x, &xarr));
+
+  PetscCall(PetscMemcpy(xarr, Xarr, pdipm->nx * sizeof(PetscScalar)));
+  PetscCall(VecRestoreArray(pdipm->x, &xarr));
 
   /* (0) Evaluate f, fx, gradG, gradH at X.x Note: pdipm->x is not changed below */
   x = pdipm->x;
@@ -842,7 +864,7 @@ static PetscErrorCode TaoSetup_PDIPM(Tao tao)
   PetscMPIInt        size;
   PetscInt           row, col, Jcrstart, Jcrend, k, tmp, nc, proc, *nh_all, *ng_all;
   PetscInt           offset, *xa, *xb, i, j, rstart, rend;
-  PetscScalar        one = 1.0, neg_one = -1.0;
+  PetscScalar        one = 1.0, neg_one = -1.0, *xarr;
   const PetscInt    *cols, *rranges, *cranges, *aj, *ranges;
   const PetscScalar *aa, *Xarr;
   Mat                J;
@@ -914,8 +936,14 @@ static PetscErrorCode TaoSetup_PDIPM(Tao tao)
 
   /* Subvectors; they share local arrays with X */
   PetscCall(VecGetArrayRead(pdipm->X, &Xarr));
-  /* x shares local array with X.x */
-  if (pdipm->Nx) PetscCall(VecCreateMPIWithArray(comm, 1, pdipm->nx, pdipm->Nx, Xarr, &pdipm->x));
+
+  /* pdipm.x update local array from X.x (do not share memory) */
+  if (pdipm->Nx) {
+    PetscCall(VecDuplicate(tao->solution, &pdipm->x));
+    PetscCall(VecGetArrayWrite(pdipm->x, &xarr));
+    PetscCall(PetscMemcpy(xarr, Xarr, pdipm->nx * sizeof(PetscScalar)));
+    PetscCall(VecRestoreArrayWrite(pdipm->x, &xarr));
+  }
 
   /* lambdae shares local array with X.lambdae */
   if (pdipm->Nce) PetscCall(VecCreateMPIWithArray(comm, 1, pdipm->nce, pdipm->Nce, Xarr + pdipm->off_lambdae, &pdipm->lambdae));

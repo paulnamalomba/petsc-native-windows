@@ -761,6 +761,23 @@ cdef class TAO(Object):
         cdef PetscMat ctype = M.mat
         CHKERR(TaoSetLMVMMatrix(self.tao, ctype))
 
+    def getDualVariables(self) -> tuple[Vec, Vec]:
+        """Get the Tao dual variables.
+
+        Not collective.
+
+        See Also
+        --------
+        petsc.TaoGetDualVariables
+
+        """
+        cdef Vec DE = Vec()
+        cdef Vec DI = Vec()
+        CHKERR(TaoGetDualVariables(self.tao, &DE.vec, &DI.vec))
+        CHKERR(PetscINCREF(DE.obj))
+        CHKERR(PetscINCREF(DI.obj))
+        return (DE, DI)
+
     def setEqualityConstraints(self, equality_constraints, Vec c,
                                args: tuple[Any, ...] | None = None, kargs: dict[str, Any] | None = None) -> None:
         """Set equality constraints callback.

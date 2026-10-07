@@ -334,6 +334,56 @@ class BaseTestTAO:
     def testBQNLS_diagonal(self):
         self.templateBQNLS('diagonal')
 
+    def testPDIPM(self):
+        if self.tao.getComm().Get_size() > 1:
+            return
+        tao = self.tao
+
+        x = PETSc.Vec().createGhost([0], 2)
+        x[0] = 1
+        x[1] = 1
+        x.assemble()
+        c = PETSc.Vec().create(tao.getComm())
+        c.setSizes(1)
+        c.setType(x.getType())
+        J = PETSc.Mat().create(tao.getComm())
+        J.setSizes([1, 2])
+        J.setType(PETSc.Mat.Type.DENSE)
+        J.setUp()
+
+        tao.setObjective(Objective())
+        tao.setGradient(Gradient(), None)
+        tao.setEqualityConstraints(EqConstraints(), c)
+        tao.setJacobianEquality(EqJacobian(), J, J)
+        tao.setSolution(x)
+        tao.setType(PETSc.TAO.Type.PDIPM)
+        lb = PETSc.Vec().createSeq(2)
+        lb[0] = -1
+        lb[1] = -1
+        ub = PETSc.Vec().createSeq(2)
+        ub[0] = 3
+        ub[1] = 3
+        H = PETSc.Mat().createDense((2, 2), comm=tao.getComm())
+
+        def evalHessian(tao, x, H, P):
+            # H = F_xx       + Jacobian(grad g^T*DE) - Jacobian(grad h^T*DI)
+            #   = diag(2, 2) + Jacobian(grad (x^2 + y - 2)^T*DE[0])
+            #   = diag(2, 2) + Jacobian([2x, 1] * DE[0])
+            #   = diag(2, 2) + [[2*DE[0], 0], [0, 0]]
+            DE, DI = tao.getDualVariables()
+            H[0, 0] = 2
+            H[1, 1] = 2 + 2 * DE[0]
+            H.assemble()
+
+        tao.setHessian(evalHessian, H)
+        tao.setVariableBounds((lb, ub))
+        tao.setTolerances(gatol=1.0e-4)
+        tao.setFromOptions()
+        tao.solve()
+        self.assertAlmostEqual(abs(x[0] ** 2 + x[1] - 2.0), 0.0, places=4)
+        self.assertAlmostEqual(x[0], 0.7351392590499015014254200465, places=4)
+        self.assertAlmostEqual(x[1], 1.4595702698035618134357683666, places=4)
+
 
 # --------------------------------------------------------------------
 
