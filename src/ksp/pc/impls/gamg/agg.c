@@ -1705,13 +1705,11 @@ static PetscErrorCode PCGAMGProlongatorBlockFilter_AGG(PC pc, Mat Prol, PetscInt
      PETSC_FALSE: with keep, a zero whose local column index equals its local row index survives (an
      index-based diagonal test that is meaningless for the rectangular Prol). The compression is done
      in place, deliberately: a MatDuplicate()/MatHeaderReplace() copy as in MatFilter() would return
-     the freed CSR tail to the allocator, at the cost of a peak-memory spike. MatEliminateZeros() has
-     a known issue with HIPSPARSE (see the bypass in MatFilter()) and is not implemented by all matrix
-     types; in those cases the zeros are left in the sparsity pattern; the step-3 correction in
-     PCGAMGKernelPreservingFilter_AGG() skips exactly-zero entries, so a dropped block stays dropped
-     either way, it just still costs storage here. */
-  PetscCall(PetscObjectTypeCompareAny((PetscObject)Prol, &ishipsparse, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
-  if (!ishipsparse && Prol->ops->eliminatezeros) PetscCall(MatEliminateZeros(Prol, PETSC_FALSE));
+     the freed CSR tail to the allocator, at the cost of a peak-memory spike. MatEliminateZeros() is not
+     implemented by all matrix types; in those cases the zeros are left in the sparsity pattern;
+     the step-3 correction in PCGAMGKernelPreservingFilter_AGG() skips exactly-zero entries, so a dropped
+     block stays dropped either way, it just still costs storage here. */
+  if (Prol->ops->eliminatezeros) PetscCall(MatEliminateZeros(Prol, PETSC_FALSE));
   else PetscCall(PetscInfo(pc, "PCGAMGProlongatorBlockFilter_AGG: skipping zero elimination for %s; filtered entries are zeroed but not removed\n", ((PetscObject)Prol)->type_name));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
