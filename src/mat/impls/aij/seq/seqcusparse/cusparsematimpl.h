@@ -133,6 +133,14 @@ struct Mat_SeqAIJCUSPARSETriFactorStruct {
   PetscScalar        *AA_h; /* managed host buffer for moving values to the GPU */
 };
 
+struct Mat_SeqAIJCUSPARSEMatSolve {
+  PetscInt             nrhs;
+  PetscScalar         *work[2];
+  cusparseDnMatDescr_t dense[2];
+  cusparseSpSMDescr_t  solve[2][2]; // normal/transpose solve, then first/second triangular factor
+  void                *buffer[2][2];
+};
+
 /* This is a larger struct holding all the triangular factors for a solve, transpose solve, and any indices used in a reordering */
 struct Mat_SeqAIJCUSPARSETriFactors {
   THRUSTINTARRAY  *rpermIndices; /* indices used for any reordering */
@@ -174,7 +182,8 @@ struct Mat_SeqAIJCUSPARSETriFactors {
   PetscBool updatedTransposeSpSVAnalysis; /* Have we ever updated (done) SpSV analysis for Lt, Ut */
   PetscBool updatedSpSVAnalysis;          /* Have we ever updated (done) SpSV Analysis for L, U? */
 
-  PetscLogDouble numericFactFlops; /* Estimated FLOPs in ILU0/ICC0 numeric factorization */
+  PetscLogDouble              numericFactFlops; /* Estimated FLOPs in ILU0/ICC0 numeric factorization */
+  Mat_SeqAIJCUSPARSEMatSolve *matSolve;
 };
 
 struct Mat_CusparseSpMV {
