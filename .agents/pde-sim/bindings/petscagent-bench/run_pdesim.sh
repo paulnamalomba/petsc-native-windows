@@ -145,8 +145,6 @@ OUTPUT=${OUTPUT:-$BENCH/output/pdesim_$RUN_ID}
 
 PURPLE_PORT=9002
 PURPLE_URL=http://localhost:$PURPLE_PORT/
-# `ss` is aliased to start_ssh in the interactive shell; call the binary.
-SS=/usr/bin/ss
 
 # PETSC_DIR and PETSC_ARCH need no export: they came from the environment, so
 # the Purple and the pipeline below it already inherit them.
@@ -155,7 +153,26 @@ export PDESIM_CLAUDE_MODEL=$MODEL
 ts() { date '+%F %T'; }
 say() { echo "[$(ts)] $*"; }
 
-port_free() { ! $SS -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
+# Run a command in a new session so it leads its own process group and stop_purple
+# can signal the whole subtree. macOS has no setsid binary; os.setsid() is the same
+# POSIX call, so fall back to a one-line Python exec wrapper that does it in-process.
+if command -v setsid >/dev/null 2>&1; then
+  new_session() { setsid "$@"; }
+else
+  new_session() { python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"; }
+fi
+
+# Report whether a TCP port has no listener. lsof is present on macOS and on most
+# Linux boxes; ss (iproute2) covers Linux installs without lsof. In the interactive
+# shell `ss` is aliased to start_ssh, so call the binary by its path.
+if command -v lsof >/dev/null 2>&1; then
+  port_free() { ! lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+elif [ -x /usr/sbin/ss ] || [ -x /usr/bin/ss ]; then
+  SS=$([ -x /usr/sbin/ss ] && echo /usr/sbin/ss || echo /usr/bin/ss)
+  port_free() { ! $SS -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
+else
+  die "need lsof or ss to check ports; install one and retry"
+fi
 
 # Move rather than delete, so a run is always recoverable from $ARCHIVE.
 stash() {                                # stash <dest-subdir> <path>...
@@ -274,8 +291,12 @@ start_progress() {                       # start_progress <config>
     while sleep "$PROGRESS_EVERY"; do
       # Newest first, so this follows the pipeline from one problem to the next.
       report_done "$c"                   # announce problems as they finish
-      newest=$(find "$ARTIFACTS" -maxdepth 1 -type d -name 'bench-*' \
-                 -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+      # ls -dt sorts by mtime newest-first on both BSD and GNU; find -printf is
+      # GNU-only. nullglob keeps the glob from passing a literal 'bench-*' to ls
+      # when nothing has been created yet.
+      shopt -s nullglob
+      newest=$(ls -dt "$ARTIFACTS"/bench-*/ 2>/dev/null | head -1)
+      shopt -u nullglob
       if [ -n "$newest" ]; then
         say "  c$c $(elapsed $start)  $(summarize_stream "$newest")"
       else
@@ -302,7 +323,7 @@ start_purple() {                         # start_purple <config>
   # sidecar, which nothing reads. Green takes its telemetry in-band, from the
   # petscagent.telemetry.v1 data Part the Purple returns over A2A.
   PDESIM_CONFIG=$c \
-    setsid uv run python "$PURPLE" > "/tmp/pdesim_purple_c$c.log" 2>&1 &
+    new_session uv run python "$PURPLE" > "/tmp/pdesim_purple_c$c.log" 2>&1 &
   PURPLE_PID=$!
   PURPLE_PGID=$(ps -o pgid= -p "$PURPLE_PID" 2>/dev/null | tr -d ' ')
   say "started Purple (config=$c) pid=$PURPLE_PID pgid=${PURPLE_PGID:-?}"
@@ -342,7 +363,7 @@ cd "$BENCH" || exit 1
 mkdir -p "$ARCHIVE" "$OUTPUT"
 
 say "=== $PROBLEMS x configs $CONFIGS on model $MODEL ==="
-say "output  -> $(readlink -f "$OUTPUT")"
+say "output  -> $(cd "$OUTPUT" && pwd)"   # resolve portably; readlink -f is GNU-only
 say "archive -> $ARCHIVE"
 
 # Resolve the problem terms now: a typo should fail here, not after a server is up.
