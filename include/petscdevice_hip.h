@@ -215,7 +215,6 @@ static inline hipsolverStatus_t hipsolverSetStream(hipsolverHandle_t handle, hip
     #endif // __HIP_PLATFORM_NVCC__
   #endif   /* PETSC_PKG_HIP_VERSION_GE(4,5,0) */
 // REMOVE ME
-PETSC_EXTERN hipStream_t    PetscDefaultHipStream; // The default stream used by PETSc
 PETSC_EXTERN PetscErrorCode PetscHIPBLASGetHandle(hipblasHandle_t *);
 PETSC_EXTERN PetscErrorCode PetscHIPSOLVERGetHandle(hipsolverHandle_t *);
 PETSC_EXTERN PetscErrorCode PetscGetCurrentHIPStream(hipStream_t *);
