@@ -2,6 +2,17 @@
 #include <petscviewer.h>
 #include <petsc/private/deviceimpl.h>
 
+static struct _p_PetscDeviceContext defaultContextPlaceholder;
+PetscDeviceContext const            PetscDeviceContextDefault = &defaultContextPlaceholder;
+
+PetscErrorCode PetscDeviceContextGetDefaultContext(PetscDeviceContext *dctx)
+{
+  PetscFunctionBegin;
+  PetscAssertPointer(dctx, 1);
+  *dctx = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* implementations for <include/petscdevice.h> */
 PetscErrorCode PetscDeviceCreate(PETSC_UNUSED PetscDeviceType type, PETSC_UNUSED PetscInt devid, PetscDevice *device)
 {
@@ -83,6 +94,7 @@ PetscErrorCode PetscDeviceContextDestroy(PetscDeviceContext *dctx)
 {
   PetscFunctionBegin;
   PetscAssertPointer(dctx, 1);
+  PetscAssert(*dctx != PetscDeviceContextDefault, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot modify or destroy PetscDeviceContextDefault");
   if (*dctx) *dctx = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -90,6 +102,7 @@ PetscErrorCode PetscDeviceContextDestroy(PetscDeviceContext *dctx)
 PetscErrorCode PetscDeviceContextSetStreamType(PETSC_UNUSED PetscDeviceContext dctx, PETSC_UNUSED PetscStreamType type)
 {
   PetscFunctionBegin;
+  PetscAssert(dctx != PetscDeviceContextDefault, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot modify or destroy PetscDeviceContextDefault");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -104,6 +117,7 @@ PetscErrorCode PetscDeviceContextGetStreamType(PETSC_UNUSED PetscDeviceContext d
 PetscErrorCode PetscDeviceContextSetDevice(PETSC_UNUSED PetscDeviceContext dctx, PETSC_UNUSED PetscDevice device)
 {
   PetscFunctionBegin;
+  PetscAssert(dctx != PetscDeviceContextDefault, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot modify or destroy PetscDeviceContextDefault");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -193,6 +207,7 @@ PetscErrorCode PetscDeviceContextDelay(PETSC_UNUSED PetscDeviceContext dctx, Pet
 PetscErrorCode PetscDeviceContextSetFromOptions(PETSC_UNUSED MPI_Comm comm, PETSC_UNUSED PetscDeviceContext dctx)
 {
   PetscFunctionBegin;
+  PetscAssert(dctx != PetscDeviceContextDefault, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot modify or destroy PetscDeviceContextDefault");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -278,14 +293,6 @@ PetscErrorCode PetscDeviceGetDefaultForType_Internal(PETSC_UNUSED PetscDeviceTyp
   PetscFunctionBegin;
   PetscAssertPointer(device, 2);
   *device = NULL;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PetscDeviceContextGetNullContext_Internal(PetscDeviceContext *dctx)
-{
-  PetscFunctionBegin;
-  PetscAssertPointer(dctx, 1);
-  *dctx = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

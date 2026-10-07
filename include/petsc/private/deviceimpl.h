@@ -305,7 +305,24 @@ static inline PETSC_CONSTEXPR_14 PetscBool PetscDeviceConfiguredFor_Internal(Pet
 // ===================================================================================
 //                     PetscDeviceContext Internal Functions
 // ===================================================================================
-PETSC_SINGLE_LIBRARY_INTERN PetscErrorCode PetscDeviceContextGetNullContext_Internal(PetscDeviceContext *);
+// Validate a public argument without initializing the default context.
+#if PetscDefined(USE_DEBUG) || PetscDefined(DEVICE_KEEP_ERROR_CHECKING_MACROS) || PetscDefined(CLANG_STATIC_ANALYZER)
+  #define PetscValidDeviceContextOrDefault(dctx, argno) \
+    do { \
+      PetscDeviceContext pvdcod_dctx_ = (dctx); \
+      if (pvdcod_dctx_ != PetscDeviceContextDefault) PetscValidDeviceContext(pvdcod_dctx_, argno); \
+    } while (0)
+#else
+  #define PetscValidDeviceContextOrDefault(dctx, argno)
+#endif
+
+static inline PetscErrorCode PetscDeviceContextResolveDefault_Private(PetscDeviceContext *dctx)
+{
+  PetscFunctionBegin;
+  if (*dctx == PetscDeviceContextDefault) PetscCall(PetscDeviceContextGetDefaultContext(dctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 #if PetscDefined(DEVICELANGUAGE_CXX)
 static inline PetscErrorCode PetscDeviceContextGetBLASHandle_Internal(PetscDeviceContext dctx, void *handle)
 {
@@ -406,15 +423,6 @@ static inline PetscErrorCode PetscDeviceContextGetCurrentContextAssertType_Inter
     PetscCall(PetscDeviceContextGetDeviceType(*dctx, &dtype));
     PetscCheckCompatibleDeviceTypes(dtype, 1, type, 2);
   } else (void)type;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static inline PetscErrorCode PetscDeviceContextGetOptionalNullContext_Internal(PetscDeviceContext *dctx)
-{
-  PetscFunctionBegin;
-  PetscAssertPointer(dctx, 1);
-  if (!*dctx) PetscCall(PetscDeviceContextGetNullContext_Internal(dctx));
-  PetscValidDeviceContext(*dctx, 1);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
