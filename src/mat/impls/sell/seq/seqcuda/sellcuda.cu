@@ -5,18 +5,18 @@
 #define SLICE_HEIGHT 16
 
 typedef struct {
-  PetscInt   maxallocmat;
-  PetscInt   totalentries;
-  PetscInt  *colidx; /* column index array, device pointer */
-  MatScalar *val;    /* value array, device pointer */
-  PetscInt   totalslices;
-  PetscInt  *sliidx; /* slice index array, device pointer */
-  PetscInt   nonzerostate;
-  PetscInt   kernelchoice;
-  PetscInt   blocky;
-  PetscInt   chunksperblock;
-  PetscInt   totalchunks;
-  PetscInt  *chunk_slice_map; /* starting slice for each chunk, device pointer */
+  PetscInt         maxallocmat;
+  PetscInt         totalentries;
+  PetscInt        *colidx; /* column index array, device pointer */
+  MatScalar       *val;    /* value array, device pointer */
+  PetscInt         totalslices;
+  PetscInt        *sliidx; /* slice index array, device pointer */
+  PetscObjectState nonzerostate;
+  PetscInt         kernelchoice;
+  PetscInt         blocky;
+  PetscInt         chunksperblock;
+  PetscInt         totalchunks;
+  PetscInt        *chunk_slice_map; /* starting slice for each chunk, device pointer */
 } Mat_SeqSELLCUDA;
 
 static PetscErrorCode MatSeqSELLCUDA_Destroy(Mat_SeqSELLCUDA **cudastruct)
@@ -40,7 +40,7 @@ static PetscErrorCode MatSeqSELLCUDACopyToGPU(Mat A)
   PetscFunctionBegin;
   if (A->offloadmask == PETSC_OFFLOAD_UNALLOCATED || A->offloadmask == PETSC_OFFLOAD_CPU) {
     PetscCall(PetscLogEventBegin(MAT_CUDACopyToGPU, A, 0, 0, 0));
-    if (A->assembled && A->nonzerostate == cudastruct->nonzerostate) {
+    if (cudastruct->sliidx && A->nonzerostate == cudastruct->nonzerostate) {
       /* copy values only */
       PetscCallCUDA(cudaMemcpy(cudastruct->val, a->val, a->sliidx[a->totalslices] * sizeof(MatScalar), cudaMemcpyHostToDevice));
       PetscCall(PetscLogCpuToGpu(a->sliidx[a->totalslices] * (sizeof(MatScalar))));
@@ -67,7 +67,8 @@ static PetscErrorCode MatSeqSELLCUDACopyToGPU(Mat A)
     }
     PetscCallCUDA(WaitForCUDA());
     PetscCall(PetscLogEventEnd(MAT_CUDACopyToGPU, A, 0, 0, 0));
-    A->offloadmask = PETSC_OFFLOAD_BOTH;
+    cudastruct->nonzerostate = A->nonzerostate;
+    A->offloadmask           = PETSC_OFFLOAD_BOTH;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -938,7 +939,7 @@ static PetscErrorCode MatZeroEntries_SeqSELLCUDA(Mat A)
 static PetscErrorCode MatDestroy_SeqSELLCUDA(Mat A)
 {
   PetscFunctionBegin;
-  if (A->factortype == MAT_FACTOR_NONE && A->offloadmask != PETSC_OFFLOAD_UNALLOCATED) PetscCall(MatSeqSELLCUDA_Destroy((Mat_SeqSELLCUDA **)&A->spptr));
+  if (A->factortype == MAT_FACTOR_NONE) PetscCall(MatSeqSELLCUDA_Destroy((Mat_SeqSELLCUDA **)&A->spptr));
   PetscCall(MatDestroy_SeqSELL(A));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
