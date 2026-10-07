@@ -6,8 +6,7 @@
 
 /* Logging support */
 PetscClassId  PC_CLASSID;
-PetscLogEvent PC_SetUp, PC_SetUpOnBlocks, PC_Apply, PC_MatApply, PC_ApplyCoarse, PC_ApplySymmetricLeft;
-PetscLogEvent PC_ApplySymmetricRight, PC_ModifySubMatrices, PC_ApplyOnBlocks, PC_ApplyTransposeOnBlocks;
+PetscLogEvent PC_SetUp, PC_SetUpOnBlocks, PC_Apply, PC_MatApply, PC_ApplyTranspose, PC_ApplyCoarse, PC_ApplySymmetricLeft, PC_ApplySymmetricRight, PC_ModifySubMatrices, PC_ApplyOnBlocks, PC_ApplyTransposeOnBlocks;
 PetscInt      PetscMGLevelId;
 PetscLogStage PCMPIStage;
 
@@ -60,7 +59,7 @@ PETSC_INTERN PetscErrorCode PCGetDefaultType_Private(PC pc, const char *type[])
 }
 
 /* do not log solves, setup, and applications of preconditioners while constructing preconditioners; perhaps they should be logged separately from the regular solves */
-PETSC_EXTERN PetscLogEvent KSP_Solve, KSP_SetUp;
+PETSC_EXTERN PetscLogEvent KSP_Solve, KSP_SetUp, KSP_MatSolve, KSP_SolveTranspose, KSP_MatSolveTranspose;
 
 static PetscErrorCode PCLogEventsDeactivatePush(void)
 {
@@ -68,8 +67,12 @@ static PetscErrorCode PCLogEventsDeactivatePush(void)
   PetscCall(KSPInitializePackage());
   PetscCall(PetscLogEventDeactivatePush(KSP_Solve));
   PetscCall(PetscLogEventDeactivatePush(KSP_SetUp));
+  PetscCall(PetscLogEventDeactivatePush(KSP_MatSolve));
+  PetscCall(PetscLogEventDeactivatePush(KSP_SolveTranspose));
+  PetscCall(PetscLogEventDeactivatePush(KSP_MatSolveTranspose));
   PetscCall(PetscLogEventDeactivatePush(PC_Apply));
   PetscCall(PetscLogEventDeactivatePush(PC_SetUp));
+  PetscCall(PetscLogEventDeactivatePush(PC_MatApply));
   PetscCall(PetscLogEventDeactivatePush(PC_SetUpOnBlocks));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -80,8 +83,12 @@ static PetscErrorCode PCLogEventsDeactivatePop(void)
   PetscCall(KSPInitializePackage());
   PetscCall(PetscLogEventDeactivatePop(KSP_Solve));
   PetscCall(PetscLogEventDeactivatePop(KSP_SetUp));
+  PetscCall(PetscLogEventDeactivatePop(KSP_MatSolve));
+  PetscCall(PetscLogEventDeactivatePop(KSP_SolveTranspose));
+  PetscCall(PetscLogEventDeactivatePop(KSP_MatSolveTranspose));
   PetscCall(PetscLogEventDeactivatePop(PC_Apply));
   PetscCall(PetscLogEventDeactivatePop(PC_SetUp));
+  PetscCall(PetscLogEventDeactivatePop(PC_MatApply));
   PetscCall(PetscLogEventDeactivatePop(PC_SetUpOnBlocks));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
