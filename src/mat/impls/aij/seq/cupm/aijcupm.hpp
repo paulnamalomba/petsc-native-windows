@@ -132,17 +132,17 @@ __global__ void GetDiagonal_CSR(const PetscInt *row, const PetscInt *col, const 
 
 /* --------------------------------------------------------------------------
    Shared __global__ kernel: sum the absolute values of each CSR row.
-   With compressed rows, cprow maps CSR row x to its row in the matrix.
+   With compressed rows, cprow maps CSR row i to its row in the matrix.
    -------------------------------------------------------------------------- */
-__global__ void GetRowSumAbs_CSR(const PetscInt *row, const PetscScalar *val, const PetscInt *cprow, const PetscInt len, PetscScalar *sum)
+__global__ void GetRowSumAbs_CSR(const PetscInt *rowptr, const PetscScalar *val, const PetscInt *cprow, const PetscInt m, PetscScalar *sum)
 {
-  const size_t x = blockIdx.x * blockDim.x + threadIdx.x;
+  const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (x < (size_t)len) {
+  if (i < (size_t)m) {
     PetscReal s = 0.0;
 
-    for (PetscInt i = row[x]; i < row[x + 1]; i++) s += PetscAbsScalar(val[i]);
-    sum[cprow ? cprow[x] : (PetscInt)x] = s;
+    for (PetscInt k = rowptr[i]; k < rowptr[i + 1]; k++) s += PetscAbsScalar(val[k]);
+    sum[cprow ? cprow[i] : (PetscInt)i] = s;
   }
 }
 

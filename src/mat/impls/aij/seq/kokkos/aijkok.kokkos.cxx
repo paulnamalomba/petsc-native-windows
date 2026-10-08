@@ -1493,21 +1493,26 @@ static PetscErrorCode MatNorm_SeqAIJKokkos(Mat A, NormType type, PetscReal *nrm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode MatGetRowSumAbs_SeqAIJKokkos(Mat A, Vec v)
+// For MATMPIAIJKOKKOS, a row spans both the diagonal block A and the off-diagonal block B, so one kernel sums both
+PetscErrorCode MatGetRowSumAbs_AIJKokkos(Mat mat, Vec v)
 {
+  Mat                   A = mat, B = NULL;
   PetscInt              n;
+  PetscBool             ismpi;
   PetscScalarKokkosView vv;
 
   PetscFunctionBegin;
-  PetscCheck(A->factortype == MAT_FACTOR_NONE, PETSC_COMM_SELF, PETSC_ERR_SUP, "MatGetRowSumAbs_SeqAIJKokkos not supported on factored matrices");
+  PetscCheck(mat->factortype == MAT_FACTOR_NONE, PETSC_COMM_SELF, PETSC_ERR_SUP, "MatGetRowSumAbs_AIJKokkos not supported on factored matrices");
   PetscCall(VecGetLocalSize(v, &n));
-  PetscCheck(n == A->rmap->n, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Nonconforming matrix and vector");
+  PetscCheck(n == mat->rmap->n, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Nonconforming matrix and vector");
+  PetscCall(PetscObjectTypeCompare((PetscObject)mat, MATMPIAIJKOKKOS, &ismpi));
+  if (ismpi) PetscCall(MatMPIAIJGetSeqAIJ(mat, &A, &B, NULL));
   PetscCall(PetscLogGpuTimeBegin());
   PetscCall(VecGetKokkosViewWrite(v, &vv));
-  PetscCall(MatSeqAIJKokkosGetRowAbsSums_Private(A, NULL, vv));
+  PetscCall(MatSeqAIJKokkosGetRowAbsSums_Private(A, B, vv));
   PetscCall(VecRestoreKokkosViewWrite(v, &vv));
   PetscCall(PetscLogGpuTimeEnd());
-  PetscCall(PetscLogGpuFlops(static_cast<Mat_SeqAIJ *>(A->data)->nz));
+  PetscCall(PetscLogGpuFlops(static_cast<Mat_SeqAIJ *>(A->data)->nz + (B ? static_cast<Mat_SeqAIJ *>(B->data)->nz : 0)));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1805,7 +1810,7 @@ static PetscErrorCode MatSetOps_SeqAIJKokkos(Mat A)
   A->ops->diagonalset               = MatDiagonalSet_SeqAIJKokkos;
   A->ops->diagonalscale             = MatDiagonalScale_SeqAIJKokkos;
   A->ops->norm                      = MatNorm_SeqAIJKokkos;
-  A->ops->getrowsumabs              = MatGetRowSumAbs_SeqAIJKokkos;
+  A->ops->getrowsumabs              = MatGetRowSumAbs_AIJKokkos;
   A->ops->getcurrentmemtype         = MatGetCurrentMemType_SeqAIJKokkos;
   A->ops->bindtocpu                 = MatBindToCPU_SeqAIJKokkos;
   a->ops->getarray                  = MatSeqAIJGetArray_SeqAIJKokkos;
