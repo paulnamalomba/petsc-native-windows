@@ -533,7 +533,7 @@ PetscErrorCode TaoBNKRecomputePred(Tao tao, Vec S, PetscReal *prered)
   }
   /* Recompute the predicted decrease based on the quadratic model */
   PetscCall(MatMult(bnk->H_inactive, bnk->X_inactive, bnk->inactive_work));
-  PetscCall(VecAYPX(bnk->inactive_work, -0.5, bnk->G_inactive));
+  PetscCall(VecAYPX(bnk->inactive_work, 0.5, bnk->G_inactive));
   PetscCall(VecDot(bnk->inactive_work, bnk->X_inactive, prered));
   /* Restore the sub vectors */
   if (bnk->active_idx) {
