@@ -70,6 +70,9 @@
 ```{rubric} PC:
 ```
 
+- Add `PCHPDDMSetScaling()` to supply a diagonal scaling `Vec` for the deflation space set with `PCHPDDMSetDeflationMat()`. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the scaling is forwarded accordingly. Without `PCHPDDMSetDeflationMat()`, the scaling only applies to the fine-level `PCASM` of a single-level `PCHPDDM`.
+- Change `PCHPDDMSetDeflationMat()` to share its `IS` with `PCHPDDMSetScaling()`, and to accept `NULL` arguments to reuse the stored `IS` or remove the deflation space.
+
 ```{rubric} KSP:
 ```
 
