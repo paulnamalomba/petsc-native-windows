@@ -220,6 +220,7 @@ static PetscErrorCode PCHPDDMSetAuxiliaryMat_HPDDM(PC pc, IS is, Mat A, PetscErr
   PC_HPDDM *data = (PC_HPDDM *)pc->data;
 
   PetscFunctionBegin;
+  PetscCheck(!data->scaling, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "PCHPDDMSetAuxiliaryMat() cannot be combined with a user-supplied scaling, remove it first with PCHPDDMSetScaling(pc, NULL, NULL)");
   PetscCall(PCHPDDMSetAuxiliaryMat_Private(pc, is, A, PETSC_FALSE));
   if (setup) {
     data->setup     = setup;
@@ -249,15 +250,17 @@ static PetscErrorCode PCHPDDMSetAuxiliaryMat_HPDDM(PC pc, IS is, Mat A, PetscErr
 
   Level: intermediate
 
-  Note:
+  Notes:
   As an example, in a finite element context with nonoverlapping subdomains plus (overlapping) ghost elements, this could be the unassembled (Neumann)
   local overlapping operator. As opposed to the assembled (Dirichlet) local overlapping operator obtained by summing neighborhood contributions
   at the interface of ghost elements.
 
+  This routine does not currently support a scaling set with `PCHPDDMSetScaling()`.
+
   Fortran Notes:
   Only `PETSC_NULL_FUNCTION` is supported for `setup` and `ctx` is never accessed
 
-.seealso: [](ch_ksp), `PCHPDDM`, `PCCreate()`, `PCSetType()`, `PCType`, `PC`, `PCHPDDMSetRHSMat()`, `MATIS`
+.seealso: [](ch_ksp), `PCHPDDM`, `PCCreate()`, `PCSetType()`, `PCType`, `PC`, `PCHPDDMSetRHSMat()`, `PCHPDDMSetScaling()`, `MATIS`
 @*/
 PetscErrorCode PCHPDDMSetAuxiliaryMat(PC pc, IS is, Mat A, PetscErrorCode (*setup)(Mat J, PetscReal t, Vec X, Vec X_t, PetscReal s, IS ovl, PetscCtx ctx), PetscCtx ctx)
 {
@@ -3343,9 +3346,10 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
   Without a deflation space, the scaling only applies to the fine-level `PCASM` (of type `PC_ASM_WEIGHTED`)
   and a single level is used; `is` must then be supplied here. With a deflation space set with
   `PCHPDDMSetDeflationMat()`, two levels with at least one deflation vector globally (individual
-  processes may supply zero vectors) are required. Both need an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` Pmat, and `-pc_hpddm_define_subdomains true`. Internal
-  harmonic, block-splitting, and Neumann auxiliary problems are not supported, and
-  `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the supplied overlap.
+  processes may supply zero vectors) are required. Both need an assembled `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` Pmat, and `-pc_hpddm_define_subdomains true`. An
+  auxiliary matrix set with `PCHPDDMSetAuxiliaryMat()`, before or after this call, is not supported, nor are internal
+  harmonic, block-splitting, and Neumann auxiliary problems, and `-pc_hpddm_levels_1_pc_asm_overlap` cannot expand the
+  supplied overlap.
 
   With local unscaled deflation vectors $U_i$ and $D_i = \text{diag}(scaling)$, the global coarse
   basis is $Z = [R_i^T D_i U_i]$; do not prescale $U_i$. By default, a fine-level `PCASM` uses
@@ -3387,6 +3391,7 @@ static PetscErrorCode PCHPDDMSetScaling_HPDDM(PC pc, IS is, Vec scaling)
     PetscInt           n, m;
     PetscBool          valid = PETSC_TRUE;
 
+    PetscCheck(!data->aux || data->deflation, PETSC_COMM_SELF, PETSC_ERR_SUP, "User-supplied scaling cannot be combined with the auxiliary matrix of PCHPDDMSetAuxiliaryMat()");
     if (!is) is = data->is;
     PetscCheck(is, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "No stored IS, supply one to PCHPDDMSetScaling() or PCHPDDMSetDeflationMat()");
     PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)scaling), &size));
