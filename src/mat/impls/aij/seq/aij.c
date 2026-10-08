@@ -4733,21 +4733,35 @@ PetscErrorCode MatSetPreallocationCOO_SeqAIJ(Mat mat, PetscCount coo_n, PetscInt
   coo->jmap = jmap;         // of length nnz+1
   coo->perm = perm;
   // MatSetPreallocationCOO() increments the nonzero state once more after this routine returns; if that changes, every
-  // MatSetValuesCOO() fails the check in MatSeqAIJCheckCOONonzeroState_Private(), so a mismatch cannot go unnoticed
+  // MatSetValuesCOO() fails the check in MatSeqAIJCheckCOONonzeroState(), so a mismatch cannot go unnoticed
   coo->nonzerostate = mat->nonzerostate + 1;
   PetscCall(PetscObjectContainerCompose((PetscObject)mat, "__PETSc_MatCOOStruct_Host", coo, MatCOOStructDestroy_SeqAIJ));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
-  Check that the COO maps built by MatSetPreallocationCOO() can still be used by MatSetValuesCOO().
+// PetscClangLinter pragma disable: -fdoc-internal-linkage
+/*@
+  MatSeqAIJCheckCOONonzeroState - Checks that the COO maps built by `MatSetPreallocationCOO()` can still be used by
+  `MatSetValuesCOO()` on a `MATSEQAIJ` matrix
 
+  Not Collective
+
+  Input Parameter:
+. A - the `MATSEQAIJ` matrix
+
+  Level: developer
+
+  Notes:
   The maps address the nonzeros of the matrix by position, so they are only valid while its nonzero pattern is the one built by
-  MatSetPreallocationCOO(). Any change to the pattern, for example a new nonzero inserted with MatSetValues(), would make
-  MatSetValuesCOO() write values into the wrong locations, so this generates an error instead. It also generates an error when
-  MatSetPreallocationCOO() has not been called.
-*/
-PetscErrorCode MatSeqAIJCheckCOONonzeroState_Private(Mat A)
+  `MatSetPreallocationCOO()`. Any change to the pattern, for example a new nonzero inserted with `MatSetValues()`, would make
+  `MatSetValuesCOO()` write values into the wrong locations, so this routine generates an error instead. It also generates an
+  error when `MatSetPreallocationCOO()` has not been called.
+
+  The `MatSetValuesCOO()` implementations of `MATSEQAIJ` and its device subtypes call this routine before using the maps.
+
+.seealso: [](ch_matrices), `Mat`, `MATSEQAIJ`, `MatSetPreallocationCOO()`, `MatSetValuesCOO()`, `MatMPIAIJCheckCOONonzeroState()`
+@*/
+PetscErrorCode MatSeqAIJCheckCOONonzeroState(Mat A)
 {
   PetscContainer       container;
   MatCOOStruct_SeqAIJ *coo;
@@ -4770,7 +4784,7 @@ static PetscErrorCode MatSetValuesCOO_SeqAIJ(Mat A, const PetscScalar v[], Inser
   MatCOOStruct_SeqAIJ *coo;
 
   PetscFunctionBegin;
-  PetscCall(MatSeqAIJCheckCOONonzeroState_Private(A));
+  PetscCall(MatSeqAIJCheckCOONonzeroState(A));
   PetscCall(PetscObjectQuery((PetscObject)A, "__PETSc_MatCOOStruct_Host", (PetscObject *)&container));
   PetscCall(PetscContainerGetPointer(container, &coo));
   perm = coo->perm;
