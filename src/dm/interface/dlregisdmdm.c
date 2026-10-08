@@ -174,6 +174,7 @@ PetscErrorCode DMInitializePackage(void)
   PetscCall(PetscLogEventRegister("DMSwarmSetSizes", DM_CLASSID, &DMSWARM_SetSizes));
   PetscCall(PetscLogEventRegister("DMSwarmCopyToGPU", DM_CLASSID, &DMSWARM_CopyToGPU));
   PetscCall(PetscLogEventRegister("DMSwarmCopyFromGPU", DM_CLASSID, &DMSWARM_CopyFromGPU));
+  PetscCall(PetscLogEventRegister("DMSwarmMassSq", DM_CLASSID, &DMSWARM_MassMatrixSquare));
   /* Each rank copies its swarm fields between host and device on its own schedule */
   PetscCall(PetscLogEventSetCollective(DMSWARM_CopyToGPU, PETSC_FALSE));
   PetscCall(PetscLogEventSetCollective(DMSWARM_CopyFromGPU, PETSC_FALSE));

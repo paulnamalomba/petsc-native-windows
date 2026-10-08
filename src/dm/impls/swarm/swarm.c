@@ -17,6 +17,7 @@ PetscLogEvent DMSWARM_Migrate, DMSWARM_SetSizes, DMSWARM_AddPoints, DMSWARM_Remo
 PetscLogEvent DMSWARM_DataExchangerTopologySetup, DMSWARM_DataExchangerBegin, DMSWARM_DataExchangerEnd;
 PetscLogEvent DMSWARM_DataExchangerSendCount, DMSWARM_DataExchangerPack;
 PetscLogEvent DMSWARM_CopyToGPU, DMSWARM_CopyFromGPU;
+PetscLogEvent DMSWARM_MassMatrixSquare;
 
 const char *DMSwarmTypeNames[]          = {"basic", "pic", NULL};
 const char *DMSwarmMigrateTypeNames[]   = {"basic", "dmcellnscatter", "dmcellexact", "user", NULL};
@@ -757,8 +758,8 @@ PetscErrorCode DMSwarmFillMassMatrix(DM dmc, DM dmf, Mat mass, PetscInt rStart, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Whether DMSwarmComputeMassMatrixCOO_Private() computes the values on the device; numF is the common closure size of the cells
-   with particles (-1 if there are none) when uniform is true. The decision is collective. */
+/* Whether DMSwarmComputeMassMatrixCOO_Private() or DMSwarmComputeMassMatrixSquareCOO_Private() computes the values on the device; numF
+   is the common closure size of the cells with particles (-1 if there are none) when uniform is true. The decision is collective. */
 static PetscErrorCode DMSwarmMassCOOUseDevice_Private(DM dmc, DM dmf, Mat mass, PetscObject disc, PetscInt Nc, PetscInt numF, PetscBool uniform, PetscBool *onDevice)
 {
   PetscFunctionBegin;
@@ -1035,12 +1036,121 @@ static PetscErrorCode DMCreateMassMatrix_Swarm(DM dmCoarse, DM dmFine, Mat *mass
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Single-field COO assembly of DMSwarmComputeMassMatrixSquare_Private() with the values computed on the device. Each cell with n_c
+   particles contributes the n_c x n_c block elemMat^T elemMat that DMSwarmComputeMassMatrixSquare_Private() passes to MatSetValues(),
+   with the COO entries ordered by cell and row-major within the block. Every particle lies in exactly one cell, so no (i,j) pair
+   repeats, and the device computes each entry in the order of the reference BLAS gemm of that path, so the assembled matrix is bitwise
+   identical to it. The (i,j) pattern is built on the host, as in DMSwarmComputeMassMatrixCOO_Private(), with the cell offsets
+   sq_offsets and tile_offsets of the blocks that the device kernel uses.
+
+   When the values cannot be computed on the device (see DMSwarmMassCOOUseDevice_Private()), the matrix is left untouched and assembled
+   is false: computed on the host, COO only adds the cost of MatSetPreallocationCOO() to the MatSetValues() path, whose preallocation is a
+   row count since the matrix is block diagonal. */
+static PetscErrorCode DMSwarmComputeMassMatrixSquareCOO_Private(DM dmc, DM dmf, Mat mass, PetscBool useDeltaFunction, PetscBool *assembled)
+{
+  DMSwarmCellDM celldm;
+  PetscDS       ds;
+  PetscSection  fsection, globalFSection;
+  PetscLayout   rLayout;
+  PetscFE       fe;
+  PetscCount    ncoo = 0, n = 0;
+  PetscCount   *sq_offsets, *tile_offsets;
+  PetscInt      cStart, cEnd, Nc, Nfc, locRows, rStart, numF = -1;
+  PetscInt     *coo_i, *coo_j;
+  const char  **coordFields;
+  PetscBool     uniform = PETSC_TRUE, onDevice = PETSC_FALSE;
+
+  PetscFunctionBegin;
+  *assembled = PETSC_FALSE;
+  PetscCall(DMPlexGetHeightStratum(dmf, 0, &cStart, &cEnd));
+  PetscCall(DMGetLocalSection(dmf, &fsection));
+  PetscCall(DMGetGlobalSection(dmf, &globalFSection));
+  PetscCall(DMGetDS(dmf, &ds));
+  PetscCall(PetscDSGetDiscretization(ds, 0, (PetscObject *)&fe));
+  PetscCall(PetscFEGetNumComponents(fe, &Nc));
+  PetscCall(DMSwarmGetCellDMActive(dmc, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+
+  PetscCall(DMSwarmSortGetAccess(dmc));
+  for (PetscInt cell = cStart; cell < cEnd; ++cell) {
+    PetscInt *findices, *cindices;
+    PetscInt  numFIndices, numCIndices;
+
+    PetscCall(DMSwarmSortGetPointsPerCell(dmc, cell, &numCIndices, &cindices));
+    if (numCIndices) {
+      PetscCall(DMPlexGetClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+      ncoo += (PetscCount)numCIndices * numCIndices;
+      if (numF < 0) numF = numFIndices;
+      else if (numF != numFIndices) uniform = PETSC_FALSE;
+      PetscCall(DMPlexRestoreClosureIndices(dmf, fsection, globalFSection, cell, PETSC_FALSE, &numFIndices, &findices, NULL, NULL));
+    }
+    PetscCall(DMSwarmSortRestorePointsPerCell(dmc, cell, &numCIndices, &cindices));
+  }
+  PetscCall(DMSwarmMassCOOUseDevice_Private(dmc, dmf, mass, (PetscObject)fe, Nc, numF, uniform, &onDevice));
+  PetscCall(PetscInfo(dmc, "Particle mass matrix square values computed on the %s\n", onDevice ? "device" : "host"));
+  if (!onDevice) {
+    PetscCall(DMSwarmSortRestoreAccess(dmc));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(MatGetLocalSize(mass, &locRows, NULL));
+  PetscCall(PetscLayoutCreateFromSizes(PetscObjectComm((PetscObject)mass), locRows, PETSC_DECIDE, 1, &rLayout));
+  PetscCall(PetscLayoutGetRange(rLayout, &rStart, NULL));
+  PetscCall(PetscLayoutDestroy(&rLayout));
+  PetscCall(PetscMalloc2(ncoo, &coo_i, ncoo, &coo_j));
+  PetscCall(PetscMalloc2(cEnd - cStart + 1, &sq_offsets, cEnd - cStart + 1, &tile_offsets));
+  sq_offsets[0] = tile_offsets[0] = 0;
+  for (PetscInt cell = cStart; cell < cEnd; ++cell) {
+    PetscInt  *cindices;
+    PetscInt   numCIndices;
+    PetscCount nt;
+
+    PetscCall(DMSwarmSortGetPointsPerCell(dmc, cell, &numCIndices, &cindices));
+    for (PetscInt a = 0; a < numCIndices; ++a) {
+      for (PetscInt b = 0; b < numCIndices; ++b, ++n) {
+        coo_i[n] = cindices[a] + rStart;
+        coo_j[n] = cindices[b] + rStart;
+      }
+    }
+    nt                              = (numCIndices + DMSWARM_MASS_SQUARE_TILE - 1) / DMSWARM_MASS_SQUARE_TILE;
+    sq_offsets[cell - cStart + 1]   = sq_offsets[cell - cStart] + (PetscCount)numCIndices * numCIndices;
+    tile_offsets[cell - cStart + 1] = tile_offsets[cell - cStart] + nt * nt;
+    PetscCall(DMSwarmSortRestorePointsPerCell(dmc, cell, &numCIndices, &cindices));
+  }
+  PetscCall(MatSetPreallocationCOO(mass, ncoo, coo_i, coo_j));
+  PetscCall(PetscFree2(coo_i, coo_j));
+#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+  {
+    DMSwarmSort         sort;
+    DMSwarmFEBasis      basis;
+    DMSwarmCellGeometry geom;
+    PetscMemType        mtype;
+    const PetscReal    *coords;
+
+    PetscCall(DMSwarmCellDMGetSort(celldm, &sort));
+    PetscCall(DMSwarmFEBasisGetDevice_Internal((PetscObject)fe, &basis));
+    PetscCall(DMSwarmCellGeometryGetDevice_Internal(dmf, &geom));
+    PetscCall(DMSwarmGetFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
+    PetscCheck(PetscMemTypeDevice(mtype), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Particle coordinates are not in device memory");
+    PetscCall(DMSwarmMassMatrixSquareSetValuesCOO_Internal_HIP(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction, sort->ncells, sort->pcell_offsets_d, sq_offsets, tile_offsets));
+    PetscCall(DMSwarmRestoreFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
+  }
+#endif
+  PetscCall(PetscFree2(sq_offsets, tile_offsets));
+  PetscCall(DMSwarmSortRestoreAccess(dmc));
+  *assembled = PETSC_TRUE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode DMSwarmComputeMassMatrixSquare_Private(DM dmc, DM dmf, Mat mass, PetscBool useDeltaFunction, PetscCtx ctx)
 {
-  const char   *name = "Mass Matrix Square";
+  const char   *name  = "Mass Matrix Square";
+  DM_Swarm     *swarm = (DM_Swarm *)dmc->data;
   MPI_Comm      comm;
   DMSwarmCellDM celldm;
   PetscDS       prob;
+  PetscObject   disc;
+  PetscClassId  id;
+  PetscBool     isHIP, assembled;
   PetscSection  fsection, globalFSection;
   PetscHSetIJ   ht;
   PetscLayout   rLayout, colLayout;
@@ -1058,6 +1168,15 @@ static PetscErrorCode DMSwarmComputeMassMatrixSquare_Private(DM dmc, DM dmf, Mat
   PetscCall(DMGetCoordinateDim(dmf, &cdim));
   PetscCall(DMGetDS(dmf, &prob));
   PetscCall(PetscDSGetNumFields(prob, &Nf));
+  if (swarm->mass_coo && Nf == 1) {
+    PetscCall(PetscDSGetDiscretization(prob, 0, &disc));
+    PetscCall(PetscObjectGetClassId(disc, &id));
+    PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, &isHIP, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
+    if (id == PETSCFE_CLASSID && swarm->backend == DMSWARM_BACKEND_HIP && isHIP) {
+      PetscCall(DMSwarmComputeMassMatrixSquareCOO_Private(dmc, dmf, mass, useDeltaFunction, &assembled));
+      if (assembled) PetscFunctionReturn(PETSC_SUCCESS);
+    }
+  }
   PetscCall(PetscDSGetTotalDimension(prob, &totDim));
   PetscCall(PetscMalloc3(cdim, &v0, cdim * cdim, &J, cdim * cdim, &invJ));
   PetscCall(DMGetLocalSection(dmf, &fsection));
@@ -1246,6 +1365,7 @@ PetscErrorCode DMSwarmCreateMassMatrixSquare(DM dmCoarse, DM dmFine, Mat *mass)
   void    *ctx;
 
   PetscFunctionBegin;
+  PetscCall(PetscLogEventBegin(DMSWARM_MassMatrixSquare, dmCoarse, dmFine, 0, 0));
   PetscCall(DMSwarmGetLocalSize(dmCoarse, &n));
   PetscCall(MatCreate(PetscObjectComm((PetscObject)dmCoarse), mass));
   PetscCall(MatSetSizes(*mass, n, n, PETSC_DETERMINE, PETSC_DETERMINE));
@@ -1253,6 +1373,7 @@ PetscErrorCode DMSwarmCreateMassMatrixSquare(DM dmCoarse, DM dmFine, Mat *mass)
   PetscCall(DMGetApplicationContext(dmFine, &ctx));
 
   PetscCall(DMSwarmComputeMassMatrixSquare_Private(dmCoarse, dmFine, *mass, PETSC_TRUE, ctx));
+  PetscCall(PetscLogEventEnd(DMSWARM_MassMatrixSquare, dmCoarse, dmFine, 0, 0));
   PetscCall(MatViewFromOptions(*mass, NULL, "-mass_sq_mat_view"));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -3313,7 +3434,7 @@ static PetscErrorCode DMSetFromOptions_Swarm(DM dm, PetscOptionItems PetscOption
   PetscCall(PetscOptionsEnum("-dm_swarm_remap_type", "Remap algorithm", "DMSwarmSetRemapType", DMSwarmRemapTypeNames, (PetscEnum)swarm->remap_type, (PetscEnum *)&swarm->remap_type, NULL));
   PetscCall(PetscOptionsEnum("-dm_swarm_backend", "Storage backend for particle data", "DMSwarmSetBackend", DMSwarmBackendTypeNames, (PetscEnum)backend, (PetscEnum *)&backend, &flg));
   if (flg) PetscCall(DMSwarmSetBackend(dm, backend));
-  PetscCall(PetscOptionsBool("-dm_swarm_mass_coo", "Assemble the particle mass matrix in COO format", "DMCreateMassMatrix", swarm->mass_coo, &swarm->mass_coo, NULL));
+  PetscCall(PetscOptionsBool("-dm_swarm_mass_coo", "Assemble the particle mass matrix in COO format, and its square when its values are computed on the device", "DMCreateMassMatrix", swarm->mass_coo, &swarm->mass_coo, NULL));
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }

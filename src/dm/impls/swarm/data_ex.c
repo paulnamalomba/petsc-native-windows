@@ -102,9 +102,9 @@ PetscErrorCode DMSwarmDataExCreate(MPI_Comm comm, const PetscInt count, DMSwarmD
   d->n_neighbour_procs = -1;
   d->neighbour_procs   = NULL;
 
-  d->messages_to_be_sent      = NULL;
-  d->message_offsets          = NULL;
-  d->messages_to_be_recvieved = NULL;
+  d->messages_to_be_sent     = NULL;
+  d->message_offsets         = NULL;
+  d->messages_to_be_received = NULL;
 
   d->unit_message_size   = (size_t)-1;
   d->send_message        = NULL;
@@ -158,7 +158,7 @@ PetscErrorCode DMSwarmDataExView(DMSwarmDataEx d)
     PetscCall(PetscSynchronizedPrintf(PETSC_COMM_WORLD, "    [%d] atomic size: %ld \n", d->rank, (long int)d->unit_message_size));
     for (p = 0; p < d->n_neighbour_procs; p++) PetscCall(PetscSynchronizedPrintf(PETSC_COMM_WORLD, "    [%d] >>>>> ( %" PetscInt_FMT " units :: tag = %d) >>>>> [%d] \n", d->rank, d->messages_to_be_sent[p], d->send_tags[p], d->neighbour_procs[p]));
     for (p = 0; p < d->n_neighbour_procs; p++) {
-      PetscCall(PetscSynchronizedPrintf(PETSC_COMM_WORLD, "    [%d] <<<<< ( %" PetscInt_FMT " units :: tag = %d) <<<<< [%d] \n", d->rank, d->messages_to_be_recvieved[p], d->recv_tags[p], d->neighbour_procs[p]));
+      PetscCall(PetscSynchronizedPrintf(PETSC_COMM_WORLD, "    [%d] <<<<< ( %" PetscInt_FMT " units :: tag = %d) <<<<< [%d] \n", d->rank, d->messages_to_be_received[p], d->recv_tags[p], d->neighbour_procs[p]));
     }
     PetscCall(PetscSynchronizedFlush(PETSC_COMM_WORLD, stdout));
   }
@@ -212,7 +212,7 @@ PetscErrorCode DMSwarmDataExDestroy(DMSwarmDataEx d)
   PetscCall(PetscFree(d->neighbour_procs));
   PetscCall(PetscFree(d->messages_to_be_sent));
   PetscCall(PetscFree(d->message_offsets));
-  PetscCall(PetscFree(d->messages_to_be_recvieved));
+  PetscCall(PetscFree(d->messages_to_be_received));
   PetscCall(DMSwarmDataExFreeMessages_Private(d));
   PetscCall(PetscFree(d->pack_cnt));
   PetscCall(PetscFree(d->send_tags));
@@ -233,7 +233,7 @@ PetscErrorCode DMSwarmDataExTopologyInitialize(DMSwarmDataEx d)
   PetscCall(PetscFree(d->neighbour_procs));
   PetscCall(PetscFree(d->messages_to_be_sent));
   PetscCall(PetscFree(d->message_offsets));
-  PetscCall(PetscFree(d->messages_to_be_recvieved));
+  PetscCall(PetscFree(d->messages_to_be_received));
   PetscCall(PetscFree(d->pack_cnt));
   PetscCall(PetscFree(d->send_tags));
   PetscCall(PetscFree(d->recv_tags));
@@ -391,7 +391,7 @@ PetscErrorCode DMSwarmDataExTopologyFinalize(DMSwarmDataEx d)
   /* allocates memory */
   if (!d->messages_to_be_sent) PetscCall(PetscMalloc1(d->n_neighbour_procs + 1, &d->messages_to_be_sent));
   if (!d->message_offsets) PetscCall(PetscMalloc1(d->n_neighbour_procs + 1, &d->message_offsets));
-  if (!d->messages_to_be_recvieved) PetscCall(PetscMalloc1(d->n_neighbour_procs + 1, &d->messages_to_be_recvieved));
+  if (!d->messages_to_be_received) PetscCall(PetscMalloc1(d->n_neighbour_procs + 1, &d->messages_to_be_received));
   if (!d->pack_cnt) PetscCall(PetscMalloc(sizeof(PetscInt) * d->n_neighbour_procs, &d->pack_cnt));
   if (!d->_stats) PetscCall(PetscMalloc(sizeof(MPI_Status) * 2 * d->n_neighbour_procs, &d->_stats));
   if (!d->_requests) PetscCall(PetscMalloc(sizeof(MPI_Request) * 2 * d->n_neighbour_procs, &d->_requests));
@@ -487,7 +487,7 @@ static PetscErrorCode _DMSwarmDataExInitializeTmpStorage(DMSwarmDataEx de)
   np = de->n_neighbour_procs;
   for (i = 0; i < np; ++i) {
     /*  de->messages_to_be_sent[i] = -1; */
-    de->messages_to_be_recvieved[i] = -1;
+    de->messages_to_be_received[i] = -1;
   }
   PetscCall(DMSwarmDataExFreeMessages_Private(de));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -623,14 +623,14 @@ PetscErrorCode DMSwarmDataExPackFinalize(DMSwarmDataEx de)
     PetscCheck(de->pack_cnt[i] == de->messages_to_be_sent[i], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Not all messages for neighbour[%d] have been packed. Expected %" PetscInt_FMT " : Inserted %" PetscInt_FMT, de->neighbour_procs[i], de->messages_to_be_sent[i], de->pack_cnt[i]);
   }
   /* init */
-  for (i = 0; i < np; ++i) de->messages_to_be_recvieved[i] = -1;
+  for (i = 0; i < np; ++i) de->messages_to_be_received[i] = -1;
   /* figure out the recv counts here */
   for (i = 0; i < np; ++i) PetscCallMPI(MPIU_Isend(&de->messages_to_be_sent[i], 1, MPIU_INT, de->neighbour_procs[i], de->send_tags[i], de->comm, &de->_requests[i]));
-  for (i = 0; i < np; ++i) PetscCallMPI(MPIU_Irecv(&de->messages_to_be_recvieved[i], 1, MPIU_INT, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
+  for (i = 0; i < np; ++i) PetscCallMPI(MPIU_Irecv(&de->messages_to_be_received[i], 1, MPIU_INT, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
   PetscCallMPI(MPI_Waitall(2 * np, de->_requests, de->_stats));
-  /* create space for the data to be recvieved; mirrored on the device in device mode */
+  /* create space for the data to be received; mirrored on the device in device mode */
   total = 0;
-  for (i = 0; i < np; ++i) total = total + de->messages_to_be_recvieved[i];
+  for (i = 0; i < np; ++i) total = total + de->messages_to_be_received[i];
   if (de->message_on_device) {
     PetscDeviceContext dctx;
     char              *host_buf = NULL, *dev_buf = NULL;
@@ -711,17 +711,17 @@ PetscErrorCode DMSwarmDataExEnd(DMSwarmDataEx de)
   np = de->n_neighbour_procs;
   PetscCall(PetscMalloc1(np + 1, &message_recv_offsets));
   message_recv_offsets[0] = 0;
-  total                   = de->messages_to_be_recvieved[0];
+  total                   = de->messages_to_be_received[0];
   for (i = 1; i < np; ++i) {
     message_recv_offsets[i] = total;
-    total                   = total + de->messages_to_be_recvieved[i];
+    total                   = total + de->messages_to_be_received[i];
   }
   /* == NON BLOCKING == */
   recv_base = (char *)de->recv_message;
   if (de->message_on_device && de->gpu_aware_cycle) recv_base = (char *)de->recv_message_d;
   for (i = 0; i < np; ++i) {
     dest = recv_base + de->unit_message_size * message_recv_offsets[i];
-    PetscCallMPI(MPIU_Irecv(dest, de->messages_to_be_recvieved[i] * de->unit_message_size, MPI_CHAR, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
+    PetscCallMPI(MPIU_Irecv(dest, de->messages_to_be_received[i] * de->unit_message_size, MPI_CHAR, de->neighbour_procs[i], de->recv_tags[i], de->comm, &de->_requests[np + i]));
   }
   PetscCallMPI(MPI_Waitall(2 * np, de->_requests, de->_stats));
   if (de->message_on_device && !de->gpu_aware_cycle && de->recv_message_length > 0) {

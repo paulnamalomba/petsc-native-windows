@@ -16,10 +16,10 @@ struct _p_DMSwarmDataEx {
   MPI_Comm     comm;
   PetscMPIInt  rank;
   PetscMPIInt  n_neighbour_procs;
-  PetscMPIInt *neighbour_procs;          /* [n_neighbour_procs] */
-  PetscInt    *messages_to_be_sent;      /* [n_neighbour_procs] */
-  PetscInt    *message_offsets;          /* [n_neighbour_procs] */
-  PetscInt    *messages_to_be_recvieved; /* [n_neighbour_procs] */
+  PetscMPIInt *neighbour_procs;         /* [n_neighbour_procs] */
+  PetscInt    *messages_to_be_sent;     /* [n_neighbour_procs] */
+  PetscInt    *message_offsets;         /* [n_neighbour_procs] */
+  PetscInt    *messages_to_be_received; /* [n_neighbour_procs] */
   size_t       unit_message_size;
   void        *send_message;
   PetscInt     send_message_length;

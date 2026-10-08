@@ -54,8 +54,10 @@ int main(int argc, char **argv)
   PetscCall(DMSwarmSetCellDM(sw, dm));
   PetscCall(DMSwarmRegisterPetscDatatypeField(sw, "w_q", Nc, PETSC_SCALAR));
   PetscCall(DMSwarmFinalizeFieldRegister(sw));
-  PetscCall(DMSwarmSetLocalSizes(sw, Np, zero));
+  /* Options must be consumed before DMSwarmSetLocalSizes() triggers DMSetUp(), so that
+     -dm_swarm_backend can still be honored (it is a hard error after setup) */
   PetscCall(DMSetFromOptions(sw));
+  PetscCall(DMSwarmSetLocalSizes(sw, Np, zero));
   PetscCall(DMSwarmGetField(sw, "w_q", &bs, &dtype, (void **)&wq));
   PetscCall(DMSwarmGetField(sw, "DMSwarmPIC_coor", &bs, &dtype, (void **)&coords));
   for (PetscInt p = 0; p < Np; ++p) {
@@ -116,5 +118,23 @@ int main(int argc, char **argv)
           -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero \
           -dm_view -swarm_view -ftop_ksp_rtol 1.e-14
     filter: grep -v DM_ | grep -v atomic
+
+  # bjacobi with HIP vectors and matrices; the particles on the arc leave cells empty next to cells with many particles,
+  # and under the hip backend the bjacobi preconditioning matrix values are computed on the device, which must reproduce
+  # the host expected output
+  testset:
+    requires: double triangle hip
+    output_file: output/ex1_bjacobi.out
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 4,2 -dm_plex_box_lower -2.0,0.0 -dm_plex_box_upper 2.0,2.0 \
+          -np 50 -petscspace_degree 2 -dm_plex_hash_location \
+          -ptof_ksp_type cg -ptof_pc_type ilu -ptof_ksp_rtol 1.e-14 \
+          -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero \
+          -dm_view -swarm_view -ftop_ksp_rtol 1.e-14 -dm_vec_type hip -dm_mat_type aijhipsparse
+    filter: grep -v DM_ | grep -v atomic
+    test:
+      suffix: bjacobi_dm_mat
+    test:
+      suffix: bjacobi_dm_mat_backend_hip
+      args: -dm_swarm_backend hip
 
 TEST*/

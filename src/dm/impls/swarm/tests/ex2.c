@@ -972,6 +972,24 @@ int main(int argc, char *argv[])
       -particlesPerCell 200 \
       -ptof_pc_type lu \
       -ftop_ksp_rtol 1e-17 -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero
+
+  # proj_quad_lsqr_prec_scale with HIP vectors and matrices; under the hip backend the values of the bjacobi preconditioning
+  # matrix (the per-cell blocks of M_p M_p^T, 7 x 7 device tiles per cell) are computed on the device, which must reproduce
+  # the host expected output
+  testset:
+    requires: hip !complex
+    output_file: output/ex2_proj_quad_lsqr_prec_scale.out
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 4,4 \
+      -petscspace_degree 2 -petscfe_default_quadrature_order 3 \
+      -particlesPerCell 200 \
+      -ptof_pc_type lu \
+      -ftop_ksp_rtol 1e-17 -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero \
+      -dm_vec_type hip -dm_mat_type aijhipsparse
+    test:
+      suffix: proj_quad_lsqr_prec_scale_dm_mat
+    test:
+      suffix: proj_quad_lsqr_prec_scale_dm_mat_backend_hip
+      args: -dm_swarm_backend hip
   test:
     suffix: proj_shape_linear_tri_2d
     requires: ctetgen triangle

@@ -20,6 +20,7 @@ PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerSendCount;
 PETSC_EXTERN PetscLogEvent DMSWARM_DataExchangerPack;
 PETSC_EXTERN PetscLogEvent DMSWARM_CopyToGPU;
 PETSC_EXTERN PetscLogEvent DMSWARM_CopyFromGPU;
+PETSC_EXTERN PetscLogEvent DMSWARM_MassMatrixSquare;
 
 typedef struct _DMSwarmCellDMOps *DMSwarmCellDMOps;
 struct _DMSwarmCellDMOps {
@@ -75,7 +76,7 @@ typedef struct {
   DMSwarmBackendType backend;
 
   PetscBool migrate_error_on_missing_point;
-  PetscBool mass_coo; /* assemble the particle mass matrix with MatSetValuesCOO() instead of MatSetValues() */
+  PetscBool mass_coo; /* assemble the particle mass matrix, and its square when its values are computed on the device, with MatSetValuesCOO() instead of MatSetValues() */
 
   PetscBool collect_view_active;
   PetscInt  collect_view_reset_nlocal;

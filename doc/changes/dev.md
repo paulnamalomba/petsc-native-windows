@@ -19,6 +19,7 @@
 
 - Add `providesDocs` and `docsDirs` package attributes so that an external package's sources can be cloned and scanned to generate PETSc manual pages when the documentation is built
 - Add interface to LIBXSMM
+- Add `--with-dmswarm-pid-size=(int|long|long long)` to select the C type of the `DMSWARM` particle identifier field `DMSwarmField_pid`; the default `long long` preserves the previous 8-byte field
 
 ## Sys
 
@@ -150,6 +151,7 @@
 - Add `DMSwarmSortDestroy()` and `DMSwarmSortView()`
 - Allow `DMSwarmCellDMSetSort()` to take in `NULL` and clear the sort
 - Add `DMSwarmPreallocateMassMatrix()` and `DMSwarmFillMassMatrix()`
+- Add `DMSwarmPID`, `DMSwarmPID_FMT`, `MPIU_DMSWARM_PID`, `DMSWARM_PID_DATATYPE`, `DMSWARM_PID_MIN`, and `DMSWARM_PID_MAX` for the configure-selected type of the `DMSwarmField_pid` field
 
 ## DMPlex
 

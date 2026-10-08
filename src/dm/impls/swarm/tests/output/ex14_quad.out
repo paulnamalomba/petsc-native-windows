@@ -1,0 +1,9 @@
+576 particles after 20 steps of dt 0.03
+DMSwarmPIC_coor:
+  component 0: min 0.00281754 max 0.99718246 mean 0.50000000
+  component 1: min 0.00281754 max 0.99718246 mean 0.50000000
+  checksum 2585872696844
+velocity:
+  component 0: min -0.97182458 max 0.97182458 mean 0.00000000
+  component 1: min -0.97182458 max 0.97182458 mean 0.00000000
+  checksum 51188315472
