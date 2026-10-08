@@ -12,8 +12,9 @@ import abc
 import difflib
 import pathlib
 import argparse
+import subprocess
 
-from typing          import TypeVar, Union
+from typing          import TypeVar, Union, Iterator
 from collections.abc import Iterable, Sequence
 
 __version__     = (1, 0, 0)
@@ -359,10 +360,6 @@ def replace_in_file(path: pathlib.Path, opts: argparse.Namespace, ReplacerCls: t
   Does nothing if the file isn't a header
   """
   error_diffs: list[str] = []
-
-  if not path.name.endswith(opts.suffixes):
-    return error_diffs
-
   if opts.verbose:
     print('Reading', path)
 
@@ -415,25 +412,44 @@ def main(args: argparse.Namespace) -> int:
   else:
     raise ValueError(f'Unknown replacer kind: {args.kind}')
 
-  args.suffixes     = tuple(args.suffixes)
-  exclude_dirs      = set(args.exclude_dirs)
-  exclude_files     = set(args.exclude_files)
-  errors: list[str] = []
-  for path in args.paths:
-    path = path.resolve(strict=True)
-    if exclude_dirs.intersection(path.parts) or path.name in exclude_files:
-      # the path itself is in an excluded path
-      continue
+  allowed_suffixes = tuple(args.suffixes)
+  exclude_dirs     = set(args.exclude_dirs)
+  exclude_files    = set(args.exclude_files)
+  tracked          = set(
+    pathlib.Path(f).resolve()
+    for f in subprocess.run(
+        ['git', 'ls-files', '--full-name', '--', ':/*'],
+        check=True, capture_output=True, universal_newlines=True,
+    ).stdout.splitlines()
+  )
 
+  def skip_path(path: pathlib.Path) -> bool:
     if path.is_file():
-      errors.extend(replace_in_file(path, args, replacer_cls))
+      path_name = path.name
+      return \
+        path_name in exclude_files or \
+        path not in tracked or \
+        not path_name.endswith(allowed_suffixes)
     else:
-      for dirname, dirs, files in os.walk(path):
-        dirs[:] = [d for d in dirs if d not in exclude_dirs]
-        dirpath = pathlib.Path(dirname)
-        for f in files:
-          if f not in exclude_files:
-            errors.extend(replace_in_file(dirpath / f, args, replacer_cls))
+      # is dir
+      return exclude_dirs.intersection(path.parts)
+
+  def yield_paths() -> Iterator[pathlib.Path]:
+    for path in args.paths:
+      path = path.resolve(strict=True)
+      if path.is_file():
+        yield path
+      else:
+        for dirname, dirs, files in os.walk(path):
+          dirs[:] = [d for d in dirs if d not in exclude_dirs]
+          dirpath = pathlib.Path(dirname)
+          for f in files:
+            yield dirpath / f
+
+  errors: list[str] = []
+  for path in yield_paths():
+    if not skip_path(path):
+      errors.extend(replace_in_file(path, args, replacer_cls))
 
   if errors:
     print(*errors, sep='\n')
