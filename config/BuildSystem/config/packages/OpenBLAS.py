@@ -20,12 +20,6 @@ class Configure(config.package.Package):
     self.liblist                = [['libopenblas.a']]
     self.precisions             = ['single','double']
     self.buildLanguages         = ['C','FC']
-    self.usespthreads           = 0
-
-  def __str__(self):
-    output  = config.package.Package.__str__(self)
-    if self.usespthreads: output += '  using pthreads; use export OPENBLAS_NUM_THREADS=<p> to control the number of threads\n'
-    return output
 
   def setupHelp(self, help):
     config.package.Package.setupHelp(self,help)
@@ -96,7 +90,7 @@ class Configure(config.package.Package):
       self.usesopenmp = 'no'
       if 'download-openblas-use-pthreads' in self.argDB and self.argDB['download-openblas-use-pthreads']:
         if not self.pthread.found: raise RuntimeError("--download-openblas-use-pthreads option selected but pthreads is not available")
-        self.usespthreads = 1
+        self.usespthreads = 'yes'
         cmdline += " USE_THREAD=1 "
         # use the environmental variable OPENBLAS_NUM_THREADS to control the number of threads used
       else:
