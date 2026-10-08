@@ -1,7 +1,7 @@
 #include <petsc/private/garbagecollector.h>
 
 /* Fetches garbage hashmap from communicator */
-static PetscErrorCode GarbageGetHMap_Private(MPI_Comm comm, PetscGarbage *garbage)
+PetscErrorCode GarbageGetHMap_Private(MPI_Comm comm, PetscGarbage *garbage)
 {
   PetscMPIInt  iflg;
   PetscHMapObj garbage_map;

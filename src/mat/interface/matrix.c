@@ -7,6 +7,7 @@
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
 #include <petsc/private/isimpl.h>
 #include <petsc/private/vecimpl.h>
+#include <petsc/private/garbagecollector.h>
 
 /* Logging support */
 PetscClassId MAT_CLASSID;
@@ -1547,6 +1548,14 @@ PetscErrorCode MatDestroy(Mat *A)
     *A = NULL;
     PetscFunctionReturn(PETSC_SUCCESS);
   }
+
+  // debugging!
+  PetscGarbage garbage;
+  PetscBool has;
+  PetscObject obj = (PetscObject)*A;
+  PetscCall(GarbageGetHMap_Private(PetscObjectComm(obj), &garbage));
+  PetscCall(PetscHMapObjHas(garbage.map, obj->cidx, &has));
+  PetscCheck(!has, PetscObjectComm(obj), 666, "matrix already registered to die!");
 
   /* if memory was published with SAWs then destroy it */
   PetscCall(PetscObjectSAWsViewOff((PetscObject)*A));

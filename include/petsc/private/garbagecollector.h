@@ -13,5 +13,6 @@ PETSC_EXTERN PetscErrorCode PetscObjectDelayedDestroy(PetscObject *);
 PETSC_EXTERN void           PetscGarbageKeySortedIntersect(void *, void *, PetscMPIInt *, MPI_Datatype *);
 PETSC_EXTERN PetscErrorCode PetscGarbageCleanup(MPI_Comm);
 PETSC_EXTERN PetscErrorCode PetscGarbageView(MPI_Comm, PetscViewer);
+PetscErrorCode GarbageGetHMap_Private(MPI_Comm comm, PetscGarbage *garbage);
 
 PETSC_EXTERN PetscErrorCode GarbageKeyAllReduceIntersect_Private(MPI_Comm, PetscInt64 *, PetscInt *);
