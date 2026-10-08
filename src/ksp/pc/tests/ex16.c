@@ -391,12 +391,12 @@ int main(int argc, char **argv)
       if (pass == 2) PetscCall(PCReset(pc));
       PetscCall(CreateDeflation(empty_rank0, &is, &U, &D));
       PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-      PetscCall(PCHPDDMSetScaling(pc, D));
+      PetscCall(PCHPDDMSetScaling(pc, is, D));
       if (pass == 0) {
-        PetscCall(PCHPDDMSetScaling(pc, NULL));
-        PetscCall(PCHPDDMSetScaling(pc, D));
+        PetscCall(PCHPDDMSetScaling(pc, NULL, NULL));
+        PetscCall(PCHPDDMSetScaling(pc, NULL, D));
         PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-        PetscCall(PCHPDDMSetScaling(pc, D));
+        PetscCall(PCHPDDMSetScaling(pc, is, D));
       }
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
       PetscCall(ISDestroy(&is));

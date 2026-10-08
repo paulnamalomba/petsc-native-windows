@@ -2843,13 +2843,15 @@ cdef class PC(Object):
         """
         CHKERR(PCHPDDMSetDeflationMat(self.pc, uis.iset, U.mat))
 
-    def setHPDDMScaling(self, Vec scaling=None) -> None:
+    def setHPDDMScaling(self, IS uis=None, Vec scaling=None) -> None:
         """Set a diagonal scaling for the deflation space and Schwarz correction.
 
         Logically collective.
 
         Parameters
         ----------
+        uis
+            The `IS` of the local scaling, currently unused; may be `None`.
         scaling
             The single-process scaling vector, in the ordering of the deflation
             `IS`, or `None` to restore the default scaling before setup.
@@ -2861,9 +2863,11 @@ cdef class PC(Object):
         setHPDDMDeflationMat, petsc.PCHPDDMSetScaling
 
         """
+        cdef PetscIS ciset = NULL
         cdef PetscVec scaling_vec = NULL
+        if uis is not None: ciset = uis.iset
         if scaling is not None: scaling_vec = scaling.vec
-        CHKERR(PCHPDDMSetScaling(self.pc, scaling_vec))
+        CHKERR(PCHPDDMSetScaling(self.pc, ciset, scaling_vec))
 
     # --- SPAI ---
 

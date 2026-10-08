@@ -3293,6 +3293,7 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
 
   Input Parameters:
 + pc      - preconditioner context
+. is      - index set of the local scaling, currently unused (may be `NULL`)
 - scaling - local diagonal scaling, or `NULL` to restore the default scaling before setup
 
   Level: advanced
@@ -3328,16 +3329,16 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
 
 .seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetDeflationMat()`, `PCASMWeightedSetScaling()`, `PCHPDDMSetCoarseCorrectionType()`
 @*/
-PetscErrorCode PCHPDDMSetScaling(PC pc, Vec scaling)
+PetscErrorCode PCHPDDMSetScaling(PC pc, IS is, Vec scaling)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
-  if (scaling) PetscValidHeaderSpecific(scaling, VEC_CLASSID, 2);
-  PetscTryMethod(pc, "PCHPDDMSetScaling_C", (PC, Vec), (pc, scaling));
+  if (scaling) PetscValidHeaderSpecific(scaling, VEC_CLASSID, 3);
+  PetscTryMethod(pc, "PCHPDDMSetScaling_C", (PC, IS, Vec), (pc, is, scaling));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PCHPDDMSetScaling_HPDDM(PC pc, Vec scaling)
+static PetscErrorCode PCHPDDMSetScaling_HPDDM(PC pc, PETSC_UNUSED IS is, Vec scaling)
 {
   PC_HPDDM *data = (PC_HPDDM *)pc->data;
 
