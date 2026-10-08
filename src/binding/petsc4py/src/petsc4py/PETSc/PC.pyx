@@ -2836,8 +2836,8 @@ cdef class PC(Object):
             `setHPDDMScaling`, or `None` to use the stored one.
         U
             The deflation sequential matrix of type `Mat.Type.DENSE`, or
-            `None` to remove the deflation space. ``uis`` is then ignored and
-            the stored `IS` is discarded unless a scaling still uses it.
+            `None` to remove the deflation space. ``uis`` must then be `None`,
+            and the stored `IS` is discarded unless a scaling still uses it.
 
         See Also
         --------
@@ -2862,10 +2862,10 @@ cdef class PC(Object):
             or `None` to use the stored one.
         scaling
             The single-process scaling vector, in the ordering of the `IS`, or
-            `None` to restore the default scaling before setup. ``uis`` is then
-            ignored and the stored `IS` is discarded unless a deflation matrix
-            still uses it. The vector must contain finite, real, nonnegative
-            entries; do not change them after this call.
+            `None` to restore the default scaling before setup. ``uis`` must
+            then be `None`, and the stored `IS` is discarded unless a deflation
+            matrix still uses it. The vector must contain finite, real,
+            nonnegative entries; do not change them after this call.
 
         See Also
         --------

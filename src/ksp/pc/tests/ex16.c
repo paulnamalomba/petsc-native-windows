@@ -411,8 +411,8 @@ int main(int argc, char **argv)
         PetscCall(PCHPDDMSetScaling(pc, NULL, NULL));
         PetscCall(CheckReferences(is, PETSC_TRUE)); // still used by the deflation space
         PetscCall(PCHPDDMSetScaling(pc, NULL, D));
-        PetscCall(PCHPDDMSetDeflationMat(pc, is, NULL)); // the IS argument is ignored
-        PetscCall(CheckReferences(is, PETSC_TRUE));      // still used by the scaling
+        PetscCall(PCHPDDMSetDeflationMat(pc, NULL, NULL));
+        PetscCall(CheckReferences(is, PETSC_TRUE)); // still used by the scaling
         PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
         PetscCall(PCHPDDMSetScaling(pc, NULL, NULL));
         PetscCall(PCHPDDMSetDeflationMat(pc, NULL, NULL));

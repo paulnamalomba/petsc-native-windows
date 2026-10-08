@@ -3268,8 +3268,8 @@ static PetscErrorCode PCHPDDMGetSTShareSubKSP_HPDDM(PC pc, PetscBool *share)
   The `is` argument is shared with `PCHPDDMSetScaling()`. Both routines can be called in any order, or
   only one of them. If `is` is not `NULL`, it replaces the stored one, and a stored scaling is kept and
   must have the same size. If `is` is `NULL`, the stored one, which must exist, is used. When `U` is
-  `NULL`, `is` is ignored and the stored one is discarded unless a scaling still uses it; remove the
-  deflation space before `PCSetUp()`, or call `PCReset()`, which discards the deflation space, the
+  `NULL`, `is` must be `NULL` too, and the stored one is discarded unless a scaling still uses it; remove
+  the deflation space before `PCSetUp()`, or call `PCReset()`, which discards the deflation space, the
   scaling, and their index set.
 
 .seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetScaling()`, `PCDeflationSetSpace()`, `PCMGSetRestriction()`
@@ -3306,6 +3306,7 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
     PetscCall(VecDestroy(&data->scaling));
     data->scaling = scaling;
   } else {
+    PetscCheck(!is, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Pass a NULL IS to remove the deflation space");
     PetscCheck(!pc->setupcalled, PetscObjectComm((PetscObject)pc), PETSC_ERR_ORDER, "Remove the deflation space before PCSetUp() or after PCReset()");
     if (data->deflation) {
       PetscCall(MatDestroy(&data->aux));
@@ -3332,8 +3333,8 @@ static PetscErrorCode PCHPDDMSetDeflationMat_HPDDM(PC pc, IS is, Mat U)
   The `is` argument is shared with `PCHPDDMSetDeflationMat()`. Both routines can be called in any
   order before `PCSetUp()`, or only one of them. If `is` is not `NULL`, it replaces the stored one, and
   a stored deflation matrix is kept and must have as many rows as `is`. If `is` is `NULL`, the stored
-  one, which must exist, is used. When `scaling` is `NULL`, `is` is ignored and the stored one is
-  discarded unless a deflation matrix still uses it.
+  one, which must exist, is used. When `scaling` is `NULL`, `is` must be `NULL` too, and the stored one
+  is discarded unless a deflation matrix still uses it.
 
   The single-process vector follows the ordering of `is`, like the rows of the deflation matrix, and
   must contain finite, real, nonnegative values. PETSc retains a reference; do not change the entries
@@ -3405,7 +3406,10 @@ static PetscErrorCode PCHPDDMSetScaling_HPDDM(PC pc, IS is, Vec scaling)
     PetscCall(PetscObjectReference((PetscObject)is));
     PetscCall(ISDestroy(&data->is));
     data->is = is;
-  } else if (!data->aux) PetscCall(ISDestroy(&data->is));
+  } else {
+    PetscCheck(!is, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Pass a NULL IS to remove the scaling");
+    if (!data->aux) PetscCall(ISDestroy(&data->is));
+  }
   PetscCall(VecDestroy(&data->scaling));
   data->scaling = scaling;
   PetscFunctionReturn(PETSC_SUCCESS);
