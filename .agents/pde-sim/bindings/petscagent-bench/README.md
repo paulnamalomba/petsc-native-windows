@@ -261,10 +261,11 @@ rename them.
   repo root (it adds the cwd to `sys.path`). It reports token/cost/effort to the
   bench in a versioned data Part (`petscagent.telemetry.v1`) via `_build_telemetry()`.
 - **Cost/time.** A full pde-sim pipeline (multi-agent, MMS studies, retries) uses
-  far more tokens/time per problem than a single-shot purple agent. The binding runs
-  the CLI with `--output-format json`; the reported token counts are the **top-level
-  agent's** (subagent tokens excluded), so the whole-run `cost_usd` /
-  `total_cost_usd` is the trustworthy total-cost figure. It is also written to the
-  `PDESIM_USAGE_DIR` sidecar and aggregated into the report's `Gen $` column.
+  far more tokens/time per problem than a single-shot purple agent. Both the
+  reported token counts and `cost_usd` cover the **whole run, subagents included**:
+  they are read from the CLI's `modelUsage` breakdown, whose per-model costs sum to
+  `total_cost_usd`. For a config-3 study that is several times the top-level
+  agent's own usage — one Darcy run spent 7.2M input tokens against the top-level
+  agent's 0.5M.
 - **`bypassPermissions` runs arbitrary Bash** — only run against a sandboxed
   PETSc build.

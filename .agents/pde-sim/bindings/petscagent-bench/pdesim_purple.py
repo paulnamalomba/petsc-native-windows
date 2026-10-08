@@ -340,9 +340,12 @@ def _scan_events(events: List[Any]) -> Dict[str, Any]:
 def _partial_usage(events: List[Any]) -> Optional[Dict[str, Any]]:
     """Usage for a run that was killed before emitting its final ``result`` event.
 
-    A timed-out run never reports ``total_cost_usd``, so that stays None and the
-    record is flagged ``partial``; the token sums still price the run after the
-    fact, which a bare timeout would otherwise leave unrecorded entirely.
+    A timed-out run never reports ``total_cost_usd`` or the ``modelUsage``
+    breakdown, so cost stays None and the record is flagged ``partial``. The token
+    sums are then the per-turn figures from the transcript, which only approximate
+    the CLI's own accounting — on a completed run they have been seen to overstate
+    input and understate output — so treat them as an order of magnitude for a run
+    that would otherwise go unrecorded, not as a billable total.
     """
     if not isinstance(events, list) or not events:
         return None
@@ -412,19 +415,32 @@ def _extract_result(events: List[Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
     sysinit = next((e for e in events if isinstance(e, dict) and e.get("type") == "system"), {})
     model_name = sysinit.get("model") or next(iter(result.get("modelUsage") or {}), None)
 
-    u = result.get("usage") or {}
-    inp = int(u.get("input_tokens", 0) or 0)
-    cc = int(u.get("cache_creation_input_tokens", 0) or 0)
-    cr = int(u.get("cache_read_input_tokens", 0) or 0)
-    out = int(u.get("output_tokens", 0) or 0)
+    # Token totals come from modelUsage, the CLI's per-model breakdown, because it
+    # counts the subagents a config-3 run dispatches while result.usage counts only
+    # the top-level agent — on one Darcy study that was 7.2M input tokens against
+    # 0.5M. The two agree exactly when no subagent ran, and the modelUsage costs sum
+    # to total_cost_usd, so this is the accounting the reported cost comes from.
+    # result.usage remains the fallback for a CLI that reports no breakdown.
+    mu = [v for v in (result.get("modelUsage") or {}).values() if isinstance(v, dict)]
+    if mu:
+        inp = sum(int(v.get("inputTokens", 0) or 0) for v in mu)
+        cc = sum(int(v.get("cacheCreationInputTokens", 0) or 0) for v in mu)
+        cr = sum(int(v.get("cacheReadInputTokens", 0) or 0) for v in mu)
+        out = sum(int(v.get("outputTokens", 0) or 0) for v in mu)
+    else:
+        u = result.get("usage") or {}
+        inp = int(u.get("input_tokens", 0) or 0)
+        cc = int(u.get("cache_creation_input_tokens", 0) or 0)
+        cr = int(u.get("cache_read_input_tokens", 0) or 0)
+        out = int(u.get("output_tokens", 0) or 0)
     prompt_tokens = inp + cc + cr  # all input, including cached, for Green's "prompt"
     stats = result.get("subagent_stats") or {}
 
     scan = _scan_events(events)
 
     usage_info = {
-        # Token counts are the TOP-LEVEL agent only; subagents (config 3) are not
-        # summed into usage, so total_cost_usd is the trustworthy total-run figure.
+        # Token counts and total_cost_usd both cover the whole run, subagents
+        # included, so the two are on the same footing (see the modelUsage note).
         "prompt_tokens": prompt_tokens,
         "completion_tokens": out,
         "total_tokens": prompt_tokens + out,
@@ -1023,8 +1039,8 @@ def _build_telemetry(usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
     """Map captured usage onto the bench's petscagent.telemetry.v1 data-Part contract.
 
     The bench aggregates these fields (all optional) from a data Part tagged with
-    PURPLE_TELEMETRY_SCHEMA; see src/util/telemetry.py. Token counts are the
-    top-level agent's (subagents excluded), while cost_usd is the whole-run figure.
+    PURPLE_TELEMETRY_SCHEMA; see src/util/telemetry.py. Token counts and cost_usd
+    both cover the whole run, including any subagents the pipeline dispatched.
     Also self-reports this agent's model name for output naming.
     """
     if not usage:
