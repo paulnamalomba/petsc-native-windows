@@ -1484,3 +1484,85 @@ either rep, while 4-8 MB are steady within 2%. The 8-rank ring is steady on both
 pin costs it 1-2% (4 MB 141.7 vs 138.6-140.4 us). So the UCX pin stays (it is what keeps host
 MPI collectives alive next to NCCL, 29.7), and 2+2 host-staged MPI above 8 MB is not a usable
 baseline on this fabric (the 28.x "MPI 4 MB drift" was the small end of the same thing).
+
+## 30. The ladder rerun on a nonblocking PETSc stream (2026-09-14, job 2912)
+
+Every eager arm of the sections 17-28 ladder (MPI, PetscSF-NVSHMEM, hand-rolled NCCL) was
+launched without `-root_device_context_stream_type nonblocking`, i.e. on PETSc's default
+legacy NULL stream. Section 29.3 later measured that stream costing NCCL ~45 us per
+iteration of implicit synchronization, and 29.4 recorded a nonblocking-stream SF ladder
+(148 / 109 / 93), but neither number ever propagated back to the ladder table (24, 28.8)
+or to the interview prep. Rerun today on `x2002c0s1b0n0` + `x2003c0s9b0n0`, same binaries,
+same launch lines as 2026-08-15 (1 node) and 2026-09-01 (2+2, RoCE v1 pin, `mlx5_0`),
+64 KB, G=8, P=4, 300 iterations, best of 3. Raw log:
+`nvshmem-tools/results-20260914-nonblocking-stream.txt`.
+
+| arm | ladder value (24 / 28.8) | today, NULL stream | today, nonblocking stream |
+| --- | ---: | ---: | ---: |
+| PetscSF over GPU-aware MPI, 1 node | 162 | 165 | **149** |
+| PetscSF over NVSHMEM host API (fused put+signal), 1 node | 206 | 180 | **106** |
+| NCCL eager (`acgnbench-nccl`), 1 node | 107 | 106 | **59** |
+| NCCL graph replay (k=10), 1 node | 32 | n/a (program forces nonblocking) | 32 |
+| NVSHMEM device kernel, 1 node | 41 | n/a (no PETSc stream) | 41 (unchanged) |
+| compute-only floor (`-skip_comm`), 1 node | 39 | 39 | 39 |
+| NCCL eager, 2+2 | 177 | 173 | **118** |
+| NCCL graph replay, 2+2 | 122 | n/a | 124 |
+| NVSHMEM device kernel (push), 2+2 | 104 (28.12) | n/a | 104 (unchanged) |
+| PetscSF over GPU-aware MPI, host-staged (UCX 1.17), 2+2 | 206 | 206 | **192** |
+| PetscSF over GPU-aware MPI, GPUDirect (UCX 1.19 preload), 2+2 | 192 | 189 | **176** |
+| PetscSF over NVSHMEM host API (fused put+signal, IBRC), 2+2 | 280 | 244 | **179** |
+
+Four findings:
+
+1. **The NULL stream, not the launch tax, was most of the eager NCCL number.** 106 -> 59 on
+   one node and 173 -> 118 at 2+2: ~45-55 us per iteration, matching 29.3. The remaining
+   59 -> 32 on one node is the per-op enqueue cost graph replay removes.
+2. **PetscSF-NVSHMEM beats PetscSF-MPI by 1.4x on one node (106 vs 149) on a nonblocking
+   stream.** The 24/28.8 ordering "PetscSF-NVSHMEM is the slowest arm" was a NULL-stream
+   artefact: the legacy NULL stream serializes against every other blocking stream in the
+   process, and the NVSHMEM path's dedicated high-priority comm stream (section 14) paid
+   for that on every one of its ~7 ops per exchange. MPI barely moves (165 -> 149) because
+   it blocks on the host regardless of stream. Section 28.8 statement 2 ("NVSHMEM's problem
+   was never the transport ... yet PetscSF-NVSHMEM is the slowest arm") must be restated:
+   the protocol cost is real (106 is still 1.8x eager NCCL's 59) but the arm is second on
+   the in-tree ladder, not last.
+3. **Across the fabric, graph replay gives nothing over a properly streamed eager loop**
+   (118 eager vs 124 graph). See "why" below. The device kernel (104) is the only arm that
+   still improves at 2+2, and it does so for a different reason than launch cost.
+4. **The compute-only floor is stream-invariant (39 on both)**, which confirms it is the
+   host's `VecAXPY` issue rate (17 launches on the busiest rank x ~2.3 us), not GPU time.
+
+**Why graph replay stops helping across nodes.** Graph replay removes exactly one thing:
+the gap between consecutive host enqueues. That gap only matters when the host is the
+bottleneck, i.e. when the GPU finishes each kernel before the host has issued the next.
+On one node that is the case: daxpy on 8192 doubles is ~1-2 us, an NVLink hop ~3-5 us,
+so the GPU starves behind a ~2 us-per-op host. Across the fabric the critical path is 8
+crossing edges at ~10-12 us each (28.7): GPU -> NCCL proxy thread -> NIC -> wire -> remote
+(28.1). The eager host never blocks, so its ~40 us of enqueueing per iteration overlaps
+with the ~100 us the GPU spends waiting on the network; the launch tax is hidden, and
+there is nothing left for the graph to remove. Two costs the graph cannot touch: the NCCL
+proxy thread still posts and polls every RDMA work request whether the kernel came from a
+graph or not (29.5: a graph launch costs ~40 us across nodes for that reason, ~4 us/iter
+amortized at k=10, which is the 118 -> 124), and NCCL fan-out to two remote peers is
+serial (28.12). The device kernel's 104 comes from fusing signal with data and skipping
+NCCL's per-stage kernel and proxy hand-off, not from launch count.
+
+**Why graph replay (32) is below the "compute-only floor" (39).** The floor is
+host-bound: 17 `VecAXPY` calls at ~2.3 us of host issue cost each = 39 us, during which
+the GPU runs ~1.5 us kernels and idles ~0.8 us between them. Stream type does not change
+it (39 on both), because nothing is waiting on anything; the host simply cannot issue
+faster. In the graph the same 17 daxpy kernels execute back to back on the GPU (~20-25 us)
+and the four NCCL NVLink kernels add ~8-10 us, total 32. A graph-replayed compute-only
+run would land near 20-25 us; it was not measured (`acgnbench-nccl-graph` has no
+`-skip_comm`). "Compute floor, eager" is therefore a floor for host-driven loops only,
+and it is itself the strongest evidence for the ladder's thesis.
+
+**What the slide/prep should say.** Use the nonblocking numbers with "nonblocking PETSc
+stream" in the caption: 149 / 106 / 59 / 41 / 32 on one node (4.7x MPI -> graph, not 5x);
+118 / 124 / 104 at 2+2. The story is unchanged on one node (each rung is a change of
+orchestrator) and sharper across nodes (graph replay stops paying; device-initiated
+execution is what still does). The 2+2 SF arms were rerun the same night (rows above): PetscSF-NVSHMEM
+280 -> 179 on the nonblocking stream, level with GDR-MPI (176) and 7% ahead of
+host-staged MPI (192); so across the fabric the three in-tree arms tie within noise once
+the stream is right, and the 28.8 statement "slowest arm on both node counts" is retracted
+on both. Not rerun: the put+signal fusion delta (25, NULL stream) and the IBGDA hybrid.
