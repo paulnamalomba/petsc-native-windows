@@ -26,5 +26,6 @@ typedef struct {
   PCASMWeightedComputeScalingFn *computescaling;    /* callback filling scaling[] during PCSetUp() */
   PetscCtx                       computescalingctx; /* user context passed to computescaling */
   /* For multiplicative solve */
-  Mat *lmats; /* submatrices for overlapping multiplicative (process) subdomain */
+  Mat *lmats;      /* submatrices for overlapping multiplicative (process) subdomain */
+  Mat  matwork[3]; /* block solve workspaces: subdomain union, right-hand side, and solution */
 } PC_ASM;

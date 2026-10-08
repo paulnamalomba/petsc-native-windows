@@ -2698,7 +2698,10 @@ PetscErrorCode MatDenseScatter_Private(PetscSF sf, Mat X, Mat Y, InsertMode mode
   const PetscScalar *in;
   PetscScalar       *out;
   PetscSF            vsf;
-  PetscInt           N, ny, rld, lld;
+  Mat                xmat = X, ymat = Y;
+  PetscInt           N, ny, rld, lld, nscatters = 1;
+  static PetscInt    cacheid[3] = {-1, -1, -1};
+  PetscMPIInt        size;
   PetscMemType       mtype[2];
   MPI_Op             op = MPI_OP_NULL;
 
@@ -2711,38 +2714,78 @@ PetscErrorCode MatDenseScatter_Private(PetscSF sf, Mat X, Mat Y, InsertMode mode
   else if (mode == MAX_VALUES) op = MPIU_MAX;
   else if (mode == MIN_VALUES) op = MPIU_MIN;
   PetscCheck(op != MPI_OP_NULL, PetscObjectComm((PetscObject)sf), PETSC_ERR_SUP, "Unsupported InsertMode %d in MatDenseScatter_Private()", mode);
-  PetscCheck(smode == SCATTER_FORWARD || smode == SCATTER_REVERSE, PetscObjectComm((PetscObject)sf), PETSC_ERR_SUP, "Unsupported ScatterMode %d in MatDenseScatter_Private()", smode);
+  PetscCheck(smode == SCATTER_FORWARD || smode == SCATTER_REVERSE || smode == SCATTER_FORWARD_LOCAL || smode == SCATTER_REVERSE_LOCAL, PetscObjectComm((PetscObject)sf), PETSC_ERR_SUP, "Unsupported ScatterMode %d in MatDenseScatter_Private()", smode);
   PetscCall(MatGetSize(X, NULL, &N));
   PetscCall(MatGetSize(Y, NULL, &ny));
   PetscCheck(N == ny, PetscObjectComm((PetscObject)sf), PETSC_ERR_ARG_SIZ, "Matrix column sizes must match: %" PetscInt_FMT " != %" PetscInt_FMT, N, ny);
-  PetscCall(MatDenseGetLDA(X, &rld));
-  PetscCall(MatDenseGetLDA(Y, &lld));
+  if (!N) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)sf), &size));
+  if ((smode & SCATTER_FORWARD_LOCAL) && size > 1) {
+    PetscCall(MatDenseGetLocalMatrix(X, &xmat));
+    PetscCall(MatDenseGetLocalMatrix(Y, &ymat));
+    if (!sf->vscat.lsf) PetscCall(PetscSFCreateLocalSF_Private(sf, &sf->vscat.lsf));
+    if (sf->vscat.lsf->vscat.bs != sf->vscat.bs) {
+      sf->vscat.lsf->vscat.bs     = sf->vscat.bs;
+      sf->vscat.lsf->vscat.from_n = sf->vscat.from_n;
+      sf->vscat.lsf->vscat.to_n   = sf->vscat.to_n;
+      if (sf->vscat.bs > 1) PetscCallMPI(MPI_Type_dup(sf->vscat.unit, &sf->vscat.lsf->vscat.unit));
+    }
+    sf = sf->vscat.lsf;
+  }
+  PetscCall(MatDenseGetLDA(smode & SCATTER_REVERSE ? Y : X, &rld));
+  PetscCall(MatDenseGetLDA(smode & SCATTER_REVERSE ? X : Y, &lld));
   /* get cached or create new strided PetscSF when the number of columns is greater than one */
   if (N > 1) {
-    PetscCall(PetscObjectQuery((PetscObject)sf, "_MatDenseScatter_StridedSF", (PetscObject *)&vsf));
+    const char *key      = smode & SCATTER_REVERSE ? "_MatDenseScatter_StridedSFReverse" : "_MatDenseScatter_StridedSF";
+    PetscInt    value[3] = {N, rld, lld}, bs = PetscMax(1, sf->vscat.bs);
+    PetscBool   rebuild[2] = {PETSC_FALSE, (PetscBool)(rld % bs || lld % bs)};
+
+    PetscCall(PetscObjectQuery((PetscObject)sf, key, (PetscObject *)&vsf));
+    for (PetscInt i = 0; i < 3; ++i) {
+      if (cacheid[i] < 0) PetscCall(PetscObjectComposedDataRegister(&cacheid[i]));
+      if (vsf) {
+        PetscInt  cached = 0;
+        PetscBool found;
+
+        PetscCall(PetscObjectComposedDataGetInt((PetscObject)vsf, cacheid[i], cached, found));
+        if (!found || cached != value[i]) rebuild[0] = PETSC_TRUE;
+      }
+    }
     if (vsf) {
       PetscInt nr[2], nl[2];
 
       PetscCall(PetscSFGetGraph(sf, nr, nl, NULL, NULL));
       PetscCall(PetscSFGetGraph(vsf, nr + 1, nl + 1, NULL, NULL));
-      if (N * nr[0] != nr[1] || N * nl[0] != nl[1]) vsf = NULL;
-    }
-    if (!vsf) {
+      if (N * nr[0] != nr[1] || N * nl[0] != nl[1]) rebuild[0] = PETSC_TRUE;
+    } else rebuild[0] = PETSC_TRUE;
+    /* A changed root stride on one rank changes the remote indices of its neighbors. */
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, rebuild, 2, MPI_C_BOOL, MPI_LOR, PetscObjectComm((PetscObject)sf)));
+    if (rebuild[1]) {
+      /* A block-compressed scatter cannot express a column stride that splits a block. */
+      vsf       = sf;
+      nscatters = N;
+    } else if (rebuild[0]) {
       PetscCall(PetscSFCreateStridedSF(sf, N, rld, lld, &vsf));
-      PetscCall(PetscObjectCompose((PetscObject)sf, "_MatDenseScatter_StridedSF", (PetscObject)vsf));
+      for (PetscInt i = 0; i < 3; ++i) PetscCall(PetscObjectComposedDataSetInt((PetscObject)vsf, cacheid[i], value[i]));
+      PetscCall(PetscObjectCompose((PetscObject)sf, key, (PetscObject)vsf));
       PetscCall(PetscObjectDereference((PetscObject)vsf));
     }
   } else vsf = sf;
   /* the output array is accessed in read and write mode,
     but write-only in the INSERT_VALUES case could be worth exploring */
-  PetscCall(MatDenseGetArrayReadAndMemType(X, &in, &mtype[0]));
-  PetscCall(MatDenseGetArrayAndMemType(Y, &out, &mtype[1]));
-  if (smode == SCATTER_FORWARD) {
-    PetscCall(PetscSFBcastWithMemTypeBegin(vsf, vsf->vscat.unit, mtype[0], in, mtype[1], out, op));
-    PetscCall(PetscSFBcastEnd(vsf, vsf->vscat.unit, in, out, op));
-  } else {
-    PetscCall(PetscSFReduceWithMemTypeBegin(vsf, vsf->vscat.unit, mtype[0], in, mtype[1], out, op));
-    PetscCall(PetscSFReduceEnd(vsf, vsf->vscat.unit, in, out, op));
+  PetscCall(MatDenseGetArrayReadAndMemType(xmat, &in, &mtype[0]));
+  PetscCall(MatDenseGetArrayAndMemType(ymat, &out, &mtype[1]));
+  for (PetscInt i = 0; i < nscatters; ++i) {
+    const PetscScalar *x = PetscSafePointerPlusOffset(in, (size_t)i * (smode & SCATTER_REVERSE ? lld : rld));
+    PetscScalar       *y = PetscSafePointerPlusOffset(out, (size_t)i * (smode & SCATTER_REVERSE ? rld : lld));
+
+    if (!(smode & SCATTER_REVERSE)) {
+      PetscCall(PetscSFBcastWithMemTypeBegin(vsf, vsf->vscat.unit, mtype[0], x, mtype[1], y, op));
+      PetscCall(PetscSFBcastEnd(vsf, vsf->vscat.unit, x, y, op));
+    } else {
+      PetscCall(PetscSFReduceWithMemTypeBegin(vsf, vsf->vscat.unit, mtype[0], x, mtype[1], y, op));
+      PetscCall(PetscSFReduceEnd(vsf, vsf->vscat.unit, x, y, op));
+    }
   }
   PetscCall(MatDenseRestoreArrayAndMemType(Y, &out));
   PetscCall(MatDenseRestoreArrayReadAndMemType(X, &in));
