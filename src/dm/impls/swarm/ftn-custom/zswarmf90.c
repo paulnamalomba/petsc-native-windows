@@ -22,7 +22,7 @@ PETSC_EXTERN void dmswarmgetfield_(DM *dm, char *name, PetscInt *blocksize, Pets
   if (*ierr) return;
   *ierr = DMSwarmGetField(*dm, fieldname, blocksize, type, (void **)&v);
   if (*ierr) return;
-  *ierr = F90Array1dCreate((void *)v, MPIU_SCALAR, 1, n, ptr PETSC_F90_2PTR_PARAM(ptrd));
+  *ierr = F90Array1dCreate((void *)v, MPIU_SCALAR, 1, n * (*blocksize), ptr PETSC_F90_2PTR_PARAM(ptrd));
   FREECHAR(name, fieldname);
 }
 
