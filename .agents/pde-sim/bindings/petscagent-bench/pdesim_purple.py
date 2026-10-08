@@ -180,11 +180,14 @@ def _build_prompt(problem_description: str, study_dir: Path) -> str:
     )
 
 
-# Output/deliverable rules shared VERBATIM by every ablation config, so that
-# scoring differences reflect the agent wiring under test and not incidental
-# prompt wording. The grader compares the program's trailing numeric stdout lines
-# against a hidden reference, so the output-discipline text below must be identical
-# for configs 1, 2, and 3.
+# Output/deliverable rules for configs 1 and 2. Config 3 states the same rules in
+# its own prompt, by pointing at the pipeline's contracts, so that scoring
+# differences reflect the agent wiring under test and not incidental prompt
+# wording. The grader compares the program's trailing numeric stdout lines against
+# a hidden reference, so the output-discipline text below must stay equivalent
+# across all three. The attempts journal is likewise asked for here in the shape
+# results-manifest.schema.json requires of config 3, so the failure counts derived
+# from it compare across the ladder.
 _SHARED_CONTRACT = (
     "- Write ALL artifacts (generated source, makefile, results-manifest.json, logs) "
     f"under this directory: {{study_dir}}\n"
@@ -203,6 +206,11 @@ _SHARED_CONTRACT = (
     '- Write a results-manifest.json in that directory with a "runs" array; each run entry '
     'must have "command" (the direct invocation string above), "mpi_ranks" (integer), and '
     '"status": "success" once it runs cleanly.\n'
+    '- Also record an "attempts" array in that manifest: one entry per build, run or '
+    'format step you make, in the order you made them, each with "action" ("build", '
+    '"run" or "format"), "status" ("success" or "failure"), and for a failure a short '
+    '"error_excerpt" of what went wrong. Keep the failed steps in — the journal is a '
+    'record of what the program took to get right, not only of the steps that worked.\n'
     "- When finished, print EXACTLY one final line:\n"
     "      PDESIM_DONE <absolute path to results-manifest.json>\n"
 )

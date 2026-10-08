@@ -198,13 +198,12 @@ bench should aggregate attempts is left to the bench maintainers):
   where `stage_attempts["code-generation"]` counts the dispatches themselves. The
   journal's third action, `format`, is not counted: it runs PETSc's formatter and
   succeeds, so it says nothing about the generated code.
-  **Omitted entirely when the manifest has no `attempts[]`**, which today means
-  configs 1–2. Every config builds and runs its program — the shared contract
-  requires it — but only config 3 is asked for a manifest conforming to
-  `results-manifest.schema.json`, whose `required` list includes the journal;
-  configs 1–2 are asked only for a `runs` array, so their failures go unrecorded
-  rather than unmade. The field is omitted rather than zero because a zero would
-  read as a run that failed nothing.
+  Every config is asked for the journal — config 3 through
+  `results-manifest.schema.json`, configs 1–2 through the same shape stated in
+  their own contract — so the count compares across the ladder. **Omitted, rather
+  than zero, when a manifest carries no `attempts[]`**, since a zero would read as
+  a run that failed nothing instead of one that recorded nothing. Runs made before
+  configs 1–2 were asked to journal have no entry for this field.
 
 A usage record is written on **every** path — success, timeout, or failure — so a
 run's consumption is never silently lost. A run killed at `PDESIM_TIMEOUT` emits
