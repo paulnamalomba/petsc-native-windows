@@ -283,14 +283,16 @@ rename them.
   `VecView()`) and to keep extra numeric diagnostics off stdout. A correct
   solution can still miss the metric if the description's output format is
   ambiguous; remaining cases need per-problem handling in the bench evaluators.
-- **Run selection is a heuristic.** Of the runs the pipeline recorded, the
-  binding sends the successful one with the most `mpi_ranks` (ties go to the
-  earlier run, and a run above `PDESIM_MAX_NSIZE` is passed over where possible
-  since `nsize` is clamped to that cap). This exercises the parallel path and
-  does not depend on the order the agent listed its runs in. Note the bench uses
-  the reported `mpi_ranks` only for a test case that declares no `nsize` of its
-  own, and ignores the reported `cli_args` whenever the case declares `args`.
-  If a problem needs a different run, adjust `_pick_run`.
+- **Run selection is a heuristic.** The bench runs the reported `cli_args` with
+  each test case's own arguments appended, so this choice decides how the graded
+  program is invoked. Of the runs the pipeline recorded, the binding drops those
+  that verify the method rather than answer the problem (an `-mms` run reports an
+  error norm, not the solution), prefers one the agent labelled `production` or
+  `deliverable`, then takes the most `mpi_ranks` — ties to the earlier run, and a
+  run above `PDESIM_MAX_NSIZE` passed over where possible. Each filter yields if
+  it would leave nothing. The reported `mpi_ranks` is used only by a test case
+  that declares no `nsize`. If a problem needs a different run, adjust
+  `_pick_run`.
 - **cli_args are passed verbatim** after stripping the launcher/exe prefix,
   including MMS-specific flags (e.g. `-mms_levels 4`, `-mms_csv convergence.csv`);
   the latter just writes a file in the bench work dir.

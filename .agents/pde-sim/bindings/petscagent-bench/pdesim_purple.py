@@ -938,23 +938,44 @@ def _find_manifest(stdout: str, study_dir: Path, since_ts: float) -> Optional[Pa
     return newest
 
 
-def _pick_run(manifest: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Choose a representative run: the most parallel successful one.
+# A run made to check the method rather than to produce the answer. Its label is
+# the signal the manifest schema offers ('mms-level-3' against 'production-Re1000'),
+# and -mms on the command line is surer still: in manufactured-solution mode the
+# program reports an error norm instead of the solution that was asked for.
+_VERIFICATION_LABEL = re.compile(r"mms|convergence|verif|check", re.I)
+_MMS_FLAG = re.compile(r"(?:^|\s)-mms(?:\s|=|$)")
 
-    The pipeline records every run it made — MMS levels, serial and parallel
-    production runs — in no particular order, so taking the first success made
-    the reported rank count depend on how the agent happened to order the list.
-    Prefer the largest ``mpi_ranks`` instead, which exercises the parallel path;
-    on a tie the earlier run wins, so the choice is deterministic. Runs above
-    PDESIM_MAX_NSIZE are passed over where possible, since nsize is clamped to
-    that cap and would otherwise be reported at a rank count never tested.
-    Falls back to the first run with a command when none succeeded.
+
+def _is_verification_run(run: Dict[str, Any]) -> bool:
+    return bool(_VERIFICATION_LABEL.search(run.get("label") or "")
+                or _MMS_FLAG.search(run.get("command") or ""))
+
+
+def _pick_run(manifest: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Choose the run that produced the answer, preferring the parallel one.
+
+    The bench runs the reported ``cli_args`` with the test case's own arguments
+    appended, so this choice decides how the graded program is invoked. The
+    pipeline records every run it made — MMS levels, parallel smoke checks,
+    production runs — in no particular order, so three filters apply in turn:
+    drop the runs that verify the method rather than answer the problem (an
+    ``-mms`` run grades the error norm, not the solution); prefer a run the agent
+    labelled as the deliverable; then take the largest ``mpi_ranks``, which
+    exercises the parallel path. Ties go to the earlier run, so the choice never
+    depends on list order alone. Runs above PDESIM_MAX_NSIZE are passed over
+    where possible, since nsize is clamped to that cap and would otherwise be
+    reported at a rank count never tested. Each filter yields if it would leave
+    nothing, and a run with a command is returned even when none succeeded.
     """
     runs = [r for r in (manifest.get("runs") or []) if r.get("command")]
     ranks = lambda r: int(r.get("mpi_ranks") or 1)  # noqa: E731 - absent means serial
-    ok = [r for r in runs if r.get("status") == "success"]
-    if ok:
-        return max([r for r in ok if ranks(r) <= SETTINGS.max_nsize] or ok, key=ranks)
+    pool = [r for r in runs if r.get("status") == "success"]
+    pool = [r for r in pool if not _is_verification_run(r)] or pool
+    deliverable = [r for r in pool
+                   if re.search(r"production|deliverable", r.get("label") or "", re.I)]
+    pool = deliverable or pool
+    if pool:
+        return max([r for r in pool if ranks(r) <= SETTINGS.max_nsize] or pool, key=ranks)
     return runs[0] if runs else None
 
 
