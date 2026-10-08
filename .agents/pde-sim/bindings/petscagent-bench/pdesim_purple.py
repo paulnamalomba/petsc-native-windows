@@ -272,6 +272,7 @@ def _scan_events(events: List[Any]) -> Dict[str, Any]:
     skill_tool_calls = 0
     subagent_tool_calls = 0
     tool_calls_total = 0
+    model_responses = 0
     peak_context = 0
     sum_input = 0
     sum_cache_creation = 0
@@ -290,6 +291,10 @@ def _scan_events(events: List[Any]) -> Dict[str, Any]:
     for e in events:
         if not (isinstance(e, dict) and e.get("type") == "assistant"):
             continue
+        # One assistant message is one model response. Subagent turns are inlined
+        # in the same stream (tagged parent_tool_use_id), so counting them here
+        # covers the whole run rather than just the orchestrator.
+        model_responses += 1
         msg = e.get("message", {}) or {}
         for c in msg.get("content", []) or []:
             if not (isinstance(c, dict) and c.get("type") == "tool_use"):
@@ -327,6 +332,7 @@ def _scan_events(events: List[Any]) -> Dict[str, Any]:
         "skill_tool_calls": skill_tool_calls,
         "subagent_tool_calls": subagent_tool_calls,
         "tool_calls": tool_calls_total,
+        "model_responses": model_responses,
         "peak_context_tokens": peak_context,
         "pdesim_skills_read": sorted(skills_read),
         "stage_attempts": stage_attempts,
@@ -361,6 +367,7 @@ def _partial_usage(events: List[Any]) -> Optional[Dict[str, Any]]:
         "cached_tokens": scan["sum_cache_read_tokens"],
         "total_cost_usd": None,  # the CLI reports cost only in the result event
         "num_turns": None,
+        "model_responses": scan["model_responses"],
         "subagents_spawned": None,
         "subagents_completed": None,
         "subagents_failed": None,
@@ -446,7 +453,11 @@ def _extract_result(events: List[Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
         "total_tokens": prompt_tokens + out,
         "cached_tokens": cr,
         "total_cost_usd": result.get("total_cost_usd"),
+        # num_turns is the CLI's own count for the orchestrator alone, and counts
+        # turns rather than responses, so it is kept for reference while
+        # model_responses is what the whole-run model_calls telemetry reports.
         "num_turns": result.get("num_turns"),
+        "model_responses": scan["model_responses"],
         "subagents_spawned": stats.get("spawned"),
         "subagents_completed": stats.get("completed"),
         "subagents_failed": stats.get("failed"),
@@ -1053,7 +1064,12 @@ def _build_telemetry(usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
     t["total_tokens"] = usage["total_tokens"]
     t["cached_tokens"] = usage["cached_tokens"]
     t["peak_context_tokens"] = usage.get("peak_context_tokens") or usage["prompt_tokens"]
-    if usage.get("num_turns") is not None:
+    # One assistant message per model response, counted across the orchestrator and
+    # its subagents. The CLI's num_turns covers only the orchestrator, and counts a
+    # coarser notion of turn, so it is the fallback rather than the figure reported.
+    if usage.get("model_responses"):
+        t["model_calls"] = usage["model_responses"]
+    elif usage.get("num_turns") is not None:
         t["model_calls"] = usage["num_turns"]
     if usage.get("tool_calls") is not None:
         t["tool_calls"] = usage["tool_calls"]
