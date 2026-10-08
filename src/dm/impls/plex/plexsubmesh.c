@@ -2796,8 +2796,12 @@ PetscErrorCode DMPlexLabelCohesiveComplete(DM dm, DMLabel label, DMLabel blabel,
     IS bdIS;
 
     PetscCall(DMLabelGetStratumIS(blabel, bvalue, &bdIS));
-    PetscCall(ISGetLocalSize(bdIS, &numPoints));
-    PetscCall(ISGetIndices(bdIS, &points));
+    numPoints = 0;
+    points    = NULL;
+    if (bdIS) {
+      PetscCall(ISGetLocalSize(bdIS, &numPoints));
+      PetscCall(ISGetIndices(bdIS, &points));
+    }
     for (p = 0; p < numPoints; ++p) {
       const PetscInt point = points[p];
       PetscInt       val, bval;
@@ -2842,7 +2846,7 @@ PetscErrorCode DMPlexLabelCohesiveComplete(DM dm, DMLabel label, DMLabel blabel,
         }
       }
     }
-    PetscCall(ISRestoreIndices(bdIS, &points));
+    if (bdIS) PetscCall(ISRestoreIndices(bdIS, &points));
     PetscCall(ISDestroy(&bdIS));
   }
 divide:
@@ -5284,6 +5288,10 @@ PetscErrorCode DMPlexGetSubpointIS(DM dm, IS *subpointIS)
   PetscValidHeaderSpecific(dm, DM_CLASSID, 1);
   PetscAssertPointer(subpointIS, 2);
   PetscCall(DMPlexGetSubpointMap(dm, &spmap));
+  if (!spmap) {
+    *subpointIS = NULL;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   PetscCall(PetscObjectStateGet((PetscObject)spmap, &state));
   if (state != mesh->subpointState || !mesh->subpointIS) PetscCall(DMPlexCreateSubpointIS_Internal(dm, &mesh->subpointIS));
   *subpointIS = mesh->subpointIS;
