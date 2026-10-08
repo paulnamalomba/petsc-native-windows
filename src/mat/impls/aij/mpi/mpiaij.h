@@ -184,7 +184,7 @@ PETSC_INTERN PetscErrorCode MatGetSeqMats_MPIAIJ(Mat, Mat *, Mat *);
 PETSC_INTERN PetscErrorCode MatSetSeqMats_MPIAIJ(Mat, IS, IS, IS, MatStructure, Mat, Mat);
 
 PETSC_INTERN PetscErrorCode MatSetPreallocationCOO_MPIAIJ(Mat, PetscCount, PetscInt[], PetscInt[]);
-PETSC_INTERN PetscErrorCode MatMPIAIJCheckCOONonzeroState_Private(Mat);
+PETSC_INTERN PetscErrorCode MatMPIAIJCheckCOONonzeroState(Mat);
 
 PETSC_INTERN PetscErrorCode MatGetCurrentMemType_MPIAIJ(Mat, PetscMemType *);
 

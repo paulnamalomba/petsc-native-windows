@@ -6780,15 +6780,31 @@ PetscErrorCode MatSetPreallocationCOO_MPIAIJ(Mat mat, PetscCount coo_n, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
-  Check that the COO maps built by MatSetPreallocationCOO() can still be used by MatSetValuesCOO().
+// PetscClangLinter pragma disable: -fdoc-internal-linkage
+/*@
+  MatMPIAIJCheckCOONonzeroState - Checks that the COO maps built by `MatSetPreallocationCOO()` can still be used by
+  `MatSetValuesCOO()` on a `MATMPIAIJ` matrix
 
+  Not Collective
+
+  Input Parameter:
+. mat - the `MATMPIAIJ` matrix
+
+  Level: developer
+
+  Notes:
   The maps address the nonzeros of the diagonal and off-diagonal blocks by position, so they are only valid while the blocks keep
-  the nonzero patterns built by MatSetPreallocationCOO(). Any change to them, for example a new nonzero inserted with MatSetValues(),
-  would make MatSetValuesCOO() write values into the wrong locations, so this generates an error instead. It also generates an
-  error when MatSetPreallocationCOO() has not been called.
-*/
-PetscErrorCode MatMPIAIJCheckCOONonzeroState_Private(Mat mat)
+  the nonzero patterns built by `MatSetPreallocationCOO()`. Any change to them, for example a new nonzero inserted with
+  `MatSetValues()`, would make `MatSetValuesCOO()` write values into the wrong locations, so this routine generates an error
+  instead. It also generates an error when `MatSetPreallocationCOO()` has not been called.
+
+  The check is local to each MPI process, so only the processes whose blocks changed generate the error.
+
+  The `MatSetValuesCOO()` implementations of `MATMPIAIJ` and its device subtypes call this routine before using the maps.
+
+.seealso: [](ch_matrices), `Mat`, `MATMPIAIJ`, `MatSetPreallocationCOO()`, `MatSetValuesCOO()`, `MatSeqAIJCheckCOONonzeroState()`
+@*/
+PetscErrorCode MatMPIAIJCheckCOONonzeroState(Mat mat)
 {
   Mat_MPIAIJ          *mpiaij = (Mat_MPIAIJ *)mat->data;
   PetscContainer       container;
@@ -6816,7 +6832,7 @@ static PetscErrorCode MatSetValuesCOO_MPIAIJ(Mat mat, const PetscScalar v[], Ins
   MatCOOStruct_MPIAIJ *coo;
 
   PetscFunctionBegin;
-  PetscCall(MatMPIAIJCheckCOONonzeroState_Private(mat));
+  PetscCall(MatMPIAIJCheckCOONonzeroState(mat));
   PetscCall(PetscObjectQuery((PetscObject)mat, "__PETSc_MatCOOStruct_Host", (PetscObject *)&container));
   PetscCall(PetscContainerGetPointer(container, &coo));
   sendbuf = coo->sendbuf;
