@@ -610,8 +610,10 @@ using four OpenMP threads per MPI process will slow the code down since one core
 
 For application codes that use certain external packages, including BLAS/LAPACK, SuperLU_DIST, MUMPS, MKL, and SuiteSparse, one can build PETSc and these
 packages to take advantage of OpenMP by using the configure option `--with-openmp`. The number of OpenMP threads used in the application can be controlled with
-the PETSc command line option `-omp_num_threads num` or the environmental variable `OMP_NUM_THREADS`. Running a PETSc program with `-omp_view` will display the
+the PETSc command line option `-omp_num_threads num` or the environment variable `OMP_NUM_THREADS`. Running a PETSc program with `-omp_view` will display the
 number of threads used. The default number is often absurdly high for the given hardware, so we recommend always setting it appropriately.
+See also the discussion on shared memory parallelism in [BLAS/LAPACK](blas-lapack.md#shared-memory-parallelism) for further options applicable to those
+libraries only and details on different shared-memory programming models such as pthreads.
 
 Users can also put OpenMP pragmas into their own code. However, since standard PETSc is not thread-safe, they should not, in general,
 call PETSc routines from inside the parallel regions.
