@@ -1,0 +1,19 @@
+1728 particles
+Particle count preserved by 1 warm-up and 4 timed migrations
+Migration timings in stage "Swarm Migration", maximum over 2 ranks
+  backend host, point location brute force, 1728 particles, 4 migrations
+  144 particles change rank in each migration
+  Event                   Count       Time (s)  Time/call (s)
+  Stage total                 4   1.122992e+00   2.807480e-01
+  DMSwarmMigrate              4   1.122897e+00   2.807244e-01
+  DMPlexLocatePoints          8   8.572026e-01   1.071503e-01
+  DMSwarmDETSetup             0   0.000000e+00   0.000000e+00
+  DMSwarmDESendCnt            4   1.560900e-05   3.902250e-06
+  DMSwarmDEPack               4   1.472170e-04   3.680425e-05
+  DMSwarmDExBegin             4   2.977500e-05   7.443750e-06
+  DMSwarmDExEnd               4   3.136920e-04   7.842300e-05
+  DMSwarmAddPnts              0   0.000000e+00   0.000000e+00
+  DMSwarmRmvPnts              8   2.006680e-04   2.508350e-05
+  DMSwarmSort                 0   0.000000e+00   0.000000e+00
+  DMSwarmCopyToGPU            0   0.000000e+00   0.000000e+00
+  DMSwarmCopyFromGPU          0   0.000000e+00   0.000000e+00
