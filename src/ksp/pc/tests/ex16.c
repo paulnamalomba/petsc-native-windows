@@ -358,6 +358,17 @@ static PetscErrorCode CheckApplications(PC pc, Mat T)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+// checks that the PC holds the shared IS of PCHPDDMSetDeflationMat() and PCHPDDMSetScaling() exactly when one of them uses it
+static PetscErrorCode CheckReferences(IS is, PetscBool held)
+{
+  PetscInt refct;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscObjectGetReference((PetscObject)is, &refct));
+  PetscCheck(refct == (held ? 2 : 1), PETSC_COMM_SELF, PETSC_ERR_PLIB, "IS has %" PetscInt_FMT " references, expected %d", refct, held ? 2 : 1);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   PC                          pc;
@@ -365,8 +376,8 @@ int main(int argc, char **argv)
   IS                          is;
   Vec                         D;
   PetscMPIInt                 size;
-  PetscBool                   empty_rank0 = PETSC_FALSE;
-  FineLevelType               fine        = FINE_ASM_WEIGHTED;
+  PetscBool                   empty_rank0 = PETSC_FALSE, scaling_only = PETSC_FALSE;
+  FineLevelType               fine = FINE_ASM_WEIGHTED;
   PCHPDDMCoarseCorrectionType correction;
 
   PetscFunctionBeginUser;
@@ -374,13 +385,15 @@ int main(int argc, char **argv)
   PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
   PetscCheck(size == 2, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "Run with two processes");
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-empty_rank0", &empty_rank0, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-scaling_only", &scaling_only, NULL)); // no deflation space, the scaling only weights the fine level
   PetscCall(GetFineLevelType(&fine));
   PetscCall(CreateOperator(&A));
   PetscCall(PCCreate(PETSC_COMM_WORLD, &pc));
   PetscCall(PCSetType(pc, PCHPDDM));
   /*
     Three setups of the same PC, each checked against the reference operator:
-    0. initial setup, after clearing the scaling and replacing the deflation space, which must leave no trace;
+    0. initial setup, after installing and removing the deflation space and scaling in both orders, which must leave
+       no trace, and with the PC holding their shared IS exactly while one of them uses it;
     1. new operator values with the same deflation space and scaling: both levels are rebuilt, and the fine-level
        PCASMType selected at the initial setup must persist;
     2. PCReset() discards the deflation space and scaling, which are then installed again.
@@ -390,11 +403,22 @@ int main(int argc, char **argv)
     else {
       if (pass == 2) PetscCall(PCReset(pc));
       PetscCall(CreateDeflation(empty_rank0, &is, &U, &D));
-      PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-      PetscCall(PCHPDDMSetScaling(pc, is, D));
-      if (pass == 0) {
+      if (scaling_only) PetscCall(PCHPDDMSetScaling(pc, is, D));
+      else if (pass == 0) {
+        PetscCall(PCHPDDMSetScaling(pc, is, D)); // the scaling alone stores the IS
+        PetscCall(CheckReferences(is, PETSC_TRUE));
+        PetscCall(PCHPDDMSetDeflationMat(pc, NULL, U)); // reuses the stored IS and keeps the scaling
         PetscCall(PCHPDDMSetScaling(pc, NULL, NULL));
+        PetscCall(CheckReferences(is, PETSC_TRUE)); // still used by the deflation space
         PetscCall(PCHPDDMSetScaling(pc, NULL, D));
+        PetscCall(PCHPDDMSetDeflationMat(pc, is, NULL)); // the IS argument is ignored
+        PetscCall(CheckReferences(is, PETSC_TRUE));      // still used by the scaling
+        PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
+        PetscCall(PCHPDDMSetScaling(pc, NULL, NULL));
+        PetscCall(PCHPDDMSetDeflationMat(pc, NULL, NULL));
+        PetscCall(CheckReferences(is, PETSC_FALSE));
+      }
+      if (!scaling_only) {
         PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
         PetscCall(PCHPDDMSetScaling(pc, is, D));
       }
@@ -406,8 +430,11 @@ int main(int argc, char **argv)
     PetscCall(PCSetModifySubMatrices(pc, ModifySubmatrices, NULL));
     PetscCall(PCSetFromOptions(pc));
     PetscCall(PCSetUp(pc));
-    PetscCall(PCHPDDMGetCoarseCorrectionType(pc, &correction));
-    PetscCall(CreateReference(A, empty_rank0, fine, correction, &T));
+    if (scaling_only) PetscCall(CreateFineReference(A, fine, &T));
+    else {
+      PetscCall(PCHPDDMGetCoarseCorrectionType(pc, &correction));
+      PetscCall(CreateReference(A, empty_rank0, fine, correction, &T));
+    }
     PetscCall(CheckApplications(pc, T));
     PetscCall(MatDestroy(&T));
   }
@@ -439,5 +466,13 @@ int main(int argc, char **argv)
       # non-PCASM fine level: the partition of unity only weights the coarse space
       suffix: jacobi
       args: -pc_hpddm_levels_1_pc_type jacobi
+
+  test:
+    # no deflation space: the scaling only weights the fine-level PCASM of a single-level PC, whose prefix is -pc_hpddm_coarse_
+    suffix: scaling_only
+    nsize: 2
+    requires: hpddm slepc mumps defined(PETSC_HAVE_DYNAMIC_LIBRARIES) defined(PETSC_USE_SHARED_LIBRARIES)
+    args: -pc_hpddm_define_subdomains true -scaling_only -pc_hpddm_coarse_sub_pc_type lu
+    output_file: output/empty.out
 
 TEST*/
