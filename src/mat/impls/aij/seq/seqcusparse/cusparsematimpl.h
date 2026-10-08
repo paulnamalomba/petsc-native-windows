@@ -202,14 +202,12 @@ struct Mat_SeqAIJCUSPARSEMultStruct {
   PetscScalar         *alpha_one;        /* pointer to a device "scalar" storing the alpha parameter in the SpMV */
   PetscScalar         *beta_zero;        /* pointer to a device "scalar" storing the beta parameter in the SpMV as zero*/
   PetscScalar         *beta_one;         /* pointer to a device "scalar" storing the beta parameter in the SpMV as one */
-  cusparseSpMatDescr_t matDescr;         /* descriptor for the matrix, used by SpMM */
-  cusparseSpMatDescr_t matDescr_SpMM[3]; // separate descriptors for opA's used by SpMM, see the known issues https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cusparse-release-12-6
+  cusparseSpMatDescr_t matDescr;         /* descriptor for the matrix, used by SpGEMM */
   Mat_CusparseSpMV     cuSpMV[3];        /* different Mat_CusparseSpMV structs for non-transpose, transpose, conj-transpose */
   Mat_SeqAIJCUSPARSEMultStruct() : matDescr(NULL)
   {
     for (int i = 0; i < 3; i++) {
       cuSpMV[i].initialized = PETSC_FALSE;
-      matDescr_SpMM[i]      = NULL;
     }
   }
 };

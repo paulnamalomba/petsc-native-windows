@@ -1784,6 +1784,13 @@ struct MatProductCtx_MatMatCusparse {
   CsrMatrix     *Bcsr;
 
   cusparseSpMatDescr_t  matSpBDescr;
+  cusparseSpMatDescr_t  matSpADescr;
+  PetscObjectId         Aid;
+  PetscObjectState      Anonzerostate;
+  const void           *Arowptr, *Acolidx;
+  PetscInt              Arows, Acols, Annz, Brows, Bcols, Crows, Ccols;
+  cusparseOperation_t   opA, opB;
+  cusparseSpMMAlg_t     spmmAlg;
   PetscBool             initialized; /* C = alpha op(A) op(B) + beta C */
   cusparseDnMatDescr_t  matBDescr;
   cusparseDnMatDescr_t  matCDescr;
@@ -1803,6 +1810,7 @@ static PetscErrorCode MatProductCtxDestroy_MatMatCusparse(PetscCtxRt data)
   PetscFunctionBegin;
   PetscCallCUDA(cudaFree(mmdata->Bt));
   delete mmdata->Bcsr;
+  if (mmdata->matSpADescr) PetscCallCUSPARSE(cusparseDestroySpMat(mmdata->matSpADescr));
   if (mmdata->matSpBDescr) PetscCallCUSPARSE(cusparseDestroySpMat(mmdata->matSpBDescr));
   if (mmdata->matBDescr) PetscCallCUSPARSE(cusparseDestroyDnMat(mmdata->matBDescr));
   if (mmdata->matCDescr) PetscCallCUSPARSE(cusparseDestroyDnMat(mmdata->matCDescr));
@@ -1822,11 +1830,14 @@ static PetscErrorCode MatProductNumeric_SeqAIJCUSPARSE_SeqDENSECUDA(Mat C)
 {
   Mat_Product                  *product = C->product;
   Mat                           A, B;
-  PetscInt                      m, n, blda, clda;
-  PetscBool                     flg, biscuda, compressed;
+  PetscInt                      m, n, blda, clda, arows, acols, annz, brows, bcols;
+  PetscInt                     *arowptr, *acolidx;
+  PetscBool                     flg, biscuda, compressed, rebuild;
+  PetscObjectId                 aid;
+  PetscObjectState              anonzerostate;
   Mat_SeqAIJ                   *a;
   Mat_SeqAIJCUSPARSE           *cusp;
-  cusparseOperation_t           opA;
+  cusparseOperation_t           opA, opB;
   const PetscScalar            *barray;
   PetscScalar                  *carray;
   MatProductCtx_MatMatCusparse *mmdata;
@@ -1888,6 +1899,7 @@ static PetscErrorCode MatProductNumeric_SeqAIJCUSPARSE_SeqDENSECUDA(Mat C)
   PetscCall(MatDenseGetArrayReadAndMemType(B, &barray, nullptr));
 
   PetscCall(MatDenseGetLDA(B, &blda));
+  PetscCall(MatGetSize(B, &brows, &bcols));
   if (product->type == MATPRODUCT_RARt || product->type == MATPRODUCT_PtAP) {
     PetscCall(MatDenseGetArrayWriteAndMemType(mmdata->X, &carray, nullptr));
     PetscCall(MatDenseGetLDA(mmdata->X, &clda));
@@ -1897,78 +1909,82 @@ static PetscErrorCode MatProductNumeric_SeqAIJCUSPARSE_SeqDENSECUDA(Mat C)
   }
 
   PetscCall(PetscLogGpuTimeBegin());
-  cusparseOperation_t opB = (product->type == MATPRODUCT_ABt || product->type == MATPRODUCT_RARt) ? CUSPARSE_OPERATION_TRANSPOSE : CUSPARSE_OPERATION_NON_TRANSPOSE;
-#if PETSC_PKG_CUDA_VERSION_GE(12, 4, 0)
-  cusparseSpMatDescr_t &matADescr = mat->matDescr_SpMM[opA];
-#else
-  /* mat->matDescr is also used by the SpGEMM code, which relies on its compressed dimensions, so when A is
-     compressed the SpMM needs a descriptor of its own */
-  cusparseSpMatDescr_t &matADescr = compressed ? mat->matDescr_SpMM[opA] : mat->matDescr;
-#endif
+  opB = (product->type == MATPRODUCT_ABt || product->type == MATPRODUCT_RARt) ? CUSPARSE_OPERATION_TRANSPOSE : CUSPARSE_OPERATION_NON_TRANSPOSE;
+  if (compressed && !cusp->rowoffsets_gpu) {
+    cusp->rowoffsets_gpu = new THRUSTINTARRAY(A->rmap->n + 1);
+    cusp->rowoffsets_gpu->assign(a->i, a->i + A->rmap->n + 1);
+    PetscCall(PetscLogCpuToGpu((A->rmap->n + 1) * sizeof(PetscInt)));
+  }
+  arows   = compressed ? A->rmap->n : csrmat->num_rows;
+  acols   = csrmat->num_cols;
+  annz    = csrmat->num_entries;
+  arowptr = compressed ? cusp->rowoffsets_gpu->data().get() : csrmat->row_offsets->data().get();
+  acolidx = csrmat->column_indices->data().get();
+  PetscCall(PetscObjectGetId((PetscObject)A, &aid));
+  PetscCall(MatGetNonzeroState(A, &anonzerostate));
+  rebuild = (PetscBool)(!mmdata->initialized || mmdata->Aid != aid || mmdata->Anonzerostate != anonzerostate || mmdata->Arowptr != arowptr || mmdata->Acolidx != acolidx || mmdata->Arows != arows || mmdata->Acols != acols || mmdata->Annz != annz ||
+                        mmdata->opA != opA || mmdata->opB != opB || mmdata->spmmAlg != cusp->spmmAlg || mmdata->Blda != blda || mmdata->Clda != clda || mmdata->Brows != brows || mmdata->Bcols != bcols || mmdata->Crows != m || mmdata->Ccols != n);
 
-  /* (re)allocate mmBuffer if not initialized or LDAs are different */
-  if (!mmdata->initialized || mmdata->Blda != blda || mmdata->Clda != clda) {
-    size_t mmBufferSize;
-    if (mmdata->initialized && mmdata->Blda != blda) {
+  if (rebuild) {
+    if (mmdata->matBDescr && (mmdata->Blda != blda || mmdata->Brows != brows || mmdata->Bcols != bcols)) {
       PetscCallCUSPARSE(cusparseDestroyDnMat(mmdata->matBDescr));
       mmdata->matBDescr = NULL;
     }
     if (!mmdata->matBDescr) {
-      PetscCallCUSPARSE(cusparseCreateDnMat(&mmdata->matBDescr, B->rmap->n, B->cmap->n, blda, (void *)barray, cusparse_scalartype, CUSPARSE_ORDER_COL));
-      mmdata->Blda = blda;
+      PetscCallCUSPARSE(cusparseCreateDnMat(&mmdata->matBDescr, brows, bcols, blda, (void *)barray, cusparse_scalartype, CUSPARSE_ORDER_COL));
+      mmdata->Blda  = blda;
+      mmdata->Brows = brows;
+      mmdata->Bcols = bcols;
     }
 
-    if (mmdata->initialized && mmdata->Clda != clda) {
+    if (mmdata->matCDescr && (mmdata->Clda != clda || mmdata->Crows != m || mmdata->Ccols != n)) {
       PetscCallCUSPARSE(cusparseDestroyDnMat(mmdata->matCDescr));
       mmdata->matCDescr = NULL;
     }
     if (!mmdata->matCDescr) { /* matCDescr is for C or mmdata->X */
       PetscCallCUSPARSE(cusparseCreateDnMat(&mmdata->matCDescr, m, n, clda, (void *)carray, cusparse_scalartype, CUSPARSE_ORDER_COL));
-      mmdata->Clda = clda;
+      mmdata->Clda  = clda;
+      mmdata->Crows = m;
+      mmdata->Ccols = n;
     }
 
-#if PETSC_PKG_CUDA_VERSION_GE(12, 4, 0) // tested up to 12.6.0
-    if (matADescr) {
-      PetscCallCUSPARSE(cusparseDestroySpMat(matADescr)); // Because I find I could not reuse matADescr. It could be a cusparse bug
-      matADescr = NULL;
-    }
-#endif
+    /* Preprocessing stores the active workspace in the sparse descriptor, so each product owns its descriptor. */
+    if (mmdata->matSpADescr) PetscCallCUSPARSE(cusparseDestroySpMat(mmdata->matSpADescr));
+    PetscCallCUSPARSE(cusparseCreateCsr(&mmdata->matSpADescr, arows, acols, annz, arowptr, acolidx, csrmat->values->data().get(), csrRowOffsetsType, csrColIndType, CUSPARSE_INDEX_BASE_ZERO, cusparse_scalartype));
+  }
+  PetscCallCUSPARSE(cusparseSpMatSetValues(mmdata->matSpADescr, csrmat->values->data().get()));
+  PetscCallCUSPARSE(cusparseDnMatSetValues(mmdata->matBDescr, (void *)barray));
+  PetscCallCUSPARSE(cusparseDnMatSetValues(mmdata->matCDescr, (void *)carray));
+  if (rebuild) {
+    size_t mmBufferSize;
 
-    if (!matADescr) {
-      if (compressed) {
-        if (!cusp->rowoffsets_gpu) { /* the full row offsets may be absent when we did not construct the transpose with csr2csc */
-          cusp->rowoffsets_gpu = new THRUSTINTARRAY(A->rmap->n + 1);
-          cusp->rowoffsets_gpu->assign(a->i, a->i + A->rmap->n + 1);
-          PetscCall(PetscLogCpuToGpu((A->rmap->n + 1) * sizeof(PetscInt)));
-        }
-        PetscCallCUSPARSE(cusparseCreateCsr(&matADescr, A->rmap->n, csrmat->num_cols, csrmat->num_entries, cusp->rowoffsets_gpu->data().get(), csrmat->column_indices->data().get(), csrmat->values->data().get(), csrRowOffsetsType, csrColIndType, CUSPARSE_INDEX_BASE_ZERO, cusparse_scalartype));
-      } else {
-        PetscCallCUSPARSE(cusparseCreateCsr(&matADescr, csrmat->num_rows, csrmat->num_cols, csrmat->num_entries, csrmat->row_offsets->data().get(), csrmat->column_indices->data().get(), csrmat->values->data().get(), csrRowOffsetsType, csrColIndType, CUSPARSE_INDEX_BASE_ZERO, cusparse_scalartype));
-      }
-    }
+    PetscCallCUSPARSE(cusparseSpMM_bufferSize(cusp->handle, opA, opB, mat->alpha_one, mmdata->matSpADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, &mmBufferSize));
 
-    PetscCallCUSPARSE(cusparseSpMM_bufferSize(cusp->handle, opA, opB, mat->alpha_one, matADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, &mmBufferSize));
-
-    if ((mmdata->mmBuffer && mmdata->mmBufferSize < mmBufferSize) || !mmdata->mmBuffer) {
-      PetscCallCUDA(cudaFree(mmdata->mmBuffer));
+    if (mmdata->mmBufferSize < mmBufferSize) {
+      if (mmdata->mmBuffer) PetscCallCUDA(cudaFree(mmdata->mmBuffer));
       PetscCallCUDA(cudaMalloc(&mmdata->mmBuffer, mmBufferSize));
       mmdata->mmBufferSize = mmBufferSize;
     }
 
 #if PETSC_PKG_CUDA_VERSION_GE(12, 4, 0) // the _preprocess was added in 11.2.1, but PETSc worked without it until 12.4.0
-    PetscCallCUSPARSE(cusparseSpMM_preprocess(cusp->handle, opA, opB, mat->alpha_one, matADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, mmdata->mmBuffer));
+    PetscCallCUSPARSE(cusparseSpMM_preprocess(cusp->handle, opA, opB, mat->alpha_one, mmdata->matSpADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, mmdata->mmBuffer));
 #endif
 
-    mmdata->initialized = PETSC_TRUE;
-  } else {
-    /* to be safe, always update pointers of the mats */
-    PetscCallCUSPARSE(cusparseSpMatSetValues(matADescr, csrmat->values->data().get()));
-    PetscCallCUSPARSE(cusparseDnMatSetValues(mmdata->matBDescr, (void *)barray));
-    PetscCallCUSPARSE(cusparseDnMatSetValues(mmdata->matCDescr, (void *)carray));
+    mmdata->Aid           = aid;
+    mmdata->Anonzerostate = anonzerostate;
+    mmdata->Arowptr       = arowptr;
+    mmdata->Acolidx       = acolidx;
+    mmdata->Arows         = arows;
+    mmdata->Acols         = acols;
+    mmdata->Annz          = annz;
+    mmdata->opA           = opA;
+    mmdata->opB           = opB;
+    mmdata->spmmAlg       = cusp->spmmAlg;
+    mmdata->initialized   = PETSC_TRUE;
   }
 
   /* do cusparseSpMM, which supports transpose on B */
-  PetscCallCUSPARSE(cusparseSpMM(cusp->handle, opA, opB, mat->alpha_one, matADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, mmdata->mmBuffer));
+  PetscCallCUSPARSE(cusparseSpMM(cusp->handle, opA, opB, mat->alpha_one, mmdata->matSpADescr, mmdata->matBDescr, mat->beta_zero, mmdata->matCDescr, cusparse_scalartype, cusp->spmmAlg, mmdata->mmBuffer));
 
   PetscCall(PetscLogGpuTimeEnd());
   PetscCall(PetscLogGpuFlops(n * 2.0 * csrmat->num_entries));
@@ -3142,7 +3158,6 @@ static PetscErrorCode MatSeqAIJCUSPARSEMultStruct_Destroy(Mat_SeqAIJCUSPARSEMult
         PetscCallCUSPARSE(cusparseDestroyDnVec(mdata->cuSpMV[i].vecYDescr));
         PetscCallCUSPARSE(cusparseDestroySpMat(mdata->cuSpMV[i].matDescr));
       }
-      if (mdata->matDescr_SpMM[i]) PetscCallCUSPARSE(cusparseDestroySpMat(mdata->matDescr_SpMM[i]));
     }
     delete *matstruct;
     *matstruct = NULL;

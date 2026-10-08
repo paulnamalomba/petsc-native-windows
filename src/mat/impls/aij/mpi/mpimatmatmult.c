@@ -741,7 +741,15 @@ static PetscErrorCode MatMatMultNumeric_MPIAIJ_MPIDense(Mat A, Mat B, Mat C)
   if (PetscDefined(HAVE_CUPM)) {
     PetscCall(PetscObjectTypeCompare((PetscObject)C, MATMPIDENSE, &flg));
     if (flg) PetscCall(PetscObjectTypeCompare((PetscObject)A, MATMPIAIJ, &flg));
-    clear = (PetscBool)!flg; /* if either A or C is a device Mat, make sure MatProductClear() is called */
+#if PetscDefined(HAVE_CUDA)
+    if (!flg) {
+      PetscCall(PetscObjectTypeCompare((PetscObject)A, MATMPIAIJCUSPARSE, &flg));
+      if (flg) PetscCall(PetscObjectTypeCompare((PetscObject)B, MATMPIDENSECUDA, &flg));
+      if (flg) PetscCall(PetscObjectTypeCompare((PetscObject)C, MATMPIDENSECUDA, &flg));
+    }
+#endif
+    /* CUDA SpMM owns its descriptors and workspace in the local product, so retain them between calls. */
+    clear = (PetscBool)!flg;
   }
   /* The device scatter is non-blocking, so when there are no column batches start it before the product of the
      diagonal block below to overlap the communication with that product, as MatMult_MPIAIJ() does. The host
