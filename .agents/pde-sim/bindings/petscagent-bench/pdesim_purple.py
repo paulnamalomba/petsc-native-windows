@@ -1140,13 +1140,24 @@ class PdeSimPurpleExecutor(AgentExecutor):
                           f"subagents={usage['subagents_spawned']} "
                           f"skill_tool={usage['skill_tool_calls']} "
                           f"skills_read={usage['pdesim_skills_read']}", flush=True)
-                # Locate and parse the manifest once; fold code-generation's build/run/fix
-                # iteration count (its attempts[] journal length) into usage so the sidecar
-                # records a per-stage attempt count for the code-generation stage too.
+                # Locate and parse the manifest once; fold how often code generation
+                # had to fix something into usage, so the sidecar records the cost of
+                # getting the program right alongside the stage dispatch counts.
                 manifest_path = _find_manifest(stdout, study_dir, since)
                 manifest = json.loads(manifest_path.read_text()) if manifest_path else None
                 if usage is not None and isinstance(manifest, dict):
-                    usage["code_generation_iterations"] = len(manifest.get("attempts") or [])
+                    attempts = manifest.get("attempts")
+                    # Only build and run can fail in a way that says anything: the
+                    # journal's third action, format, just runs PETSc's formatter
+                    # and succeeds. Absent means the config never wrote the journal
+                    # (only config 3 follows results-manifest.schema.json), which is
+                    # not the same as a run that failed nothing — leave the field out
+                    # rather than report a zero that reads as a clean run.
+                    if isinstance(attempts, list):
+                        usage["code_generation_failures"] = sum(
+                            1 for a in attempts
+                            if isinstance(a, dict) and a.get("status") == "failure"
+                            and a.get("action") in ("build", "run"))
             except PdeSimTimeout as e:
                 # A killed run reports no cost, but it still consumed tokens; keep
                 # what it did report so the spend is not silently lost.

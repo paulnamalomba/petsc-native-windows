@@ -192,10 +192,19 @@ bench should aggregate attempts is left to the bench maintainers):
   for numerical-analysis: plan and assess); a value `>1` means the orchestrator
   re-dispatched that stage, e.g. a revise-plan feedback loop. Empty for configs 1–2
   (no subagents).
-- `code_generation_iterations` — the length of the code-generation stage's own
-  build/run/format fix loop, taken from the manifest's `attempts[]` journal (the
-  number of tries that stage needed, distinct from how many times it was
-  *dispatched*).
+- `code_generation_failures` — how many entries in the manifest's `attempts[]`
+  journal are a failed `build` or `run`, i.e. how often code generation had to fix
+  something before the program worked. This counts failures within a dispatch,
+  where `stage_attempts["code-generation"]` counts the dispatches themselves. The
+  journal's third action, `format`, is not counted: it runs PETSc's formatter and
+  succeeds, so it says nothing about the generated code.
+  **Omitted entirely when the manifest has no `attempts[]`**, which today means
+  configs 1–2. Every config builds and runs its program — the shared contract
+  requires it — but only config 3 is asked for a manifest conforming to
+  `results-manifest.schema.json`, whose `required` list includes the journal;
+  configs 1–2 are asked only for a `runs` array, so their failures go unrecorded
+  rather than unmade. The field is omitted rather than zero because a zero would
+  read as a run that failed nothing.
 
 A usage record is written on **every** path — success, timeout, or failure — so a
 run's consumption is never silently lost. A run killed at `PDESIM_TIMEOUT` emits
