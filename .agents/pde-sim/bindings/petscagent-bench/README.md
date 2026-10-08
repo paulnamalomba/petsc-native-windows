@@ -179,6 +179,37 @@ purple's LLM); the Green config still applies.
 | `PDESIM_USAGE_LOG`                    | *(unset)*                                           | explicit single-file override for the usage record (used when`PDESIM_USAGE_DIR` is not set)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `PDESIM_SAVE_TRANSCRIPT`              | `1`                                                 | (also gates spec companions) save the run's model I/O to the study dir,**live**, and — at the end — a companion `<name>.md` for each math-bearing spec JSON the pipeline wrote (`problem-spec.json`, `numerical-plan.json`, …), rendering its `*_latex`/formula fields as `$$` blocks so the equations are readable in a Markdown-math viewer. Model I/O: The CLI runs with `--output-format stream-json`, so `transcript.stream.jsonl` is appended one event per line as the run happens (`tail -f` it to watch it grow). Readable `.md` files are re-rendered every ~3s and once at the end: each turn timestamped `[HH:MM:SS]` local, each tool result showing the tool and its duration (e.g. `(Bash, 5.4s)`), plus a same-named `.json` sibling with the full, UNtruncated events (look up any `…[truncated]` there), plus `transcript-stderr.log`. Single-agent runs get `transcript.{md,json}`; config 3 splits by role into `transcript-{orchestrator,pde-modeling,numerical-analysis,code-generation,visualization}.{md,json}` (split by `parent_tool_use_id`, roles from the dispatch prompt). Each per-role file grows **live**: it appears the moment its subagent is dispatched and gains one timestamped progress line per tool the subagent runs (from the CLI's `task_*` events, which are the only material available before the subagent's full turns arrive), so a long code-generation step is visible step-by-step and a stall shows as a growing time gap; the coarse progress lines are superseded by the full detailed turns once the subagent completes. Set `0` to disable |
 
+### What each metric covers
+
+A config-3 run is an orchestrator plus the specialists it dispatches, so a figure
+is only meaningful once you know which of them it counts. "Whole run" below means
+the orchestrator **and** its subagents; under configs 1 and 2, which dispatch
+none, whole-run and orchestrator-only coincide.
+
+| metric | covers | how it combines |
+| --- | --- | --- |
+| `input_tokens`, `output_tokens`, `total_tokens`, `cached_tokens` | whole run | summed, from the CLI's `modelUsage` breakdown |
+| `cost_usd` | whole run | the CLI's `total_cost_usd`, which the `modelUsage` costs sum to |
+| `model_calls` | whole run | one per assistant message, counted over the transcript |
+| `tool_calls` | whole run | one per `tool_use` block |
+| `peak_context_tokens` | whole run | a **maximum** over single turns, not a sum |
+| `stage_attempts` | whole run | per-specialist dispatch counts; empty without subagents |
+| `code_generation_failures` | the code-generation stage only | failed `build`/`run` journal entries |
+| `skill_tool_calls`, `subagent_tool_calls`, `pdesim_skills_read` | whole run | counted over the transcript |
+| `subagents_spawned`, `subagents_completed`, `subagents_failed` | the orchestrator's view | as the CLI reports them |
+| `num_turns`, `model_responses` | orchestrator only / whole run | the CLI's own turn count, kept for reference, and the response count `model_calls` reports |
+| `wall_sec`, `returncode`, `config`, `context_id`, `ts` | the request | per-request context, not a metric |
+
+`cached_tokens` is the cache-read **part of** `input_tokens`, not an addition to
+it. A run killed at `PDESIM_TIMEOUT` reports neither `cost_usd` nor a `modelUsage`
+breakdown, so its record is flagged `partial` and its token counts fall back to
+per-turn sums that overstate input and understate output.
+
+The sidecar spells three of these differently, since it predates the telemetry
+contract: `prompt_tokens` is `input_tokens`, `completion_tokens` is
+`output_tokens`, and `model_name` is the model the CLI reported, where the
+telemetry's `model` is the label built from it (`pdesim-<model>-c<N>`).
+
 ### Per-stage attempts in the usage sidecar
 
 Each `PDESIM_USAGE_DIR` record carries two attempt counts, recorded **binding-side
