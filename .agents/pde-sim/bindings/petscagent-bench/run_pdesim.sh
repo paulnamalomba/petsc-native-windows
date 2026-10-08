@@ -323,10 +323,13 @@ start_purple() {                         # start_purple <config>
   # setsid puts the Purple in its own process group so stop_purple can take down
   # the claude CLI it spawns too; without that a killed Purple leaves the
   # generation running, which is how an orphan once finished after a Ctrl-C.
-  # No PDESIM_USAGE_DIR: that would make the Purple append a usage-*.jsonl
-  # sidecar, which nothing reads. Green takes its telemetry in-band, from the
-  # petscagent.telemetry.v1 data Part the Purple returns over A2A.
-  PDESIM_CONFIG=$c \
+  # Green takes its own telemetry in-band, from the petscagent.telemetry.v1 data
+  # Part the Purple returns over A2A. The sidecar carries what that contract has
+  # no field for — stage_attempts and code_generation_failures — and a record of
+  # a run that failed before Green could score it. It lands in $OUTPUT beside the
+  # results as usage-pdesim-<model>-c<config>.jsonl, so the configs do not
+  # collide and each run's records stand alone.
+  PDESIM_CONFIG=$c PDESIM_USAGE_DIR=$OUTPUT \
     new_session uv run python "$PURPLE" > "/tmp/pdesim_purple_c$c.log" 2>&1 &
   PURPLE_PID=$!
   # Advisory only: new_session()'s setsid() may not have run yet, so this can read
