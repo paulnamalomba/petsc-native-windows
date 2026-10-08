@@ -904,15 +904,23 @@ def _find_manifest(stdout: str, study_dir: Path, since_ts: float) -> Optional[Pa
 
 
 def _pick_run(manifest: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Choose a representative run: first successful, else first listed."""
-    runs = manifest.get("runs") or []
-    for r in runs:
-        if r.get("status") == "success" and r.get("command"):
-            return r
-    for r in runs:
-        if r.get("command"):
-            return r
-    return None
+    """Choose a representative run: the most parallel successful one.
+
+    The pipeline records every run it made — MMS levels, serial and parallel
+    production runs — in no particular order, so taking the first success made
+    the reported rank count depend on how the agent happened to order the list.
+    Prefer the largest ``mpi_ranks`` instead, which exercises the parallel path;
+    on a tie the earlier run wins, so the choice is deterministic. Runs above
+    PDESIM_MAX_NSIZE are passed over where possible, since nsize is clamped to
+    that cap and would otherwise be reported at a rank count never tested.
+    Falls back to the first run with a command when none succeeded.
+    """
+    runs = [r for r in (manifest.get("runs") or []) if r.get("command")]
+    ranks = lambda r: int(r.get("mpi_ranks") or 1)  # noqa: E731 - absent means serial
+    ok = [r for r in runs if r.get("status") == "success"]
+    if ok:
+        return max([r for r in ok if ranks(r) <= SETTINGS.max_nsize] or ok, key=ranks)
+    return runs[0] if runs else None
 
 
 def _split_command(command: str) -> Tuple[Optional[str], str]:
