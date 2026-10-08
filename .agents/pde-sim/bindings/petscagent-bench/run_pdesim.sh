@@ -23,7 +23,8 @@
 #   -m, --model NAME     model the Purple generates with, as PDESIM_CLAUDE_MODEL
 #                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
 #   -i, --progress SECS  seconds between progress lines, 0 to silence (default 30)
-#   -o, --output DIR     where Green writes results, as main.py --output takes it
+#   -o, --output DIR     one directory for everything this run produces: Green's
+#                        results, the Purple's usage sidecar and its study dirs
 #                        (default $BENCH/output/pdesim_<timestamp>, one per run)
 #
 # -p takes a glob, so -p '*' is the full matrix: ./run_pdesim.sh -p '*' -c 1,2,3
@@ -33,10 +34,11 @@
 # The bare id takes the 200K default, and a pde-sim run has been seen to peak at
 # ~220K tokens of context, so the 1M form is what avoids mid-run compaction.
 #
-# Each run writes to its own output directory, so results never collide with an
-# earlier run's and nothing has to be parked first. Green puts the aggregate JSON
-# there, one per config, beside the code/ and scores/ trees it writes per variant.
-# Building a report from them is a separate step.
+# Each run writes to its own output directory, so nothing collides with an earlier
+# run's and nothing has to be parked first. It ends up holding Green's aggregate
+# JSON per config beside the code/ and scores/ trees, the Purple's usage sidecar
+# per config, and artifacts/c<N>/ with that config's study dirs. Building a report
+# from them is a separate step.
 #
 # Logs: this script to stdout, per-config detail to /tmp/pdesim_{purple,launch}_c<N>.log
 set -u
@@ -64,7 +66,8 @@ Usage: run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
   -i, --progress SECS  seconds between progress lines, 0 to silence (default: 30)
   -b, --bench DIR      petscagent-bench repo root
                              (default: $PETSCAGENT_BENCH, else ~/petscagent-bench)
-  -o, --output DIR     where Green writes results, as main.py --output takes it
+  -o, --output DIR     one directory for everything this run produces: Green's
+                       results, the Purple's usage sidecar and its study dirs
                        (default: $BENCH/output/pdesim_<timestamp>, one per run)
   -h, --help           this message
 
@@ -131,13 +134,17 @@ BENCH=$abs
 PURPLE=$PETSC_DIR/.agents/pde-sim/bindings/petscagent-bench/pdesim_purple.py
 ARTIFACTS=$PETSC_DIR/artifacts
 CASE_INDEX=$PETSC_DIR/.agents/pde-sim/components/case-index.json
-ARCHIVE=$PETSC_DIR/artifacts_runs/run_$RUN_ID
-# One output directory per invocation, so a run's results stand alone without
-# having to park the previous run's out of the way first. Green creates it and
-# writes the aggregate JSON plus its code/ and scores/ trees there, one set per
-# config (the configs differ in their model slug, pdesim-<model>-c<N>, so they
-# share a directory without colliding). Same stamp as $ARCHIVE, to pair them.
+# One directory per invocation holding everything the run produced, so its
+# results stand alone without having to park the previous run's out of the way
+# first. Green writes the aggregate JSON plus its code/ and scores/ trees here,
+# one set per config (the configs differ in their model slug, pdesim-<model>-c<N>,
+# so they share a directory without colliding); the Purple appends its usage
+# sidecar here; and each config's study dirs are stashed into artifacts/ below.
 OUTPUT=${OUTPUT:-$BENCH/output/pdesim_$RUN_ID}
+# The pipeline writes studies into $ARTIFACTS as it works, since the orchestration
+# skill places them under the repo's artifacts/; they are moved here afterwards so
+# the whole run ends up in one place.
+ARCHIVE=$OUTPUT/artifacts
 [ -f "$PURPLE" ] || die "no pde-sim binding under PETSC_DIR=$PETSC_DIR (looked for $PURPLE)"
 [ -f "$PETSC_DIR/$PETSC_ARCH/lib/petsc/conf/petscvariables" ] ||
   die "PETSC_ARCH=$PETSC_ARCH is not a configured build of $PETSC_DIR"
