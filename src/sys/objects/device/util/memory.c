@@ -1,6 +1,20 @@
 #include <petsc/private/deviceimpl.h> /*I <petscdevice.h> I*/
 #include <petscdevice_cupm.h>
 
+PetscErrorCode PetscDeviceGetAllocationAlignment_Private(PetscInt requested, size_t type_alignment, PetscBool host_fallback, size_t *alignment)
+{
+  PetscFunctionBegin;
+  PetscAssertPointer(alignment, 4);
+  PetscCheck(requested == PETSC_DECIDE || requested > 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Alignment must be PETSC_DECIDE or a positive power of two, got %" PetscInt_FMT, requested);
+  PetscCheck(requested == PETSC_DECIDE || !(requested & (requested - 1)), PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Alignment %" PetscInt_FMT " must be a power of two", requested);
+  PetscCheck(type_alignment && !(type_alignment & (type_alignment - 1)), PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Type alignment %zu must be a positive power of two", type_alignment);
+  if (host_fallback) {
+    PetscCheck(requested == PETSC_DECIDE || !(PETSC_MEMALIGN % requested), PETSC_COMM_SELF, PETSC_ERR_SUP, "Host allocation fallback guarantees %d-byte alignment; requested %" PetscInt_FMT "-byte alignment is not supported", PETSC_MEMALIGN, requested);
+    *alignment = PETSC_MEMALIGN;
+  } else *alignment = requested == PETSC_DECIDE ? type_alignment : PetscMax((size_t)requested, type_alignment);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 // REVIEW ME: this should probably return PETSC_MEMTYPE_CUDA and PETSC_MEMTYPE_HIP
 
 /*@

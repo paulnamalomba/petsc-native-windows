@@ -48,21 +48,31 @@ public:
   static PetscErrorCode Convert_MPIDense_MPIDenseCUPM(Mat, MatType, MatReuse, Mat *) noexcept;
 
   template <PetscMemType, PetscMemoryAccessMode>
-  static PetscErrorCode GetArray(Mat, PetscScalar **, PetscDeviceContext = nullptr) noexcept;
+  static PetscErrorCode GetArray(Mat, PetscScalar **, PetscDeviceContext) noexcept;
   template <PetscMemType, PetscMemoryAccessMode>
-  static PetscErrorCode RestoreArray(Mat, PetscScalar **, PetscDeviceContext = nullptr) noexcept;
+  static PetscErrorCode RestoreArray(Mat, PetscScalar **, PetscDeviceContext) noexcept;
 
 private:
   template <PetscMemType mtype, PetscMemoryAccessMode mode>
   static PetscErrorCode GetArrayC_(Mat m, PetscScalar **p) noexcept
   {
-    return GetArray<mtype, mode>(m, p);
+    PetscDeviceContext dctx;
+
+    PetscFunctionBegin;
+    PetscCall(GetHandles_(&dctx));
+    PetscCall(GetArray<mtype, mode>(m, p, dctx));
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
   template <PetscMemType mtype, PetscMemoryAccessMode mode>
   static PetscErrorCode RestoreArrayC_(Mat m, PetscScalar **p) noexcept
   {
-    return RestoreArray<mtype, mode>(m, p);
+    PetscDeviceContext dctx;
+
+    PetscFunctionBegin;
+    PetscCall(GetHandles_(&dctx));
+    PetscCall(RestoreArray<mtype, mode>(m, p, dctx));
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
 public:
@@ -183,6 +193,7 @@ inline PetscErrorCode MatDense_MPI_CUPM<T>::Convert_Dispatch_(Mat M, MatType, Ma
     // ============================================================
     MatSetOp_CUPM(to_host, B, getdiagonal, MatGetDiagonal_MPIDense, GetDiagonal);
     MatSetOp_CUPM(to_host, B, bindtocpu, nullptr, BindToCPU);
+    MatSetOp_CUPM(to_host, B, getcurrentmemtype, nullptr, GetCurrentMemType);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -287,23 +298,23 @@ inline PetscErrorCode MatDense_MPI_CUPM<T>::Convert_MPIDense_MPIDenseCUPM(Mat M,
 // ==========================================================================================
 
 template <device::cupm::DeviceType T>
-template <PetscMemType, PetscMemoryAccessMode access>
+template <PetscMemType mtype, PetscMemoryAccessMode access>
 inline PetscErrorCode MatDense_MPI_CUPM<T>::GetArray(Mat A, PetscScalar **array, PetscDeviceContext dctx) noexcept
 {
   auto &mimplA = MatIMPLCast(A)->A;
 
   PetscFunctionBegin;
   if (!mimplA) PetscCall(MatCreateSeqDenseCUPM<T>(PETSC_COMM_SELF, A->rmap->n, A->cmap->N, nullptr, &mimplA, dctx));
-  PetscCall(MatDenseCUPMGetArray_Private<T, access>(mimplA, array));
+  PetscCall(MatSeqDenseCUPMGetArray_Private<T, mtype, access>(mimplA, array, dctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 template <device::cupm::DeviceType T>
-template <PetscMemType, PetscMemoryAccessMode access>
-inline PetscErrorCode MatDense_MPI_CUPM<T>::RestoreArray(Mat A, PetscScalar **array, PetscDeviceContext) noexcept
+template <PetscMemType mtype, PetscMemoryAccessMode access>
+inline PetscErrorCode MatDense_MPI_CUPM<T>::RestoreArray(Mat A, PetscScalar **array, PetscDeviceContext dctx) noexcept
 {
   PetscFunctionBegin;
-  PetscCall(MatDenseCUPMRestoreArray_Private<T, access>(MatIMPLCast(A)->A, array));
+  PetscCall(MatSeqDenseCUPMRestoreArray_Private<T, mtype, access>(MatIMPLCast(A)->A, array, dctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

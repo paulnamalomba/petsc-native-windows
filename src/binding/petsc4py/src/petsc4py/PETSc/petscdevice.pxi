@@ -15,6 +15,11 @@ cdef extern from * nogil:
         PETSC_MEMTYPE_HIP
         PETSC_MEMTYPE_SYCL
 
+    ctypedef enum PetscMemoryAccessMode:
+        PETSC_MEMORY_ACCESS_READ
+        PETSC_MEMORY_ACCESS_WRITE
+        PETSC_MEMORY_ACCESS_READ_WRITE
+
     ctypedef enum PetscDeviceType:
         PETSC_DEVICE_HOST
         PETSC_DEVICE_CUDA
@@ -61,6 +66,7 @@ cdef extern from * nogil:
     PetscErrorCode PetscDeviceContextSetFromOptions(MPI_Comm, PetscDeviceContext)
     PetscErrorCode PetscDeviceContextView(PetscDeviceContext, PetscViewer)
     PetscErrorCode PetscDeviceContextViewFromOptions(PetscDeviceContext, PetscObject, const char name[])
+    PetscErrorCode PetscDeviceContextGetDefaultContext(PetscDeviceContext *)
     PetscErrorCode PetscDeviceContextGetCurrentContext(PetscDeviceContext *)
     PetscErrorCode PetscDeviceContextSetCurrentContext(PetscDeviceContext)
 

@@ -179,7 +179,6 @@ M*/
     } while (0)
   #define CHKERRCURAND(...) PetscCallCURAND(__VA_ARGS__)
 
-PETSC_EXTERN cudaStream_t   PetscDefaultCudaStream; // The default stream used by PETSc
 PETSC_EXTERN PetscErrorCode PetscCUBLASGetHandle(cublasHandle_t *);
 PETSC_EXTERN PetscErrorCode PetscCUSOLVERDnGetHandle(cusolverDnHandle_t *);
 PETSC_EXTERN PetscErrorCode PetscGetCurrentCUDAStream(cudaStream_t *);

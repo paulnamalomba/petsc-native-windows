@@ -3,7 +3,7 @@
 #include <petsc/private/matdensecupmimpl.h> /*I <petscmat.h> I*/
 #include <../src/mat/impls/dense/seq/dense.h>
 
-#include <petsc/private/deviceimpl.h> // PetscDeviceContextGetOptionalNullContext_Internal()
+#include <petsc/private/deviceimpl.h>
 #include <petsc/private/randomimpl.h> // _p_PetscRandom
 #include <petsc/private/vecimpl.h>    // _p_Vec
 #include <petsc/private/cupmobject.hpp>
@@ -196,6 +196,28 @@ inline PetscErrorCode MatCreateSeqDenseCUPM(MPI_Comm comm, PetscInt m, PetscInt 
 {
   PetscFunctionBegin;
   PetscCall(impl::MatDense_Seq_CUPM<T>::CreateIMPLDenseCUPM(comm, m, n, m, n, data, A, dctx, preallocate));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+template <device::cupm::DeviceType T, PetscMemType mtype, PetscMemoryAccessMode access>
+inline PetscErrorCode MatSeqDenseCUPMGetArray_Private(Mat A, PetscScalar **array, PetscDeviceContext dctx) noexcept
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(A, MAT_CLASSID, 1);
+  PetscAssertPointer(array, 2);
+  PetscValidDeviceContext(dctx, 3);
+  PetscCall(impl::MatDense_Seq_CUPM<T>::template GetArray<mtype, access>(A, array, dctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+template <device::cupm::DeviceType T, PetscMemType mtype, PetscMemoryAccessMode access>
+inline PetscErrorCode MatSeqDenseCUPMRestoreArray_Private(Mat A, PetscScalar **array, PetscDeviceContext dctx) noexcept
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(A, MAT_CLASSID, 1);
+  if (array) PetscAssertPointer(array, 2);
+  PetscValidDeviceContext(dctx, 3);
+  PetscCall(impl::MatDense_Seq_CUPM<T>::template RestoreArray<mtype, access>(A, array, dctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -775,7 +797,7 @@ inline PetscErrorCode MatDense_Seq_CUPM<T>::MatMatSolve_Factored_Dispatch_(Mat A
       // X's array cannot serve as the array (too small or not on device), B's array cannot
       // serve as the array (const), so allocate a new array
       ldy = m;
-      PetscCall(PetscCUPMMallocAsync(&y, nrhs * m));
+      PetscCall(PetscCUPMMallocAsync(&y, nrhs * m, stream));
     } else {
       // X's array should serve as the array
       ldy = ldx;
@@ -954,6 +976,7 @@ inline PetscErrorCode MatDense_Seq_CUPM<T>::Convert_Dispatch_(Mat M, MatType typ
     }
 
     MatSetOp_CUPM(to_host, B, bindtocpu, nullptr, BindToCPU);
+    MatSetOp_CUPM(to_host, B, getcurrentmemtype, nullptr, GetCurrentMemType);
     MatSetOp_CUPM(to_host, B, destroy, MatDestroy_SeqDense, Destroy);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -1174,7 +1197,7 @@ inline PetscErrorCode MatDense_Seq_CUPM<T>::GetArray(Mat m, PetscScalar **array,
 
   PetscFunctionBegin;
   static_assert((mtype == PETSC_MEMTYPE_HOST) || (mtype == PETSC_MEMTYPE_DEVICE), "");
-  PetscCall(PetscDeviceContextGetOptionalNullContext_Internal(&dctx));
+  PetscValidDeviceContext(dctx, 3);
   if (hostmem) {
     if (read_access) {
       PetscCall(DeviceToHost_(m, dctx));
@@ -1671,7 +1694,7 @@ inline PetscErrorCode MatDense_Seq_CUPM<T>::Norm(Mat A, NormType type, PetscReal
       const auto keys       = thrust::make_transform_iterator(thrust::make_counting_iterator(PetscInt{0}), detail::GroupIndexFunctor<PetscInt>{group_size});
       PetscReal *sums       = nullptr;
 
-      PetscCall(PetscDeviceMalloc(dctx, PETSC_MEMTYPE_CUPM(), ngroups, &sums));
+      PetscCall(PetscDeviceMalloc(dctx, PETSC_MEMTYPE_CUPM(), ngroups, PETSC_DECIDE, &sums));
       if (type == NORM_1) {
         // the sub-matrix iterator enumerates the entries column-major, so each run of m
         // consecutive keys is exactly one column, for any lda

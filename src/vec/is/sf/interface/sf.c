@@ -72,12 +72,12 @@ PetscErrorCode PetscSFCreate(MPI_Comm comm, PetscSF *sf)
   b->use_gpu_aware_mpi    = use_gpu_aware_mpi;
   b->use_stream_aware_mpi = PETSC_FALSE;
   b->unknown_input_stream = PETSC_FALSE;
-  #if PetscDefined(HAVE_KOKKOS) /* Prefer kokkos over cuda*/
-  b->backend = PETSCSF_BACKEND_KOKKOS;
-  #elif PetscDefined(HAVE_CUDA)
+  #if PetscDefined(HAVE_CUDA)
   b->backend = PETSCSF_BACKEND_CUDA;
   #elif PetscDefined(HAVE_HIP)
   b->backend = PETSCSF_BACKEND_HIP;
+  #elif PetscDefined(HAVE_KOKKOS)
+  b->backend = PETSCSF_BACKEND_KOKKOS;
   #endif
 
   #if PetscDefined(HAVE_NVSHMEM)
@@ -330,10 +330,25 @@ PetscErrorCode PetscSFSetUp(PetscSF sf)
                                      If true, this option only works with `-use_gpu_aware_mpi 1`.
 . -sf_use_stream_aware_mpi         - Assume the underlying MPI is CUDA-stream aware and `PetscSF` won't sync streams for send/recv buffers passed to MPI (default: false).
                                      If true, this option only works with `-use_gpu_aware_mpi 1`.
-- -sf_backend (cuda|hip|kokkos)    - Select the device backend `PetscSF` uses. On CUDA (HIP) devices, one can choose `cuda` (`hip`) or `kokkos` with the default being `kokkos`.
-                                     On other devices, the only available is `kokkos`.
+- -sf_backend (cuda|hip|kokkos)    - Select the device backend `PetscSF` uses. On CUDA (HIP) devices, one can choose `cuda` (`hip`) or `kokkos` with the default being `cuda` (`hip`).
+                                     On other devices, the only available backend is `kokkos`.
 
   Level: intermediate
+
+  Notes:
+  With `-sf_backend kokkos`, SF uses PETSc's shared Kokkos execution space. Changing the current
+  `PetscDeviceContext` does not change that execution space. Order input production and output consumption
+  with respect to the Kokkos execution space; synchronizing a different current context is insufficient.
+
+  MPIX stream support with `-sf_use_stream_aware_mpi` is incomplete. The MPI communicator is bound to the
+  CUDA stream selected during `PetscSFSetFromOptions()` and is not rebound when the current context changes.
+  In addition, enabling this option does not reliably select the MPIX enqueue operations. Keep this option
+  disabled until stream-ordered MPI communication is supported consistently.
+
+  With `-use_nvshmem`, use `-sf_backend cuda` and keep a fixed CUDA context. The Kokkos/NVSHMEM path does not
+  bind its dependency events to the Kokkos execution stream. NVSHMEM also uses a separate communication stream;
+  synchronization of the SF device stream, including at barrier-context completion, only waits for communication
+  ordered onto that stream. It does not guarantee completion of all NVSHMEM communication.
 
 .seealso: [](sec_petscsf), `PetscSF`, `PetscSFCreate()`, `PetscSFSetType()`
 @*/
@@ -373,11 +388,15 @@ PetscErrorCode PetscSFSetFromOptions(PetscSF sf)
 
   #if PetscDefined(HAVE_CUDA) && PetscDefined(HAVE_MPIX_STREAM)
     if (sf->use_stream_aware_mpi) {
-      MPI_Info info;
+      MPI_Info           info;
+      PetscDeviceContext dctx;
+      cudaStream_t      *stream;
 
+      PetscCall(PetscDeviceContextGetCurrentContextAssertType_Internal(&dctx, PETSC_DEVICE_CUDA));
+      PetscCall(PetscDeviceContextGetStreamHandle(dctx, (void **)&stream));
       PetscCallMPI(MPI_Info_create(&info));
       PetscCallMPI(MPI_Info_set(info, "type", "cudaStream_t"));
-      PetscCallMPI(MPIX_Info_set_hex(info, "value", &PetscDefaultCudaStream, sizeof(PetscDefaultCudaStream)));
+      PetscCallMPI(MPIX_Info_set_hex(info, "value", stream, sizeof(*stream)));
       PetscCallMPI(MPIX_Stream_create(info, &sf->mpi_stream));
       PetscCallMPI(MPI_Info_free(&info));
       PetscCallMPI(MPIX_Stream_comm_create(PetscObjectComm((PetscObject)sf), sf->mpi_stream, &sf->stream_comm));
@@ -1545,6 +1564,16 @@ PetscErrorCode PetscSFBcastWithMemTypeBegin(PetscSF sf, MPI_Datatype unit, Petsc
 
   Level: intermediate
 
+  Notes:
+  For device buffers, this routine synchronizes the SF device stream when the current `PetscDeviceContext`
+  uses `PETSC_STREAM_DEFAULT_WITH_BARRIER` or `PETSC_STREAM_NONBLOCKING_WITH_BARRIER`. Otherwise, device work
+  may remain pending after this routine returns.
+
+  Use the same current device context for the matching Begin/End calls. Before using the same `PetscSF` on
+  a different context, complete all outstanding Begin/End pairs and call `PetscDeviceContextSynchronize()`
+  on the previous context. This also applies when using different user buffers, since SF may reuse internal buffers.
+  See `PetscSFSetFromOptions()` for the additional Kokkos, MPIX, and NVSHMEM stream limitations.
+
 .seealso: [](sec_petscsf), `PetscSF`, `PetscSFSetGraph()`, `PetscSFReduceEnd()`
 @*/
 PetscErrorCode PetscSFBcastEnd(PetscSF sf, MPI_Datatype unit, const void *rootdata, void *leafdata, MPI_Op op)
@@ -1641,6 +1670,16 @@ PetscErrorCode PetscSFReduceWithMemTypeBegin(PetscSF sf, MPI_Datatype unit, Pets
 . rootdata - result of reduction of values from all leaves of each root
 
   Level: intermediate
+
+  Notes:
+  For device buffers, this routine synchronizes the SF device stream when the current `PetscDeviceContext`
+  uses `PETSC_STREAM_DEFAULT_WITH_BARRIER` or `PETSC_STREAM_NONBLOCKING_WITH_BARRIER`. Otherwise, device work
+  may remain pending after this routine returns.
+
+  Use the same current device context for the matching Begin/End calls. Before using the same `PetscSF` on
+  a different context, complete all outstanding Begin/End pairs and call `PetscDeviceContextSynchronize()`
+  on the previous context. This also applies when using different user buffers, since SF may reuse internal buffers.
+  See `PetscSFSetFromOptions()` for the additional Kokkos, MPIX, and NVSHMEM stream limitations.
 
 .seealso: [](sec_petscsf), `PetscSF`, `PetscSFSetGraph()`, `PetscSFBcastEnd()`, `PetscSFReduceBegin()`, `PetscSFReduceWithMemTypeBegin()`
 @*/
@@ -1752,6 +1791,16 @@ PetscErrorCode PetscSFFetchAndOpWithMemTypeBegin(PetscSF sf, MPI_Datatype unit, 
 - leafupdate - state at each leaf's respective root immediately prior to atomic update
 
   Level: advanced
+
+  Notes:
+  For device buffers, this routine synchronizes the SF device stream when the current `PetscDeviceContext`
+  uses `PETSC_STREAM_DEFAULT_WITH_BARRIER` or `PETSC_STREAM_NONBLOCKING_WITH_BARRIER`. Otherwise, device work
+  may remain pending after this routine returns.
+
+  Use the same current device context for the matching Begin/End calls. Before using the same `PetscSF` on
+  a different context, complete all outstanding Begin/End pairs and call `PetscDeviceContextSynchronize()`
+  on the previous context. This also applies when using different user buffers, since SF may reuse internal buffers.
+  See `PetscSFSetFromOptions()` for the additional Kokkos, MPIX, and NVSHMEM stream limitations.
 
 .seealso: [](sec_petscsf), `PetscSF`, `PetscSFComputeDegreeEnd()`, `PetscSFReduceEnd()`, `PetscSFSetGraph()`, `PetscSFFetchAndOpBegin()`, `PetscSFFetchAndOpWithMemTypeBegin()`
 @*/
