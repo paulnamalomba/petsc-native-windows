@@ -3,6 +3,7 @@ static char help[] = "Tests the use of interface functions for MATIS matrices an
 #include <petscmat.h>
 
 PetscErrorCode TestMatZeroRows(Mat, Mat, PetscBool, IS, PetscScalar, PetscBool);
+PetscErrorCode TestMatZeroRowsShell(Mat, Mat, IS, PetscScalar);
 PetscErrorCode CheckMat(Mat, Mat, PetscBool, const char *);
 PetscErrorCode CheckVariableBlockSizes(Mat);
 PetscErrorCode CheckRepeatedMapFiltering(MPI_Comm, PetscInt, PetscInt, InsertMode);
@@ -627,6 +628,7 @@ int main(int argc, char **args)
     /* nonzero diag value is supported for square matrices only */
     PetscCall(TestMatZeroRows(A, B, PETSC_TRUE, is, diag, PETSC_FALSE));
     PetscCall(TestMatZeroRows(A, B, PETSC_TRUE, lis, diag, PETSC_TRUE));
+    PetscCall(TestMatZeroRowsShell(A, B, is, diag));
 
     /* test MatIncreaseOverlap */
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Test MatIncreaseOverlap\n"));
@@ -1084,6 +1086,59 @@ PetscErrorCode CheckVariableBlockSizes(Mat A)
   for (PetscInt i = 0; i < nblocks; i++) sum += bsizes[i];
   PetscCheck(sum == m && (!m || nblocks), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Invalid variable block sizes on loaded local matrix");
   PetscCall(MatISRestoreLocalMat(A, &lA));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode MatMult_Local(Mat A, Vec x, Vec y)
+{
+  Mat local;
+
+  PetscFunctionBeginUser;
+  PetscCall(MatShellGetContext(A, &local));
+  PetscCall(MatMult(local, x, y));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode MatMultTranspose_Local(Mat A, Vec x, Vec y)
+{
+  Mat local;
+
+  PetscFunctionBeginUser;
+  PetscCall(MatShellGetContext(A, &local));
+  PetscCall(MatMultTranspose(local, x, y));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode TestMatZeroRowsShell(Mat A, Mat Afull, IS rows, PetscScalar diag)
+{
+  Mat      B, Bcheck, local, shell;
+  PetscInt m, n;
+
+  PetscFunctionBeginUser;
+  for (PetscInt columns = 0; columns < 2; columns++) {
+    PetscCall(MatDuplicate(A, MAT_COPY_VALUES, &B));
+    PetscCall(MatDuplicate(Afull, MAT_COPY_VALUES, &Bcheck));
+    PetscCall(MatSetOption(Bcheck, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+    PetscCall(MatISGetLocalMat(B, &local));
+    PetscCall(PetscObjectReference((PetscObject)local));
+    PetscCall(MatGetLocalSize(local, &m, &n));
+    PetscCall(MatCreateShell(PETSC_COMM_SELF, m, n, m, n, local, &shell));
+    PetscCall(MatShellSetOperation(shell, MATOP_MULT, (PetscErrorCodeFn *)MatMult_Local));
+    PetscCall(MatShellSetOperation(shell, MATOP_MULT_TRANSPOSE, (PetscErrorCodeFn *)MatMultTranspose_Local));
+    PetscCall(MatISSetLocalMat(B, shell));
+    PetscCall(MatDestroy(&shell));
+    if (columns) {
+      PetscCall(MatZeroRowsColumnsIS(B, rows, diag, NULL, NULL));
+      PetscCall(MatZeroRowsColumnsIS(Bcheck, rows, diag, NULL, NULL));
+    } else {
+      PetscCall(MatZeroRowsIS(B, rows, diag, NULL, NULL));
+      PetscCall(MatZeroRowsIS(Bcheck, rows, diag, NULL, NULL));
+    }
+    PetscCall(CheckMat(B, Bcheck, PETSC_TRUE, "Zero rows with a local shell matrix"));
+    PetscCall(MatDestroy(&B));
+    PetscCall(MatDestroy(&Bcheck));
+    PetscCall(MatDestroy(&local));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
