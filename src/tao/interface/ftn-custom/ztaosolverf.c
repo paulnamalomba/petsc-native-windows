@@ -6,6 +6,7 @@
   #define taosetgradient_                     TAOSETGRADIENT
   #define taosetobjectiveandgradient_         TAOSETOBJECTIVEANDGRADIENT
   #define taosethessian_                      TAOSETHESSIAN
+  #define taosethessianmult_                  TAOSETHESSIANMULT
   #define taosetresidualroutine_              TAOSETRESIDUALROUTINE
   #define taosetjacobianresidualroutine_      TAOSETJACOBIANRESIDUALROUTINE
   #define taosetjacobianroutine_              TAOSETJACOBIANROUTINE
@@ -26,6 +27,7 @@
   #define taosetgradient_                     taosetgradient
   #define taosetobjectiveandgradient_         taosetobjectiveandgradient
   #define taosethessian_                      taosethessian
+  #define taosethessianmult_                  taosethessianmult
   #define taosetresidualroutine_              taosetresidualroutine
   #define taosetjacobianresidualroutine_      taosetjacobianresidualroutine
   #define taosetjacobianroutine_              taosetjacobianroutine
@@ -48,6 +50,7 @@ static struct {
   PetscFortranCallbackId grad;
   PetscFortranCallbackId objgrad;
   PetscFortranCallbackId hess;
+  PetscFortranCallbackId hessmult;
   PetscFortranCallbackId lsres;
   PetscFortranCallbackId lsjac;
   PetscFortranCallbackId jac;
@@ -87,6 +90,11 @@ static PetscErrorCode ourtaoobjectiveandgradientroutine(Tao tao, Vec x, PetscRea
 static PetscErrorCode ourtaohessianroutine(Tao tao, Vec x, Mat H, Mat Hpre, PetscCtx ctx)
 {
   PetscObjectUseFortranCallback(tao, _cb.hess, (Tao *, Vec *, Mat *, Mat *, void *, PetscErrorCode *), (&tao, &x, &H, &Hpre, _ctx, &ierr));
+}
+
+static PetscErrorCode ourtaohessianmultroutine(Tao tao, Vec x, Vec v, Vec Hv, PetscCtx ctx)
+{
+  PetscObjectUseFortranCallback(tao, _cb.hessmult, (Tao *, Vec *, Vec *, Vec *, void *, PetscErrorCode *), (&tao, &x, &v, &Hv, _ctx, &ierr));
 }
 
 static PetscErrorCode ourtaojacobianroutine(Tao tao, Vec x, Mat H, Mat Hpre, PetscCtx ctx)
@@ -189,6 +197,13 @@ PETSC_EXTERN void taosethessian_(Tao *tao, Mat *H, Mat *Hpre, void (*func)(Tao *
   CHKFORTRANNULLFUNCTION(func);
   *ierr = PetscObjectSetFortranCallback((PetscObject)*tao, PETSC_FORTRAN_CALLBACK_CLASS, &_cb.hess, (PetscFortranCallbackFn *)func, ctx);
   if (!*ierr) *ierr = TaoSetHessian(*tao, *H, *Hpre, ourtaohessianroutine, ctx);
+}
+
+PETSC_EXTERN void taosethessianmult_(Tao *tao, void (*func)(Tao *, Vec *, Vec *, Vec *, void *, PetscErrorCode *), PetscCtx ctx, PetscErrorCode *ierr)
+{
+  CHKFORTRANNULLFUNCTION(func);
+  *ierr = PetscObjectSetFortranCallback((PetscObject)*tao, PETSC_FORTRAN_CALLBACK_CLASS, &_cb.hessmult, (PetscFortranCallbackFn *)func, ctx);
+  if (!*ierr) *ierr = TaoSetHessianMult(*tao, ourtaohessianmultroutine, ctx);
 }
 
 PETSC_EXTERN void taosetresidualroutine_(Tao *tao, Vec *res, void (*func)(Tao *, Vec *, Vec *, void *, PetscErrorCode *), PetscCtx ctx, PetscErrorCode *ierr)

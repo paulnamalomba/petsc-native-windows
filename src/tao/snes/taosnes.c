@@ -52,10 +52,18 @@ static PetscErrorCode TAOSNESFunc(SNES snes, Vec X, Vec F, PetscCtx ctx)
 
 static PetscErrorCode TAOSNESJac(SNES snes, Vec X, Mat A, Mat P, PetscCtx ctx)
 {
-  Tao tao = (Tao)ctx;
+  Tao       tao = (Tao)ctx;
+  PetscBool mf_operator;
 
   PetscFunctionBegin;
-  PetscCall(TaoComputeHessian(tao, X, A, P));
+  PetscCall(SNESGetUseMatrixFree(snes, &mf_operator, NULL));
+  if (mf_operator && A != P) {
+    /* SNES owns the matrix-free operator and updates its base point through MatAssemblyEnd().
+       Tao only assembles the separate matrix used to construct the preconditioner. */
+    PetscCall(TaoComputeHessian(tao, X, NULL, P));
+    PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+  } else PetscCall(TaoComputeHessian(tao, X, A, P));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

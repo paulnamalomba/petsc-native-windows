@@ -1,0 +1,246 @@
+Tao Object: (t_) 3 MPI processes
+  type: nls
+    Newton steps: 2
+    BFGS steps: 0
+    Gradient steps: 0
+    nls ksp atol: 0
+    nls ksp rtol: 2
+    nls ksp ctol: 0
+    nls ksp negc: 0
+    nls ksp dtol: 0
+    nls ksp iter: 0
+    nls ksp othr: 0
+  Objective function:
+    Scale (tao_objective_scale): 1.
+    Function:
+      TaoTerm Object: (t_) 3 MPI processes
+        type: sum
+        solution vector space: N = 10 [VecType mpi (tao_term_solution_vec_type)]
+        parameter vector space: (optional) K = 9 [VecType nest (tao_term_parameters_vec_type)]
+        Hessian MatType (tao_term_hessian_mat_type): shell
+        Hessian preconditioning MatType (tao_term_hessian_pre_mat_type): aij
+        Sum of 2 terms:
+          Summand 0:
+            Scale (tao_term_sum_t_callbacks_scale): 1.
+            Term:
+              TaoTerm Object: (t_callbacks_) 3 MPI processes
+                type: callbacks
+                solution vector space: N = 10 [VecType mpi (tao_term_solution_vec_type)]
+                parameter vector space: (none)
+                Hessian MatType (tao_term_hessian_mat_type): mpiaij
+                attached to Tao [name omitted] (t_)
+                The following methods have been set: objectiveandgradient, hessian
+                total number of function/gradient evaluations=8
+                total number of Hessian evaluations=2
+            Map: unmapped
+          Summand 1:
+            Scale (tao_term_sum_reg1_scale): 0.1
+            Term:
+              TaoTerm Object: (reg1_) 3 MPI processes
+                type: shell
+                solution vector space: N = 9 [VecType standard (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 9 [VecType standard (tao_term_parameters_vec_type)]
+                default Hessian MatType (tao_term_hessian_mat_type): aij
+                Context has been set
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
+                total number of function/gradient evaluations=8
+                total number of Hessian evaluations=2
+                total number of HessianMult evaluations=13
+            Map:
+              Mat Object: (A1_) 3 MPI processes
+                type: mpiaij
+                rows=9, cols=10
+                total: nonzeros=36, allocated nonzeros=75
+                total number of mallocs used during MatSetValues calls=0
+                  not using I-node (on process 0) routines
+        total number of function evaluations=5
+        total number of function/gradient evaluations=3
+        total number of Hessian evaluations=2
+        total number of HessianMult evaluations=13
+    Map: unmapped
+  TaoLineSearch Object: (t_) 3 MPI processes
+    type: more-thuente
+    maximum function evaluations=30
+    tolerances: ftol=0.0001, rtol=1e-10, gtol=0.9
+    total number of function evaluations=0
+    total number of gradient evaluations=0
+    total number of function/gradient evaluations=1
+    Termination reason: SUCCESS
+  KSP Object: (t_tao_nls_) 3 MPI processes
+    type: stcg
+    maximum iterations=10000, initial guess is zero
+    tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
+    left preconditioning
+    using UNPRECONDITIONED norm type for convergence test
+  PC Object: (t_tao_nls_) 3 MPI processes
+    type: bjacobi
+      number of blocks = 3
+      Local solver information for each block is in the following KSP and PC objects:
+      [0] number of local blocks = 1, first local block number = 0
+      [0] local block number 0
+      KSP Object: (t_tao_nls_sub_) 1 MPI process
+        type: preonly
+        maximum iterations=10000, initial guess is zero
+        tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
+        left preconditioning
+        not checking for convergence
+      PC Object: (t_tao_nls_sub_) 1 MPI process
+        type: ilu
+          out-of-place factorization
+          0 levels of fill
+          tolerance for zero pivot 2.22045e-14
+          matrix ordering: natural
+          factor fill ratio given 1., needed 1.
+            Factored matrix:
+              Mat Object: (t_tao_nls_sub_) 1 MPI process
+                type: seqaij
+                rows=4, cols=4
+                package used to perform factorization: petsc
+                total: nonzeros=16, allocated nonzeros=16
+                  using I-node routines: found 1 nodes, limit used is 5
+        linear system matrix, which is also used to construct the preconditioner:
+        Mat Object: (t_tao_nls_sub_) 1 MPI process
+          type: seqaij
+          rows=4, cols=4
+          total: nonzeros=16, allocated nonzeros=16
+          total number of mallocs used during MatSetValues calls=0
+            using I-node routines: found 1 nodes, limit used is 5
+      - - - - - - - - - - - - - - - - - -
+      [1] number of local blocks = 1, first local block number = 1
+      [1] local block number 0
+      KSP Object: (t_tao_nls_sub_) 1 MPI process
+        type: preonly
+        maximum iterations=10000, initial guess is zero
+        tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
+        left preconditioning
+        not checking for convergence
+      PC Object: (t_tao_nls_sub_) 1 MPI process
+        type: ilu
+          out-of-place factorization
+          0 levels of fill
+          tolerance for zero pivot 2.22045e-14
+          matrix ordering: natural
+          factor fill ratio given 1., needed 1.
+            Factored matrix:
+              Mat Object: (t_tao_nls_sub_) 1 MPI process
+                type: seqaij
+                rows=3, cols=3
+                package used to perform factorization: petsc
+                total: nonzeros=9, allocated nonzeros=9
+                  using I-node routines: found 1 nodes, limit used is 5
+        linear system matrix, which is also used to construct the preconditioner:
+        Mat Object: (t_tao_nls_sub_) 1 MPI process
+          type: seqaij
+          rows=3, cols=3
+          total: nonzeros=9, allocated nonzeros=9
+          total number of mallocs used during MatSetValues calls=0
+            using I-node routines: found 1 nodes, limit used is 5
+      - - - - - - - - - - - - - - - - - -
+      [2] number of local blocks = 1, first local block number = 2
+      [2] local block number 0
+      KSP Object: (t_tao_nls_sub_) 1 MPI process
+        type: preonly
+        maximum iterations=10000, initial guess is zero
+        tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
+        left preconditioning
+        not checking for convergence
+      PC Object: (t_tao_nls_sub_) 1 MPI process
+        type: ilu
+          out-of-place factorization
+          0 levels of fill
+          tolerance for zero pivot 2.22045e-14
+          matrix ordering: natural
+          factor fill ratio given 1., needed 1.
+            Factored matrix:
+              Mat Object: (t_tao_nls_sub_) 1 MPI process
+                type: seqaij
+                rows=3, cols=3
+                package used to perform factorization: petsc
+                total: nonzeros=9, allocated nonzeros=9
+                  using I-node routines: found 1 nodes, limit used is 5
+        linear system matrix, which is also used to construct the preconditioner:
+        Mat Object: (t_tao_nls_sub_) 1 MPI process
+          type: seqaij
+          rows=3, cols=3
+          total: nonzeros=9, allocated nonzeros=9
+          total number of mallocs used during MatSetValues calls=0
+            using I-node routines: found 1 nodes, limit used is 5
+      - - - - - - - - - - - - - - - - - -
+    linear system matrix, followed by the matrix used to construct the preconditioner:
+    Mat Object: 3 MPI processes
+      type: shell
+      rows=10, cols=10
+    Mat Object: 3 MPI processes
+      type: mpiaij
+      rows=10, cols=10
+      total: nonzeros=68, allocated nonzeros=68
+      total number of mallocs used during MatSetValues calls=0
+        [0] Local rows 4 nz 27 nz alloced 27 mem 0., using I-node routines
+        [0] on-diagonal part: nz 16 
+        [0] off-diagonal part: nz 11 
+        [1] Local rows 3 nz 21 nz alloced 21 mem 0., using I-node routines
+        [1] on-diagonal part: nz 9 
+        [1] off-diagonal part: nz 12 
+        [2] Local rows 3 nz 20 nz alloced 20 mem 0., using I-node routines
+        [2] on-diagonal part: nz 9 
+        [2] off-diagonal part: nz 11 
+        Information on VecScatter used in matrix-vector product: 
+        PetscSF Object: 3 MPI processes
+          type: basic
+          [0] Number of roots=4, leaves=6, remote ranks=2
+          [0] 0 <- (1,0)
+          [0] 1 <- (1,1)
+          [0] 2 <- (1,2)
+          [0] 3 <- (2,0)
+          [0] 4 <- (2,1)
+          [0] 5 <- (2,2)
+          [1] Number of roots=3, leaves=6, remote ranks=2
+          [1] 0 <- (0,1)
+          [1] 1 <- (0,2)
+          [1] 2 <- (0,3)
+          [1] 3 <- (2,0)
+          [1] 4 <- (2,1)
+          [1] 5 <- (2,2)
+          [2] Number of roots=3, leaves=5, remote ranks=2
+          [2] 0 <- (0,0)
+          [2] 1 <- (0,1)
+          [2] 2 <- (1,0)
+          [2] 3 <- (1,1)
+          [2] 4 <- (1,2)
+          [0] Roots referenced by my leaves, by rank
+          [0] 1: 3 edges
+          [0]    0 <- 0
+          [0]    1 <- 1
+          [0]    2 <- 2
+          [0] 2: 3 edges
+          [0]    3 <- 0
+          [0]    4 <- 1
+          [0]    5 <- 2
+          [1] Roots referenced by my leaves, by rank
+          [1] 0: 3 edges
+          [1]    0 <- 1
+          [1]    1 <- 2
+          [1]    2 <- 3
+          [1] 2: 3 edges
+          [1]    3 <- 0
+          [1]    4 <- 1
+          [1]    5 <- 2
+          [2] Roots referenced by my leaves, by rank
+          [2] 0: 2 edges
+          [2]    0 <- 0
+          [2]    1 <- 1
+          [2] 1: 3 edges
+          [2]    2 <- 0
+          [2]    3 <- 1
+          [2]    4 <- 2
+          MultiSF sort=rank-order
+  total KSP iterations: 8
+  convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
+  Residual in Function/Gradient:=6.34569e-12
+  Objective value=1.71232
+  total number of iterations=2,                          (max: 50)
+  total number of function evaluations=5,                  (max: unlimited)
+  total number of function/gradient evaluations=3,      (max: unlimited)
+  total number of Hessian evaluations=2
+  Solution converged:    ||g(X)|| <= gatol
+Reference callback comparison passed

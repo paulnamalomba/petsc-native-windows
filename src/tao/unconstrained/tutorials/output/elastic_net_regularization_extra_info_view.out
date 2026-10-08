@@ -1,10 +1,10 @@
 Tao Object: 1 MPI process
   type: nls
-    Newton steps: 2
+    Newton steps: 7
     BFGS steps: 0
-    Gradient steps: 0
+    Gradient steps: 1
     nls ksp atol: 0
-    nls ksp rtol: 2
+    nls ksp rtol: 7
     nls ksp ctol: 0
     nls ksp negc: 0
     nls ksp dtol: 0
@@ -29,8 +29,8 @@ Tao Object: 1 MPI process
                   Vec Object: 1 MPI process
                     type: seq
               total number of function evaluations=5
-              total number of function/gradient evaluations=3
-              total number of Hessian evaluations=2
+              total number of function/gradient evaluations=73
+              total number of Hessian evaluations=7
           Map:
             Mat Object: (Amat_) 1 MPI process
               type: seqdense
@@ -45,8 +45,8 @@ Tao Object: 1 MPI process
               solution vector space: N = 20
               parameter vector space: (optional) K = 20
               total number of function evaluations=5
-              total number of function/gradient evaluations=3
-              total number of Hessian evaluations=2
+              total number of function/gradient evaluations=73
+              total number of Hessian evaluations=7
         Summand 2:
           Scale: 0.1
           Term:
@@ -56,8 +56,8 @@ Tao Object: 1 MPI process
               parameter vector space: (optional) K = 10
               epsilon (tao_term_l1_epsilon): 0.
               total number of function evaluations=5
-              total number of function/gradient evaluations=3
-              total number of Hessian evaluations=2
+              total number of function/gradient evaluations=73
+              total number of Hessian evaluations=7
           Map:
             Mat Object: (Dmat_) 1 MPI process
               type: seqdense
@@ -72,19 +72,19 @@ Tao Object: 1 MPI process
               solution vector space: N = 20
               parameter vector space: (optional) K = 20
               total number of function evaluations=5
-              total number of function/gradient evaluations=3
-              total number of Hessian evaluations=2
+              total number of function/gradient evaluations=73
+              total number of Hessian evaluations=7
       total number of function evaluations=5
-      total number of function/gradient evaluations=3
-      total number of Hessian evaluations=2
+      total number of function/gradient evaluations=73
+      total number of Hessian evaluations=7
   TaoLineSearch Object: 1 MPI process
     type: more-thuente
     maximum function evaluations=30
     tolerances: ftol=0.0001, rtol=1e-10, gtol=0.9
     total number of function evaluations=0
     total number of gradient evaluations=0
-    total number of function/gradient evaluations=1
-    Termination reason: SUCCESS
+    total number of function/gradient evaluations=30
+    Termination reason: HALTED_OTHER
   KSP Object: (tao_nls_) 1 MPI process
     type: stcg
     maximum iterations=10000, initial guess is zero
@@ -112,12 +112,12 @@ Tao Object: 1 MPI process
       total: nonzeros=400, allocated nonzeros=400
       total number of mallocs used during MatSetValues calls=0
         using I-node routines: found 4 nodes, limit used is 5
-  total KSP iterations: 2
+  total KSP iterations: 7
   convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
-  Residual in Function/Gradient:=8.29653e-15
-  Objective value=19.8102
-  total number of iterations=2,                          (max: 50)
+  Residual in Function/Gradient:=0.124361
+  Objective value=7.12823
+  total number of iterations=7,                          (max: 50)
   total number of function evaluations=5,                  (max: unlimited)
-  total number of function/gradient evaluations=3,      (max: unlimited)
-  total number of Hessian evaluations=2
-  Solution converged:    ||g(X)|| <= gatol
+  total number of function/gradient evaluations=73,      (max: unlimited)
+  total number of Hessian evaluations=7
+  Solver failed:    Line Search Failure

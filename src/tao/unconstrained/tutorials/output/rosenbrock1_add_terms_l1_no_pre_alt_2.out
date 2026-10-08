@@ -39,6 +39,7 @@ Tao Object: 1 MPI process
                 parameter vector space: (none)
                 Hessian MatType (tao_term_hessian_mat_type): seqbaij
                 attached to Tao [name omitted]
+                The following methods have been set: objectiveandgradient, hessian, hessianmult
                 total number of function/gradient evaluations=16
                 total number of Hessian evaluations=10
             Map: unmapped

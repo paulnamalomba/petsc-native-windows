@@ -644,26 +644,19 @@ static PetscErrorCode TaoBRGNSetDictionaryMatrix_BRGN(Tao tao, Mat dict)
 . func - function pointer for the regularizer value and gradient evaluation
 - ctx  - application context for the regularizer
 
-  Calling sequence:
-+ tao - the `Tao` context
-. u   - the location at which to compute the objective and gradient
-. val - location to store objective function value
-. g   - location to store gradient
-- ctx - application context for the regularizer Hessian
-
   Level: advanced
 
-.seealso: `Tao`, `Mat`, `TAOBRGN`
+.seealso: `Tao`, `Mat`, `TAOBRGN`, `TaoObjectiveAndGradientFn`
 @*/
-PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine(Tao tao, PetscErrorCode (*func)(Tao tao, Vec u, PetscReal *val, Vec g, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine(Tao tao, TaoObjectiveAndGradientFn *func, PetscCtx ctx)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(tao, TAO_CLASSID, 1);
-  PetscTryMethod((PetscObject)tao, "TaoBRGNSetRegularizerObjectiveAndGradientRoutine_C", (Tao, PetscErrorCode (*)(Tao, Vec, PetscReal *, Vec, void *), void *), (tao, func, ctx));
+  PetscTryMethod((PetscObject)tao, "TaoBRGNSetRegularizerObjectiveAndGradientRoutine_C", (Tao, TaoObjectiveAndGradientFn *, void *), (tao, func, ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine_BRGN(Tao tao, PetscErrorCode (*func)(Tao tao, Vec u, PetscReal *val, Vec g, PetscCtx ctx), PetscCtx ctx)
+static PetscErrorCode TaoBRGNSetRegularizerObjectiveAndGradientRoutine_BRGN(Tao tao, TaoObjectiveAndGradientFn *func, PetscCtx ctx)
 {
   TAO_BRGN *gn = (TAO_BRGN *)tao->data;
 

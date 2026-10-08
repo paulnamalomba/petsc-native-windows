@@ -1080,18 +1080,11 @@ PetscErrorCode TaoADMMSetRegularizerConstraintJacobian(Tao tao, Mat J, Mat Jpre,
 . func - function pointer for the misfit value and gradient evaluation
 - ctx  - application context for the misfit
 
-  Calling sequence of func:
-+ tao - the `Tao` context
-. u   - in current input solution
-. f   - the contribution to the objective function
-. g   - the contribution to the gradient
-- ctx - the optional application context
-
   Level: advanced
 
-.seealso: `TAOADMM`
+.seealso: `TAOADMM`, `TaoObjectiveAndGradientFn`
 @*/
-PetscErrorCode TaoADMMSetMisfitObjectiveAndGradientRoutine(Tao tao, PetscErrorCode (*func)(Tao tao, Vec u, PetscReal *f, Vec g, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoADMMSetMisfitObjectiveAndGradientRoutine(Tao tao, TaoObjectiveAndGradientFn *func, PetscCtx ctx)
 {
   TAO_ADMM *am = (TAO_ADMM *)tao->data;
 
@@ -1115,18 +1108,11 @@ PetscErrorCode TaoADMMSetMisfitObjectiveAndGradientRoutine(Tao tao, PetscErrorCo
 . func - function pointer for the misfit Hessian evaluation
 - ctx  - application context for the misfit Hessian
 
-  Calling sequence of func:
-+ tao  - the `Tao` context
-. u    - in current input solution
-. H    - output, the contribution to the Hessian matrix
-. Hpre - an optional contribution to an alternative matrix with which the preconditioner is to be constructed
-- ctx  - the optional application context
-
   Level: advanced
 
-.seealso: `TAOADMM`
+.seealso: `TAOADMM`, `TaoHessianFn`
 @*/
-PetscErrorCode TaoADMMSetMisfitHessianRoutine(Tao tao, Mat H, Mat Hpre, PetscErrorCode (*func)(Tao tao, Vec u, Mat H, Mat Hpre, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoADMMSetMisfitHessianRoutine(Tao tao, Mat H, Mat Hpre, TaoHessianFn *func, PetscCtx ctx)
 {
   TAO_ADMM *am = (TAO_ADMM *)tao->data;
 
@@ -1165,18 +1151,11 @@ PetscErrorCode TaoADMMSetMisfitHessianRoutine(Tao tao, Mat H, Mat Hpre, PetscErr
 . func - function pointer for the regularizer value and gradient evaluation
 - ctx  - application context for the regularizer
 
-  Calling sequence of func:
-+ tao - the `Tao` context
-. u   - in current input solution
-. f   - the contribution to the objective function
-. g   - the contribution to the gradient
-- ctx - the optional application context
-
   Level: advanced
 
-.seealso: `TAOADMM`
+.seealso: `TAOADMM`, `TaoObjectiveAndGradientFn`
 @*/
-PetscErrorCode TaoADMMSetRegularizerObjectiveAndGradientRoutine(Tao tao, PetscErrorCode (*func)(Tao tao, Vec u, PetscReal *f, Vec g, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoADMMSetRegularizerObjectiveAndGradientRoutine(Tao tao, TaoObjectiveAndGradientFn *func, PetscCtx ctx)
 {
   TAO_ADMM *am = (TAO_ADMM *)tao->data;
 
@@ -1200,18 +1179,11 @@ PetscErrorCode TaoADMMSetRegularizerObjectiveAndGradientRoutine(Tao tao, PetscEr
 . func - function pointer for the regularizer Hessian evaluation
 - ctx  - application context for the regularizer Hessian
 
-  Calling sequence of func:
-+ tao  - the `Tao` context
-. u    - in current input solution
-. H    - output, the contribution to the Hessian matrix
-. Hpre - an optional contribution to an alternative matrix with which the preconditioner is to be constructed
-- ctx  - the optional application context
-
   Level: advanced
 
-.seealso: `TAOADMM`
+.seealso: `TAOADMM`, `TaoHessianFn`
 @*/
-PetscErrorCode TaoADMMSetRegularizerHessianRoutine(Tao tao, Mat H, Mat Hpre, PetscErrorCode (*func)(Tao tao, Vec u, Mat H, Mat Hpre, PetscCtx ctx), PetscCtx ctx)
+PetscErrorCode TaoADMMSetRegularizerHessianRoutine(Tao tao, Mat H, Mat Hpre, TaoHessianFn *func, PetscCtx ctx)
 {
   TAO_ADMM *am = (TAO_ADMM *)tao->data;
 

@@ -1,0 +1,123 @@
+  0 TAO,  Function value: 28.954,  Residual: 32.6863 
+  1 TAO,  Function value: 7.07347,  Residual: 1.02836 
+  2 TAO,  Function value: 7.05029,  Residual: 0.00788638 
+  3 TAO,  Function value: 7.05028,  Residual: 2.99552e-06 
+  4 TAO,  Function value: 7.05028,  Residual: 9.83311e-12 
+Tao Object: 2 MPI processes
+  type: nls
+    Newton steps: 4
+    BFGS steps: 0
+    Gradient steps: 0
+    nls ksp atol: 0
+    nls ksp rtol: 4
+    nls ksp ctol: 0
+    nls ksp negc: 0
+    nls ksp dtol: 0
+    nls ksp iter: 0
+    nls ksp othr: 0
+  Objective function:
+    Scale (tao_objective_scale): 1.
+    Function:
+      TaoTerm Object: 2 MPI processes
+        type: sum
+        solution vector space: N = 20 [VecType cuda (tao_term_solution_vec_type)]
+        parameter vector space: (optional) K = 130 [VecType nest (tao_term_parameters_vec_type)]
+        Hessian MatType (tao_term_hessian_mat_type): densecuda
+        Sum of 3 terms:
+          Summand 0:
+            Scale (tao_term_sum_data_scale): 1.
+            Term:
+              TaoTerm Object: (data_) 2 MPI processes
+                type: quadratic
+                solution vector space: N = 100 [VecType mpicuda (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 100 [VecType mpicuda (tao_term_parameters_vec_type)]
+                Hessian MatType (tao_term_hessian_mat_type): diagonal
+                Mat Object: 2 MPI processes
+                  type: diagonal
+                  rows=100, cols=100
+                    Vec Object: 2 MPI processes
+                      type: mpicuda
+                      length=100
+                total number of function evaluations=5
+                total number of function/gradient evaluations=5
+                total number of Hessian evaluations=4
+            Map:
+              Mat Object: (Amat_) 2 MPI processes
+                type: mpidensecuda
+                rows=100, cols=20
+                total: nonzeros=2000, allocated nonzeros=2000
+                total number of mallocs used during MatSetValues calls=0
+          Summand 1:
+            Scale (tao_term_sum_ridge_scale): 0.1
+            Term:
+              TaoTerm Object: (ridge_) 2 MPI processes
+                type: halfl2squared
+                solution vector space: N = 20 [VecType cuda (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 20 [VecType cuda (tao_term_parameters_vec_type)]
+                Hessian MatType (tao_term_hessian_mat_type): diagonal
+                total number of function evaluations=5
+                total number of function/gradient evaluations=5
+                total number of Hessian evaluations=4
+            Map: unmapped
+          Summand 2:
+            Scale (tao_term_sum_lasso_scale): 0.1
+            Term:
+              TaoTerm Object: (lasso_) 2 MPI processes
+                type: l1
+                solution vector space: N = 10 [VecType cuda (tao_term_solution_vec_type)]
+                parameter vector space: (optional) K = 10 [VecType cuda (tao_term_parameters_vec_type)]
+                Hessian MatType (tao_term_hessian_mat_type): diagonal
+                epsilon (tao_term_l1_epsilon): 0.1
+                total number of function evaluations=5
+                total number of function/gradient evaluations=5
+                total number of Hessian evaluations=4
+            Map:
+              Mat Object: (Dmat_) 2 MPI processes
+                type: mpidensecuda
+                rows=10, cols=20
+                total: nonzeros=200, allocated nonzeros=200
+                total number of mallocs used during MatSetValues calls=0
+        total number of function evaluations=5
+        total number of function/gradient evaluations=5
+        total number of Hessian evaluations=4
+    Map: unmapped
+  TaoLineSearch Object: 2 MPI processes
+    type: more-thuente
+    maximum function evaluations=30
+    tolerances: ftol=0.0001, rtol=1e-10, gtol=0.9
+    total number of function evaluations=0
+    total number of gradient evaluations=0
+    total number of function/gradient evaluations=1
+    Termination reason: SUCCESS
+  KSP Object: (tao_nls_) 2 MPI processes
+    type: stcg
+    maximum iterations=10000, initial guess is zero
+    tolerances: relative=1e-05, absolute=1e-50, divergence=10000.
+    left preconditioning
+    using UNPRECONDITIONED norm type for convergence test
+  PC Object: (tao_nls_) 2 MPI processes
+    type: jacobi
+      type DIAGONAL, using absolute value of entries
+    Vec Object: 2 MPI processes
+      type: mpicuda
+      length=20
+    linear system matrix, which is also used to construct the preconditioner:
+    Mat Object: 2 MPI processes
+      type: mpidensecuda
+      rows=20, cols=20
+      total: nonzeros=400, allocated nonzeros=400
+      total number of mallocs used during MatSetValues calls=0
+          [0] local rows 10 nz 200 nz alloced 200 mem 0 
+          [1] local rows 10 nz 200 nz alloced 200 mem 0 
+        PetscSF Object: 2 MPI processes
+          type: allgather
+  total KSP iterations: 26
+  convergence tolerances: gatol=1e-08,   grtol=1e-08,   steptol=0.,   gttol=0.
+  Residual in Function/Gradient:=9.83311e-12
+  Objective value=7.05028
+  total number of iterations=4,                          (max: 50)
+  total number of function evaluations=5,                  (max: unlimited)
+  total number of function/gradient evaluations=5,      (max: unlimited)
+  total number of Hessian evaluations=4
+  Solution converged:    ||g(X)|| <= gatol
+Device memtype check passed

@@ -14,6 +14,7 @@ or the chained Rosenbrock function:\n\
 /* -------------- User-defined routines ---------- */
 static PetscErrorCode FormFunctionGradient(Tao, Vec, PetscReal *, Vec, void *);
 static PetscErrorCode FormHessian(Tao, Vec, Mat, Mat, void *);
+static PetscErrorCode FormHessianMult(Tao, Vec, Vec, Vec, void *);
 
 int main(int argc, char **argv)
 {
@@ -50,9 +51,10 @@ int main(int argc, char **argv)
   PetscCall(VecZeroEntries(x));
   PetscCall(TaoSetSolution(tao, x));
 
-  /* Set routines for function, gradient, hessian evaluation */
+  /* Set routines for function, gradient, hessian, and Hessian-vector product evaluation */
   PetscCall(TaoSetObjectiveAndGradient(tao, NULL, FormFunctionGradient, &user));
   PetscCall(TaoSetHessian(tao, H, Hpre, FormHessian, &user));
+  PetscCall(TaoSetHessianMult(tao, FormHessianMult, &user));
 
   /* Check for TAO command line options */
   PetscCall(TaoSetFromOptions(tao));
@@ -128,6 +130,27 @@ static PetscErrorCode FormHessian(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
     PetscCall(MatDiagonalSet(Hpre, v, INSERT_VALUES));
     PetscCall(VecDestroy(&v));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  FormHessianMult - Evaluates the matrix-free Hessian-vector product HV = H(X) V.
+
+  Input Parameters:
++ tao - the Tao context
+. X   - input vector
+. V   - vector to multiply by the Hessian
+- ptr - optional application-specific context, as set by TaoSetHessianMult()
+
+  Output Parameter:
+. HV - the Hessian-vector product
+*/
+static PetscErrorCode FormHessianMult(Tao tao, Vec X, Vec V, Vec HV, void *ptr)
+{
+  AppCtx *user = (AppCtx *)ptr;
+
+  PetscFunctionBeginUser;
+  PetscCall(AppCtxFormHessianMult(user, X, V, HV));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -270,6 +293,19 @@ static PetscErrorCode FormHessian(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
    test:
      suffix: add_terms_l1_no_pre
      args: -tao_type nls -tao_add_terms reg_ -reg_tao_term_type l1 -reg_tao_term_l1_epsilon 0.4 -tao_term_sum_reg_scale 0.3 -tao_monitor -tao_view ::ascii_info_detail
+
+   test:
+     suffix: sum_shell_hessian
+     args: -tao_type nls -tao_add_terms reg1_,reg2_ -reg1_tao_term_type halfl2squared -reg2_tao_term_type halfl2squared
+     args: -tao_term_sum_reg1_scale 1.0 -tao_term_sum_reg2_scale -1.0 -tao_term_hessian_mat_type shell -tao_monitor -tao_gatol 1.e-4
+     args: -tao_view ::ascii_info_detail
+
+   test:
+     suffix: sum_shell_hessian_sep_pre
+     args: -tao_type nls -tao_add_terms reg1_,reg2_ -reg1_tao_term_type halfl2squared -reg2_tao_term_type halfl2squared
+     args: -tao_term_sum_reg1_scale 1.0 -tao_term_sum_reg2_scale -1.0 -tao_view ::ascii_info_detail
+     args: -tao_term_hessian_mat_type shell -tao_term_hessian_pre_is_hessian false -tao_term_hessian_pre_mat_type aij
+     args: -tao_monitor
 
    test:
      suffix: hpre_is_not_h

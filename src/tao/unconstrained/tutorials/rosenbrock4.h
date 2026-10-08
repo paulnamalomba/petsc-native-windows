@@ -32,6 +32,7 @@ struct _AppCtx {
   PetscSF       gscatter;
   Vec           off_process_values; /* buffer for off-process values if chained */
   PetscBool     test_lmvm;
+  PetscBool     test_hessian_mult; /* verify TaoComputeHessianMult() against the assembled Hessian */
   PetscLogEvent event_f, event_g, event_fg;
 };
 
@@ -96,16 +97,18 @@ PetscErrorCode AppCtxCreate(MPI_Comm comm, AppCtx *ctx)
   user->comm = PETSC_COMM_WORLD;
 
   /* Initialize problem parameters */
-  user->n             = 2;
-  user->problem.alpha = 99.0;
-  user->problem.bs    = 2; // bs = 2 is block Rosenbrock, bs = n is chained Rosenbrock
-  user->test_lmvm     = PETSC_FALSE;
+  user->n                 = 2;
+  user->problem.alpha     = 99.0;
+  user->problem.bs        = 2; // bs = 2 is block Rosenbrock, bs = n is chained Rosenbrock
+  user->test_lmvm         = PETSC_FALSE;
+  user->test_hessian_mult = PETSC_FALSE;
   /* Check for command line arguments to override defaults */
   PetscOptionsBegin(user->comm, NULL, "Rosenbrock example", NULL);
   PetscCall(PetscOptionsInt("-n", "Rosenbrock problem size", NULL, user->n, &user->n, NULL));
   PetscCall(PetscOptionsInt("-bs", "Rosenbrock block size (2 <= bs <= n)", NULL, user->problem.bs, &user->problem.bs, NULL));
   PetscCall(PetscOptionsReal("-alpha", "Rosenbrock off-diagonal coefficient", NULL, user->problem.alpha, &user->problem.alpha, NULL));
   PetscCall(PetscOptionsBool("-test_lmvm", "Test LMVM solve against LMVM mult", NULL, user->test_lmvm, &user->test_lmvm, NULL));
+  PetscCall(PetscOptionsBool("-test_hessian_mult", "Verify TaoComputeHessianMult() against the assembled Hessian", NULL, user->test_hessian_mult, &user->test_hessian_mult, NULL));
   PetscOptionsEnd();
   PetscCheck(user->problem.bs >= 1, comm, PETSC_ERR_ARG_INCOMP, "Block size %" PetscInt_FMT " is not bigger than 1", user->problem.bs);
   PetscCheck((user->n % user->problem.bs) == 0, comm, PETSC_ERR_ARG_INCOMP, "Block size %" PetscInt_FMT " does not divide problem size % " PetscInt_FMT, user->problem.bs, user->n);
@@ -357,6 +360,21 @@ PETSC_KERNEL_DECL void RosenbrockHessian_Kernel(Rosenbrock r, const PetscScalar 
   rosenbrock_for_loop(r, x, o, [&](PetscInt k, PetscScalar x_a, PetscScalar x_b) { RosenbrockHessian(r.alpha, x_a, x_b, &h[4 * k]); });
 }
 
+PETSC_KERNEL_DECL void RosenbrockHessianMult_Kernel(Rosenbrock r, const PetscScalar x[], const PetscScalar o[], const PetscScalar v[], const PetscScalar vo[], PetscScalar hv[])
+{
+  // rosenbrock_for_loop() iterates so that the contribution index satisfies c = r.c_start + k, so we recover i and the direction values v_a, v_b from k
+  rosenbrock_for_loop(r, x, o, [&](PetscInt k, PetscScalar x_a, PetscScalar x_b) {
+    PetscInt    i   = ((r.c_start + k) / (r.bs - 1)) * r.bs + ((r.c_start + k) % (r.bs - 1));
+    PetscScalar v_a = v[i - r.i_start];
+    PetscScalar v_b = ((i + 1) < r.i_end) ? v[i + 1 - r.i_start] : vo[0];
+    PetscScalar h[4];
+
+    RosenbrockHessian(r.alpha, x_a, x_b, h);
+    hv[2 * k + 0] = h[0] * v_a + h[1] * v_b;
+    hv[2 * k + 1] = h[2] * v_a + h[3] * v_b;
+  });
+}
+
 static PetscErrorCode RosenbrockObjective_Device(cupmStream_t stream, Rosenbrock r, const PetscScalar x[], const PetscScalar o[], PetscScalar f_vec[])
 {
   PetscInt n_comp = r.c_end - r.c_start;
@@ -394,6 +412,16 @@ static PetscErrorCode RosenbrockHessian_Device(cupmStream_t stream, Rosenbrock r
   PetscFunctionBegin;
   if (n_comp) PetscCUPMLaunch(RosenbrockHessian_Kernel<<<(n_comp + 255) / 256, 256, 0, stream>>>(r, x, o, h));
   PetscCall(PetscLogGpuFlops(RosenbrockHessianFlops * n_comp));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode RosenbrockHessianMult_Device(cupmStream_t stream, Rosenbrock r, const PetscScalar x[], const PetscScalar o[], const PetscScalar v[], const PetscScalar vo[], PetscScalar hv[])
+{
+  PetscInt n_comp = r.c_end - r.c_start;
+
+  PetscFunctionBegin;
+  if (n_comp) PetscCUPMLaunch(RosenbrockHessianMult_Kernel<<<(n_comp + 255) / 256, 256, 0, stream>>>(r, x, o, v, vo, hv));
+  PetscCall(PetscLogGpuFlops((RosenbrockHessianFlops + 6.0) * n_comp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
@@ -457,6 +485,27 @@ static PetscErrorCode RosenbrockHessian_Host(Rosenbrock r, const PetscScalar x[]
     RosenbrockHessian(r.alpha, x_a, x_b, &h[4 * k]);
   }
   PetscCall(PetscLogFlops(RosenbrockHessianFlops * (r.c_end - r.c_start)));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Apply the per-contribution 2x2 Hessian blocks to a direction v, writing two output values per
+   contribution (for rows i and i+1) that are later summed into the global product with gscatter. */
+static PetscErrorCode RosenbrockHessianMult_Host(Rosenbrock r, const PetscScalar x[], const PetscScalar o[], const PetscScalar v[], const PetscScalar vo[], PetscScalar hv[])
+{
+  PetscFunctionBegin;
+  for (PetscInt c = r.c_start, k = 0; c < r.c_end; c++, k++) {
+    PetscInt    i   = (c / (r.bs - 1)) * r.bs + (c % (r.bs - 1));
+    PetscScalar x_a = x[i - r.i_start];
+    PetscScalar x_b = ((i + 1) < r.i_end) ? x[i + 1 - r.i_start] : o[0];
+    PetscScalar v_a = v[i - r.i_start];
+    PetscScalar v_b = ((i + 1) < r.i_end) ? v[i + 1 - r.i_start] : vo[0];
+    PetscScalar h[4];
+
+    RosenbrockHessian(r.alpha, x_a, x_b, h);
+    hv[2 * k + 0] = h[0] * v_a + h[1] * v_b;
+    hv[2 * k + 1] = h[2] * v_a + h[3] * v_b;
+  }
+  PetscCall(PetscLogFlops((RosenbrockHessianFlops + 6.0) * (r.c_end - r.c_start)));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -663,6 +712,61 @@ PetscErrorCode FormHessian(Tao tao, Vec X, Mat H, Mat Hpre, void *ptr)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+   FormHessianMult - Evaluates the matrix-free Hessian-vector product HV = H(X) V.
+
+   This mirrors FormGradient(): the off-process coupling values of both X and V are communicated,
+   each contribution applies its local 2x2 Hessian block to V, and the row contributions are summed
+   into HV with the reverse gradient scatter.
+*/
+PetscErrorCode FormHessianMult(Tao tao, Vec X, Vec V, Vec HV, void *ptr)
+{
+  AppCtx             user = (AppCtx)ptr;
+  PetscScalar       *hv;
+  const PetscScalar *x, *v;
+  const PetscScalar *o = NULL, *vo = NULL;
+  Vec                v_off_process;
+  PetscMemType       memtype_x, memtype_hv;
+
+  PetscFunctionBeginUser;
+  /* Communicate the off-process solution and direction values that couple adjacent blocks */
+  PetscCall(VecScatterBegin(user->off_process_scatter, X, user->off_process_values, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(user->off_process_scatter, X, user->off_process_values, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecDuplicate(user->off_process_values, &v_off_process));
+  PetscCall(VecScatterBegin(user->off_process_scatter, V, v_off_process, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(user->off_process_scatter, V, v_off_process, INSERT_VALUES, SCATTER_FORWARD));
+
+  PetscCall(VecGetArrayReadAndMemType(user->off_process_values, &o, NULL));
+  PetscCall(VecGetArrayReadAndMemType(v_off_process, &vo, NULL));
+  PetscCall(VecGetArrayReadAndMemType(X, &x, &memtype_x));
+  PetscCall(VecGetArrayReadAndMemType(V, &v, NULL));
+  PetscCall(VecGetArrayWriteAndMemType(user->gvalues, &hv, &memtype_hv));
+  PetscAssert(memtype_x == memtype_hv, user->comm, PETSC_ERR_ARG_INCOMP, "solution vector and Hessian-vector product must have same memtype");
+  if (memtype_x == PETSC_MEMTYPE_HOST) {
+    PetscCall(RosenbrockHessianMult_Host(user->problem, x, o, v, vo, hv));
+#if PetscDefined(USING_CUPMCC)
+  } else if (memtype_x == PETSC_MEMTYPE_DEVICE) {
+    cupmStream_t      *stream;
+    PetscDeviceContext dctx;
+
+    PetscCall(PetscDeviceContextGetCurrentContext(&dctx));
+    PetscCall(PetscDeviceContextGetStreamHandle(dctx, (void **)&stream));
+    PetscCall(RosenbrockHessianMult_Device(*stream, user->problem, x, o, v, vo, hv));
+#endif
+  } else SETERRQ(user->comm, PETSC_ERR_SUP, "Unsupported memtype %d", (int)memtype_x);
+  PetscCall(VecRestoreArrayWriteAndMemType(user->gvalues, &hv));
+  PetscCall(VecRestoreArrayReadAndMemType(V, &v));
+  PetscCall(VecRestoreArrayReadAndMemType(X, &x));
+  PetscCall(VecRestoreArrayReadAndMemType(v_off_process, &vo));
+  PetscCall(VecRestoreArrayReadAndMemType(user->off_process_values, &o));
+
+  PetscCall(VecZeroEntries(HV));
+  PetscCall(VecScatterBegin(user->gscatter, user->gvalues, HV, ADD_VALUES, SCATTER_REVERSE));
+  PetscCall(VecScatterEnd(user->gscatter, user->gvalues, HV, ADD_VALUES, SCATTER_REVERSE));
+  PetscCall(VecDestroy(&v_off_process));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode TestLMVM(Tao tao)
 {
   KSP       ksp;
@@ -732,6 +836,7 @@ PetscErrorCode RosenbrockMain(void)
   PetscCall(TaoSetObjectiveAndGradient(tao, g, FormObjectiveGradient, user));
   PetscCall(TaoSetGradient(tao, g, FormGradient, user));
   PetscCall(TaoSetHessian(tao, H, H, FormHessian, user));
+  if (user->test_hessian_mult) PetscCall(TaoSetHessianMult(tao, FormHessianMult, user));
 
   PetscCall(TaoSetFromOptions(tao));
 
@@ -741,6 +846,27 @@ PetscErrorCode RosenbrockMain(void)
   PetscCall(PetscLogStagePop());
 
   if (user->test_lmvm) PetscCall(TestLMVM(tao));
+
+  /* Verify that the matrix-free Hessian-vector product matches the assembled Hessian */
+  if (user->test_hessian_mult) {
+    Vec       V, HV1, HV2;
+    PetscReal err;
+
+    PetscCall(VecDuplicate(x, &V));
+    PetscCall(VecDuplicate(x, &HV1));
+    PetscCall(VecDuplicate(x, &HV2));
+    PetscCall(VecSet(V, 1.0));
+    PetscCall(TaoComputeHessianMult(tao, x, V, HV1));
+    PetscCall(TaoComputeHessian(tao, x, H, H));
+    PetscCall(MatMult(H, V, HV2));
+    PetscCall(VecAXPY(HV2, -1.0, HV1));
+    PetscCall(VecNorm(HV2, NORM_2, &err));
+    if (err < 1.e-10) PetscCall(PetscPrintf(user->comm, "TaoComputeHessianMult() matches assembled Hessian: < 1.e-10\n"));
+    else PetscCall(PetscPrintf(user->comm, "TaoComputeHessianMult() differs from assembled Hessian: %e\n", (double)err));
+    PetscCall(VecDestroy(&V));
+    PetscCall(VecDestroy(&HV1));
+    PetscCall(VecDestroy(&HV2));
+  }
 
   PetscCall(TaoDestroy(&tao));
   PetscCall(VecDestroy(&g));
