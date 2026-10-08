@@ -1,10 +1,10 @@
-static const char help[] = "Tests PCHPDDM with a custom deflation space and partition of unity against the explicit two-level operator.\n\n";
+static const char help[] = "Tests PCHPDDM with a user-supplied deflation space and scaling against the explicit two-level operator.\n\n";
 
 /*
   Setup, on two processes:
   - A is an 8 x 8 tridiagonal matrix, complex in complex builds, with 4 rows per process.
   - The overlapping subdomain of process p holds the global rows 2p, ..., 2p + 5, see SubdomainRow().
-  - The partition of unity D_p is given by Weight() and the single deflation vector U_p by Mode().
+  - The scaling D_p is given by Scaling() and the single deflation vector U_p by Mode().
     With -empty_rank0, process 0 supplies no deflation vector.
   - ModifySubmatrices() shifts the local matrices of the fine-level PCASM, as optimized transmission
     conditions would, so that the local solvers A_p differ from the restrictions of A.
@@ -24,7 +24,7 @@ static const char help[] = "Tests PCHPDDM with a custom deflation space and part
 
 // fine-level corrections that the reference operator can reproduce
 typedef enum {
-  FINE_ASM_WEIGHTED, // default with a custom scaling: B = sum_p R_p^T D_p A_p^{-1} R_p
+  FINE_ASM_WEIGHTED, // default with a user-supplied scaling: B = sum_p R_p^T D_p A_p^{-1} R_p
   FINE_ASM_BASIC,    // -pc_hpddm_levels_1_pc_asm_type basic: B = sum_p R_p^T A_p^{-1} R_p
   FINE_JACOBI        // -pc_hpddm_levels_1_pc_type jacobi: B = diag(A)^{-1}
 } FineLevelType;
@@ -46,12 +46,12 @@ static PetscInt SubdomainRow(PetscMPIInt p, PetscInt i)
 }
 
 /*
-  Partition-of-unity weight of process p at a global row. Process 0 weights its rows 0-5 by 1, 1, 1, 0.65, 0.35, 0,
-  and process 1 weights its rows 2-7 by the complements 0, 0.35, 0.65, 1, 1, 1. The weights sum to one on every row
-  and vanish outside each subdomain. They also vanish on the subdomain row that A couples to the outside (row 5 for
-  process 0, row 2 for process 1), as PCHPDDMSetScaling() requires.
+  Scaling of process p at a global row. Process 0 scales its rows 0-5 by 1, 1, 1, 0.65, 0.35, 0, and process 1 its
+  rows 2-7 by the complements 0, 0.35, 0.65, 1, 1, 1. The two scalings sum to one on every row and vanish outside each
+  subdomain. They also vanish on the subdomain row that A couples to the outside (row 5 for process 0, row 2 for
+  process 1), as PCHPDDMSetScaling() requires.
 */
-static PetscScalar Weight(PetscMPIInt p, PetscInt row)
+static PetscScalar Scaling(PetscMPIInt p, PetscInt row)
 {
   const PetscReal process0[N_GLOBAL] = {1.0, 1.0, 1.0, 0.65, 0.35, 0.0, 0.0, 0.0};
 
@@ -96,9 +96,9 @@ static PetscErrorCode CreateOperator(Mat *A)
 
 /*
   Inputs of PCHPDDMSetDeflationMat() and PCHPDDMSetScaling(), as a user would build them: the subdomain IS,
-  the local deflation matrix U (one column, or none on process 0 with -empty_rank0), and the local weights D. All three
+  the local deflation matrix U (one column, or none on process 0 with -empty_rank0), and the local scaling D. All three
   list the subdomain rows in reverse order, unlike the sorted order used internally by PCASM, so that the test also
-  checks how PCHPDDM reorders the weights.
+  checks how PCHPDDM reorders the scaling.
 */
 static PetscErrorCode CreateDeflation(PetscBool empty_rank0, IS *is, Mat *U, Vec *D)
 {
@@ -116,7 +116,7 @@ static PetscErrorCode CreateDeflation(PetscBool empty_rank0, IS *is, Mat *U, Vec
   PetscCall(MatDenseGetArray(*U, &u));
   PetscCall(VecGetArray(*D, &d));
   for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) {
-    d[i] = Weight(rank, rows[i]);
+    d[i] = Scaling(rank, rows[i]);
     if (nmodes > 0) u[i] = Mode(rank, rows[i]);
   }
   PetscCall(VecRestoreArray(*D, &d));
@@ -169,7 +169,7 @@ static PetscErrorCode CreateFineReference(Mat A, FineLevelType fine, Mat *B)
       PetscCall(VecAssemblyEnd(x));
       PetscCall(KSPSolve(ksp, x, y));
       PetscCall(VecGetArrayRead(y, &values));
-      for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) column[i] = (fine == FINE_ASM_WEIGHTED ? Weight(rank, rows[i]) : (PetscScalar)1.0) * values[i];
+      for (PetscInt i = 0; i < N_SUBDOMAIN; ++i) column[i] = (fine == FINE_ASM_WEIGHTED ? Scaling(rank, rows[i]) : (PetscScalar)1.0) * values[i];
       PetscCall(MatSetValues(*B, N_SUBDOMAIN, rows, 1, rows + j, column, ADD_VALUES));
       PetscCall(VecRestoreArrayRead(y, &values));
     }
@@ -185,8 +185,8 @@ static PetscErrorCode CreateFineReference(Mat A, FineLevelType fine, Mat *B)
 }
 
 /*
-  Coarse correction Q = Z (Z^H A Z)^{-1} Z^H. Column p of Z is the weighted deflation vector R_p^T D_p U_p of process p,
-  which is zero outside subdomain p because Weight() is. With -empty_rank0, Z only has the column of process 1.
+  Coarse correction Q = Z (Z^H A Z)^{-1} Z^H. Column p of Z is the scaled deflation vector R_p^T D_p U_p of process p,
+  which is zero outside subdomain p because Scaling() is. With -empty_rank0, Z only has the column of process 1.
 */
 static PetscErrorCode CreateCoarseReference(Mat A, PetscBool empty_rank0, Mat *Q)
 {
@@ -201,7 +201,7 @@ static PetscErrorCode CreateCoarseReference(Mat A, PetscBool empty_rank0, Mat *Q
   PetscCall(MatCreateAIJ(PETSC_COMM_WORLD, N_LOCAL, rank < first_process ? 0 : 1, N_GLOBAL, 2 - first_process, 1, NULL, 1, NULL, &Z));
   PetscCall(MatGetOwnershipRange(Z, &start, &end));
   for (PetscInt row = start; row < end; ++row)
-    for (PetscMPIInt p = first_process; p < 2; ++p) PetscCall(MatSetValue(Z, row, p - first_process, Weight(p, row) * Mode(p, row), INSERT_VALUES));
+    for (PetscMPIInt p = first_process; p < 2; ++p) PetscCall(MatSetValue(Z, row, p - first_process, Scaling(p, row) * Mode(p, row), INSERT_VALUES));
   PetscCall(MatAssemblyBegin(Z, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Z, MAT_FINAL_ASSEMBLY));
   PetscCall(MatHermitianTranspose(Z, MAT_INITIAL_MATRIX, &Zh));
@@ -263,7 +263,7 @@ static PetscErrorCode CreateReference(Mat A, PetscBool empty_rank0, FineLevelTyp
 static PetscErrorCode GetFineLevelType(FineLevelType *fine)
 {
   char      type[256] = PCASM;
-  PCASMType asm_type  = PC_ASM_WEIGHTED; // default selected by PCHPDDM when a custom scaling is supplied
+  PCASMType asm_type  = PC_ASM_WEIGHTED; // default selected by PCHPDDM with a user-supplied scaling
   PetscBool asm_pc, jacobi;
 
   PetscFunctionBeginUser;
@@ -292,7 +292,7 @@ static PetscErrorCode CheckVector(Vec actual, Vec expected)
 /*
   Compares the PC with the reference operator T: PCApply() on every unit vector, and PCMatApply() on a block of three
   vectors. Real builds also check PCApplyTranspose() and PCMatApplyTranspose(), which complex builds do not support with
-  a custom scaling.
+  a user-supplied scaling.
 */
 static PetscErrorCode CheckApplications(PC pc, Mat T)
 {
@@ -385,7 +385,7 @@ int main(int argc, char **argv)
   PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
   PetscCheck(size == 2, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "Run with two processes");
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-empty_rank0", &empty_rank0, NULL));
-  PetscCall(PetscOptionsGetBool(NULL, NULL, "-scaling_only", &scaling_only, NULL)); // no deflation space, the scaling only weights the fine level
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-scaling_only", &scaling_only, NULL)); // no deflation space, the scaling only applies to the fine level
   PetscCall(GetFineLevelType(&fine));
   PetscCall(CreateOperator(&A));
   PetscCall(PCCreate(PETSC_COMM_WORLD, &pc));
@@ -453,22 +453,22 @@ int main(int argc, char **argv)
     args: -pc_hpddm_define_subdomains true -pc_hpddm_coarse_correction {{deflated deflated_reversed}} -pc_hpddm_coarse_mat_type aij -empty_rank0 {{false true}}
     output_file: output/empty.out
     test:
-      # default fine level: PCASM of type PC_ASM_WEIGHTED, weighted by the same partition of unity as the coarse space
+      # default fine level: PCASM of type PC_ASM_WEIGHTED, with the same scaling as the coarse space
       suffix: weighted
       args: -pc_hpddm_levels_1_sub_pc_type lu
     test:
-      # unweighted PCASM: the partition of unity only weights the coarse space
+      # PCASM of type basic: the scaling only applies to the coarse space
       # with one subdomain per process, multiplicative composition gives the same operator as additive, but it checks
       # that the second setup keeps the selected PCASMType instead of reverting to PC_ASM_WEIGHTED
       suffix: basic
       args: -pc_hpddm_levels_1_sub_pc_type lu -pc_hpddm_levels_1_pc_asm_type basic -pc_hpddm_levels_1_pc_asm_local_type {{additive multiplicative}}
     test:
-      # non-PCASM fine level: the partition of unity only weights the coarse space
+      # non-PCASM fine level: the scaling only applies to the coarse space
       suffix: jacobi
       args: -pc_hpddm_levels_1_pc_type jacobi
 
   test:
-    # no deflation space: the scaling only weights the fine-level PCASM of a single-level PC, whose prefix is -pc_hpddm_coarse_
+    # no deflation space: the scaling only applies to the fine-level PCASM of a single-level PC, whose prefix is -pc_hpddm_coarse_
     suffix: scaling_only
     nsize: 2
     requires: hpddm slepc mumps defined(PETSC_HAVE_DYNAMIC_LIBRARIES) defined(PETSC_USE_SHARED_LIBRARIES)
