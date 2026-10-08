@@ -1,4 +1,4 @@
-static const char help[] = "Tests PCHPDDM with a user-supplied deflation space and scaling against the explicit two-level operator.\n\n";
+static const char help[] = "Tests PCHPDDM with a user-supplied deflation space and scaling against an explicitly assembled reference operator.\n\n";
 
 /*
   Setup, on two processes:
@@ -396,7 +396,7 @@ int main(int argc, char **argv)
        no trace, and with the PC holding their shared IS exactly while one of them uses it;
     1. new operator values with the same deflation space and scaling: both levels are rebuilt, and the fine-level
        PCASMType selected at the initial setup must persist;
-    2. PCReset() discards the deflation space and scaling, which are then installed again.
+    2. PCReset() discards the deflation space and scaling, which are then installed again, the scaling first.
   */
   for (PetscInt pass = 0; pass < 3; ++pass) {
     if (pass == 1) PetscCall(MatScale(A, 1.1));
@@ -419,8 +419,13 @@ int main(int argc, char **argv)
         PetscCall(CheckReferences(is, PETSC_FALSE));
       }
       if (!scaling_only) {
-        PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-        PetscCall(PCHPDDMSetScaling(pc, is, D));
+        if (pass == 2) { // the deflation space reuses the IS stored by the scaling
+          PetscCall(PCHPDDMSetScaling(pc, is, D));
+          PetscCall(PCHPDDMSetDeflationMat(pc, NULL, U));
+        } else {
+          PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
+          PetscCall(PCHPDDMSetScaling(pc, is, D));
+        }
       }
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
       PetscCall(ISDestroy(&is));
