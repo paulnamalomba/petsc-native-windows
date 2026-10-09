@@ -470,12 +470,12 @@ int main(int argc, char **args)
         filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 1[234]/Linear solve converged due to CONVERGED_RTOL iterations 15/g" -e "s/Linear solve converged due to CONVERGED_RTOL iterations 2[26]/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
         args: -pc_hpddm_levels_1_sub_pc_type cholesky -pc_hpddm_levels_1_st_pc_type cholesky -pc_hpddm_levels_1_eps_gen_non_hermitian -pc_hpddm_has_neumann -pc_hpddm_levels_1_st_share_sub_ksp -successive_solves -transpose -ksp_use_explicittranspose {{false true}shared output} -pc_hpddm_coarse_correction {{additive deflated balanced}shared output}
       test:
-        TODO: broken # slightly different convergence rate, which may be a sign of something wrong somewhere
         requires: cuda
         suffix: geneo_transpose_cuda
         output_file: output/ex76_geneo_share.out
         filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 1[2-4]/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
-        args: -pc_hpddm_levels_1_sub_pc_type cholesky -pc_hpddm_levels_1_st_pc_type cholesky -pc_hpddm_levels_1_eps_gen_non_hermitian -pc_hpddm_has_neumann -pc_hpddm_levels_1_st_share_sub_ksp -transpose -pc_hpddm_coarse_correction balanced -mat_type aijcusparse
+        # Match the eigensolver initial space on CPU and CUDA, and shift away from the Neumann nullspace.
+        args: -pc_hpddm_levels_1_sub_pc_type cholesky -pc_hpddm_levels_1_st_pc_type cholesky -pc_hpddm_levels_1_eps_gen_non_hermitian -pc_hpddm_has_neumann -pc_hpddm_levels_1_st_share_sub_ksp -transpose -pc_hpddm_coarse_correction balanced -pc_hpddm_levels_1_st_shift -1e-5 -random_type rander48 -mat_type {{aij aijcusparse}shared output}
       test:
         suffix: geneo_explicittranspose
         output_file: output/ex76_geneo_share.out
