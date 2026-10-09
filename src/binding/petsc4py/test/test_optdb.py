@@ -210,6 +210,14 @@ class TestOptions(unittest.TestCase):
         self.assertEqual(opts.getString('string'), 'jacobi')
         opts.destroy()
 
+    def testEmptyPrefix(self):
+        opts = PETSc.Options('').create()
+        assert opts.prefix == ''
+        opts.destroy()
+        opts = PETSc.Options(None).create()
+        assert opts.prefix is None
+        opts.destroy()
+
 
 # --------------------------------------------------------------------
 
