@@ -160,6 +160,7 @@ def _build_prompt(problem_description: str, study_dir: Path) -> str:
         "unanswered question.\n"
         f"- Write ALL artifacts (problem-spec, numerical-plan, generated source, makefile, "
         f"results-manifest.json, logs) under this directory: {study_dir}\n"
+        f"- You have about {SETTINGS.timeout_sec / 60:.0f} minutes of wall clock, after which you are stopped wherever you are. Treat that as a hard budget: a simpler program that compiles, runs and is recorded in the manifest beats a more thorough one that is unfinished when the time goes. Get one working run into results-manifest.json early, then spend what is left improving it — whatever is on disk at the limit is what gets submitted.\n"
         "- The deliverable is a compiled, MMS-verified PETSc program plus a results-manifest.json "
         "that conforms to .agents/pde-sim/contracts/results-manifest.schema.json, including at "
         'least one entry in "runs" with its full "command" and "mpi_ranks".\n'
@@ -189,6 +190,11 @@ def _build_prompt(problem_description: str, study_dir: Path) -> str:
 # results-manifest.schema.json requires of config 3, so the failure counts derived
 # from it compare across the ladder.
 _SHARED_CONTRACT = (
+    "- You have about {timeout_min} minutes of wall clock, after which you are stopped "
+    "wherever you are. Treat that as a hard budget: a simpler program that compiles, runs "
+    "and is recorded in the manifest beats a more thorough one that is unfinished when the "
+    "time goes. Get one working run into results-manifest.json early, then spend what is "
+    "left improving it — whatever is on disk at the limit is what gets submitted.\n"
     "- Write ALL artifacts (generated source, makefile, results-manifest.json, logs) "
     f"under this directory: {{study_dir}}\n"
     "- Prefer a single self-contained PETSc C source file for the main program.\n"
@@ -252,7 +258,8 @@ def _build_prompt_general(problem_description: str, study_dir: Path, with_skills
         "- Write a PETSc program that solves the problem, build it, run it, and confirm it "
         "runs cleanly.\n"
         f"{skills_clause}"
-        + _SHARED_CONTRACT.format(study_dir=study_dir)
+        + _SHARED_CONTRACT.format(study_dir=study_dir,
+                                  timeout_min=f"{SETTINGS.timeout_sec / 60:.0f}")
     )
 
 
@@ -1139,6 +1146,40 @@ def _append_usage_log(usage: Optional[Dict[str, Any]], context_id: str, since: f
         print(f"@@@ pde-sim purple: could not write usage log {path}: {e}", flush=True)
 
 
+def _write_stub_manifest(study_dir: Path, reason: str, sources: List[Tuple[str, bytes]],
+                         elapsed_s: float) -> None:
+    """Record why a study has no manifest of its own, in the place one would be.
+
+    The pipeline writes results-manifest.json once it has a run to report, so a
+    study stopped before that has no record of how far it got. Leave one, marked
+    as ours: ``written_by`` says the binding wrote it, because every other
+    manifest in the tree is the agent's own account of its work and the two must
+    not be read alike.
+
+    Deliberately no ``attempts`` and no ``runs`` entries. Nothing here was
+    attempted or run by the agent, and an empty attempts journal would make
+    code_generation_failures report zero — a run that failed nothing — rather
+    than leaving it absent, which is what "not recorded" has to look like. That
+    also leaves this short of results-manifest.schema.json, which requires both;
+    a stub that conformed would have to invent the fields that matter.
+    """
+    path = study_dir / "results-manifest.json"
+    if path.exists():
+        return
+    try:
+        path.write_text(json.dumps({
+            "written_by": "pdesim_purple binding, not the pde-sim pipeline",
+            "incomplete": True,
+            "reason": reason,
+            "elapsed_s": round(elapsed_s, 1),
+            "sources_found": [n for n, _ in sources],
+            "runs": [],
+        }, indent=2) + "\n")
+        print(f"@@@ pde-sim purple: wrote stub manifest ({reason})", flush=True)
+    except OSError as e:  # noqa: BLE001 - a stub is a convenience, never a failure
+        print(f"@@@ pde-sim purple: could not write stub manifest: {e}", flush=True)
+
+
 class PdeSimPurpleExecutor(AgentExecutor):
     """A2A executor that maps a problem description to a pde-sim study."""
 
@@ -1148,10 +1189,14 @@ class PdeSimPurpleExecutor(AgentExecutor):
         study_dir = SETTINGS.artifacts_dir / f"bench-{ctx}-{int(time.time())}"
         study_dir.mkdir(parents=True, exist_ok=True)
 
+        # Bound before the try so the failure handler can report telemetry for a
+        # request that fell over early.
+        usage: Optional[Dict[str, Any]] = None
+        since = time.time()
+        rc = -1
+        timed_out = False
+
         try:
-            since = time.time()
-            usage: Optional[Dict[str, Any]] = None
-            rc = -1
             prompt = _prompt_for(problem_description, study_dir)
             # All configs run at the repo root so they share identical project
             # context (CLAUDE.md/AGENTS.md); the ONLY difference across the ladder
@@ -1188,38 +1233,69 @@ class PdeSimPurpleExecutor(AgentExecutor):
                             if isinstance(a, dict) and a.get("status") == "failure"
                             and a.get("action") in ("build", "run"))
             except PdeSimTimeout as e:
-                # A killed run reports no cost, but it still consumed tokens; keep
-                # what it did report so the spend is not silently lost.
+                # Out of time is not the same as nothing to show: the pipeline
+                # writes the manifest and the source as it goes, so whatever it
+                # had finished is on disk. Pick that up and deliver it instead of
+                # reporting a failure, which would throw away a program that may
+                # well compile and run. A killed run reports no cost, but it still
+                # consumed tokens; keep what it did report so the spend is not lost.
+                timed_out = True
                 usage = e.usage
-                raise
+                print(f"@@@ pde-sim purple: ⏱ {e}; delivering whatever finished",
+                      flush=True)
+                # No stdout to read a PDESIM_DONE marker from, so _find_manifest
+                # falls back to the newest manifest this run wrote.
+                manifest_path = _find_manifest("", study_dir, since)
+                manifest = json.loads(manifest_path.read_text()) if manifest_path else None
+                stderr = str(e)
             finally:
                 # Record usage on EVERY path — success, timeout, or failure — so a
                 # run's consumption always lands in the sidecar.
                 _append_usage_log(usage, ctx, since, rc)
 
+            # The manifest is written once a run has been made, but the source is
+            # written before that, so a stop in between leaves a program with no
+            # record of how to invoke it. Send it anyway on the bench's own terms:
+            # serially, with no arguments of our own, leaving the test case's
+            # declared args to stand alone. The bench compiles what it is given, so
+            # this can only do better than reporting nothing — a program that does
+            # not build scores the zero it would have scored regardless.
+            run = _pick_run(manifest) if manifest else None
+            if run is not None:
+                exe, cli_args = _split_command(run["command"])
+                nsize = max(1, min(int(run.get("mpi_ranks") or 1), SETTINGS.max_nsize))
+                degraded = ""
+            else:
+                exe, cli_args, nsize = None, "", 1
+                degraded = "no run was recorded"
+
+            sources = _collect_sources(manifest_path.parent if manifest_path else study_dir, exe)
             if manifest_path is None:
-                raise RuntimeError(
-                    "No results-manifest.json was produced by the pde-sim pipeline "
-                    f"(exit={rc}). stderr tail: {stderr[-500:]!r}"
-                )
-            manifest_dir = manifest_path.parent
-
-            run = _pick_run(manifest)
-            if run is None:
-                raise RuntimeError(f"results-manifest.json at {manifest_path} has no usable run entry")
-
-            exe, cli_args = _split_command(run["command"])
-            nsize = int(run.get("mpi_ranks") or 1)
-            nsize = max(1, min(nsize, SETTINGS.max_nsize))
-
-            sources = _collect_sources(manifest_dir, exe)
+                # Leave a record in the study dir of why the pipeline never wrote
+                # one, so a stopped run is legible without reading its transcript.
+                _write_stub_manifest(
+                    study_dir,
+                    "stopped at PDESIM_TIMEOUT" if timed_out else f"pipeline exited {rc}",
+                    sources, time.time() - since)
             if not sources:
-                raise RuntimeError(f"No generated source files found next to {manifest_path}")
+                why = "ran out of time" if timed_out else f"exit={rc}"
+                raise RuntimeError(
+                    "The pde-sim pipeline produced no generated source "
+                    f"({why}). stderr tail: {stderr[-500:]!r}"
+                )
 
             print(f"@@@ pde-sim purple: nsize={nsize} cli_args={cli_args!r} "
-                  f"files={[n for n, _ in sources]}", flush=True)
+                  f"files={[n for n, _ in sources]}"
+                  f"{' [' + degraded + ']' if degraded else ''}", flush=True)
 
-            parts_list = [new_text_part(f"Code generation successful ✅\nnsize: {nsize}\n"
+            # Green parses this with ^Code generation successful[^\n]*\n, so the
+            # note rides on the first line without breaking the match.
+            why = ["stopped at the time limit"] if timed_out else []
+            if degraded:
+                why.append(degraded)
+            note = f" (partial: {', '.join(why)})" if why else ""
+            parts_list = [new_text_part(f"Code generation successful ✅{note}\n"
+                                        f"nsize: {nsize}\n"
                                         f"cli_args: {cli_args}\n")]
             telemetry = _build_telemetry(usage)
             if telemetry:
@@ -1233,6 +1309,15 @@ class PdeSimPurpleExecutor(AgentExecutor):
         except Exception as e:  # noqa: BLE001 - report every failure over A2A
             print(f"@@@ pde-sim purple: ❌ {type(e).__name__}: {e}", flush=True)
             parts_list = [new_text_part(f"Code generation failed ❌\nerror: {e}\n")]
+            # Report telemetry here too, or Green has no model to name the result
+            # from and files every failure as "unknown-judged-by-<judge>.json".
+            # One name for all of them means the configs overwrite each other's
+            # failures, since a live run replaces the unnumbered aggregate.
+            # _build_telemetry still reports this agent's identity when usage is
+            # None, which is the case for a request that failed before running.
+            telemetry = _build_telemetry(usage)
+            if telemetry:
+                parts_list.append(new_data_part(telemetry))
             await event_queue.enqueue_event(
                 new_agent_parts_message(parts_list, context_id=context.context_id)
             )

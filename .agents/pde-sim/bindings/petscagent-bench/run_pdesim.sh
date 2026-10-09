@@ -23,6 +23,8 @@
 #   -m, --model NAME     model the Purple generates with, as PDESIM_CLAUDE_MODEL
 #                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
 #   -i, --progress SECS  seconds between progress lines, 0 to silence (default 30)
+#   -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
+#                        finished            (default: the binding's PDESIM_TIMEOUT)
 #   -o, --output DIR     one directory for everything this run produces: Green's
 #                        results, the Purple's usage sidecar and its study dirs
 #                        (default $BENCH/output/pdesim_<timestamp>, one per run)
@@ -47,6 +49,7 @@ PROBLEMS=advection
 CONFIGS=1
 MODEL=claudeopus48
 PROGRESS_EVERY=30
+TIMEOUT_MIN=
 BENCH=${PETSCAGENT_BENCH:-$HOME/petscagent-bench}
 OUTPUT=
 RUN_ID=$(date +%Y%m%d-%H%M%S)
@@ -64,6 +67,8 @@ Usage: run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
                                                        (default: claudeopus48)
   -i, --progress SECS  seconds between progress lines, 0 to silence (default: 30)
+  -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
+                       finished        (default: the binding's PDESIM_TIMEOUT)
   -b, --bench DIR      petscagent-bench repo root
                              (default: $PETSCAGENT_BENCH, else ~/petscagent-bench)
   -o, --output DIR     one directory for everything this run produces: Green's
@@ -94,6 +99,8 @@ while [ $# -gt 0 ]; do
     -m | --model) [ $# -ge 2 ] || die "$1 needs a value"; MODEL=$2; shift 2 ;;
     --model=*) MODEL=${1#*=}; shift ;;
     -i | --progress) [ $# -ge 2 ] || die "$1 needs a value"; PROGRESS_EVERY=$2; shift 2 ;;
+    -t | --timeout) [ $# -ge 2 ] || die "$1 needs a value"; TIMEOUT_MIN=$2; shift 2 ;;
+    --timeout=*) TIMEOUT_MIN=${1#*=}; shift ;;
     --progress=*) PROGRESS_EVERY=${1#*=}; shift ;;
     -b | --bench) [ $# -ge 2 ] || die "$1 needs a value"; BENCH=$2; shift 2 ;;
     --bench=*) BENCH=${1#*=}; shift ;;
@@ -111,6 +118,9 @@ CONFIG_LIST=$(echo "$CONFIGS" | tr ',' ' ')
 [ -n "${CONFIG_LIST//[[:space:]]/}" ] || die "--configs is empty"
 [ -n "${MODEL//[[:space:]]/}" ] || die "--model is empty"
 [ -n "${BENCH//[[:space:]]/}" ] || die "--bench is empty"
+case ${TIMEOUT_MIN:-1} in
+  "" | *[!0-9]* | 0) die "--timeout wants a whole number of minutes, got '$TIMEOUT_MIN'" ;;
+esac
 case $PROGRESS_EVERY in
   "" | *[!0-9]*) die "--progress wants a whole number of seconds, got '$PROGRESS_EVERY'" ;;
 esac
@@ -156,6 +166,9 @@ PURPLE_URL=http://localhost:$PURPLE_PORT/
 # PETSC_DIR and PETSC_ARCH need no export: they came from the environment, so
 # the Purple and the pipeline below it already inherit them.
 export PDESIM_CLAUDE_MODEL=$MODEL
+# Minutes here, seconds in the binding. A problem stopped at the limit still
+# delivers whatever it had finished, so this is a budget rather than a failure.
+[ -n "$TIMEOUT_MIN" ] && export PDESIM_TIMEOUT=$((TIMEOUT_MIN * 60))
 
 ts() { date '+%F %T'; }
 say() { echo "[$(ts)] $*"; }
