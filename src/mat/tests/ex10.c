@@ -18,8 +18,6 @@ int main(int argc, char **args)
   /* create the matrix for the five point stencil, YET AGAIN*/
   PetscCall(MatCreate(PETSC_COMM_WORLD, &C));
   PetscCall(MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, m * n, m * n));
-  PetscCall(MatSetFromOptions(C));
-  PetscCall(MatSetUp(C));
   PetscCall(MatDuplicate(C, MAT_DO_NOT_COPY_VALUES, &B)); /* test that SeqAIJ non-preallocated matrices can be duplicated */
   PetscCall(MatDestroy(&C));
   C = B;
@@ -47,8 +45,8 @@ int main(int argc, char **args)
       PetscCall(MatSetValues(C, 1, &Ii, 1, &Ii, &v, INSERT_VALUES));
     }
   }
-  PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY))
+  PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));  
   for (i = 0; i < m; i++) {
     for (j = 2 * rank; j < 2 * rank + 2; j++) {
       v  = 1.0;
