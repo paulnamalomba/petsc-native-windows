@@ -186,11 +186,13 @@ typedef struct {
   { \
     const PetscBool oldvalues = (PetscBool)(A != PETSC_NULLPTR); \
     PetscInt        nonew = 0, nounused = 0; \
-    PetscBool       roworiented = PETSC_FALSE; \
+    PetscBool       roworiented = PETSC_FALSE, keepnonzeropattern = PETSC_FALSE, ignorezeroentries = PETSC_FALSE; \
     if (oldvalues) { \
-      nonew       = ((Mat_SeqAIJ *)(A)->data)->nonew; \
-      nounused    = ((Mat_SeqAIJ *)(A)->data)->nounused; \
-      roworiented = ((Mat_SeqAIJ *)(A)->data)->roworiented; \
+      nonew              = ((Mat_SeqAIJ *)(A)->data)->nonew; \
+      nounused           = ((Mat_SeqAIJ *)(A)->data)->nounused; \
+      roworiented        = ((Mat_SeqAIJ *)(A)->data)->roworiented; \
+      keepnonzeropattern = ((Mat_SeqAIJ *)(A)->data)->keepnonzeropattern; \
+      ignorezeroentries  = ((Mat_SeqAIJ *)(A)->data)->ignorezeroentries; \
     } \
     (void)0
 
@@ -206,9 +208,11 @@ typedef struct {
 
 #define MatSeqXAIJRestoreOptions_Private(A) \
   if (oldvalues) { \
-    ((Mat_SeqAIJ *)(A)->data)->nonew       = nonew; \
-    ((Mat_SeqAIJ *)(A)->data)->nounused    = nounused; \
-    ((Mat_SeqAIJ *)(A)->data)->roworiented = roworiented; \
+    ((Mat_SeqAIJ *)(A)->data)->nonew              = nonew; \
+    ((Mat_SeqAIJ *)(A)->data)->nounused           = nounused; \
+    ((Mat_SeqAIJ *)(A)->data)->roworiented        = roworiented; \
+    ((Mat_SeqAIJ *)(A)->data)->keepnonzeropattern = keepnonzeropattern; \
+    ((Mat_SeqAIJ *)(A)->data)->ignorezeroentries  = ignorezeroentries; \
   } \
   } \
   (void)0

@@ -4720,7 +4720,9 @@ PetscErrorCode MatSetPreallocationCOO_SeqAIJ(Mat mat, PetscCount coo_n, PetscInt
     PetscCall(PetscShmgetAllocateArray(nnz, sizeof(PetscScalar), (void **)&Aa));
     PetscCall(PetscArrayzero(Aa, nnz));
   }
+  MatSeqXAIJGetOptions_Private(mat);
   PetscCall(MatSetSeqAIJWithArrays_private(PETSC_COMM_SELF, M, N, Ai, Aj, Aa, rtype, mat));
+  MatSeqXAIJRestoreOptions_Private(mat);
 
   seqaij->free_a  = (PetscBool)!mat->structure_only;
   seqaij->free_ij = PETSC_TRUE; /* Let mat own Ai, Aj and any allocated Aa */

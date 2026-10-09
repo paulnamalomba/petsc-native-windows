@@ -65,6 +65,7 @@
 - Change `MatSetOption()` to error when a symmetry-related option contradicts an already known property
 - Change `MatSetValuesCOO()` for `MATAIJ` and its device subtypes to generate an error when the nonzero pattern has changed since `MatSetPreallocationCOO()`, for example because `MatSetValues()` inserted a new nonzero; values were previously written into wrong locations in such a sequence of events
 - Change `MatAXPY()` with `DIFFERENT_NONZERO_PATTERN` for `MATSEQAIJ` and `MATMPIAIJ` to add in place when the nonzeros of `X` are a subset of those of `Y`, keeping the nonzero pattern, nonzero state, and options such as `MAT_SYMMETRIC` of `Y`
+- Change `MatMPIAIJSetPreallocation()`, `MatMPIBAIJSetPreallocation()`, `MatMPISBAIJSetPreallocation()`, and `MatSetPreallocationCOO()` for `MATAIJ` to keep `MAT_KEEP_NONZERO_PATTERN` and `MAT_IGNORE_ZERO_ENTRIES` set with `MatSetOption()` before the call, and `MatSetPreallocationCOO()` for `MATSEQAIJ` to also keep `MAT_NEW_NONZERO_LOCATIONS`, `MAT_NEW_NONZERO_LOCATION_ERR`, and `MAT_NEW_NONZERO_ALLOCATION_ERR`, as the parallel formats already do
 
 ```{rubric} MatCoarsen:
 ```
