@@ -5,11 +5,11 @@ static char help[] = "Solves a linear system using PCHPDDM.\n\n";
 
 int main(int argc, char **args)
 {
-  Vec             b;            /* computed solution and RHS */
-  Mat             A, aux, X, B; /* linear system matrix */
-  KSP             ksp;          /* linear solver context */
+  Vec             b;                              /* computed solution and RHS */
+  Mat             A, aux, reset_aux = NULL, X, B; /* linear system matrix */
+  KSP             ksp;                            /* linear solver context */
   PC              pc;
-  IS              is, sizes;
+  IS              is, reset_is = NULL, sizes;
   const PetscInt *idx;
   PetscMPIInt     rank, size;
   PetscInt        m, N = 1;
@@ -17,7 +17,7 @@ int main(int argc, char **args)
   PetscViewer     viewer;
   char            dir[PETSC_MAX_PATH_LEN], name[PETSC_MAX_PATH_LEN], type[256];
   PetscBool3      share = PETSC_BOOL3_UNKNOWN;
-  PetscBool       flg, set, transpose = PETSC_FALSE, skip_set_from_options = PETSC_FALSE;
+  PetscBool       flg, set, test_eps_api = PETSC_FALSE, test_svd_api = PETSC_FALSE, transpose = PETSC_FALSE, skip_set_from_options = PETSC_FALSE;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &args, NULL, help));
@@ -105,6 +105,42 @@ int main(int argc, char **args)
   PetscCall(KSPGetPC(ksp, &pc));
   PetscCall(PCSetType(pc, PCHPDDM));
 #if PetscDefined(HAVE_HPDDM) && PetscDefined(HAVE_DYNAMIC_LIBRARIES) && PetscDefined(USE_SHARED_LIBRARIES)
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-test_eps_api", &test_eps_api, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-test_svd_api", &test_svd_api, NULL));
+  if (test_eps_api) {
+    PetscInt  nev[] = {30}, ncv[] = {31}, mpd[] = {30};
+    PetscReal threshold[] = {10.0};
+
+    PetscCall(PCHPDDMSetHarmonicOverlap(pc, 1));
+    PetscCall(PCHPDDMSetEPSThreshold(pc, threshold, 1, PETSC_TRUE));
+    PetscCall(PCHPDDMSetEPSDimensions(pc, nev, ncv, mpd, 1));
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_harmonic_overlap", &flg));
+    PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetHarmonicOverlap() inserted an option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_eps_threshold_relative", &flg));
+    PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetEPSThreshold() inserted an option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_eps_nev", &flg));
+    PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetEPSDimensions() inserted an EPS nev option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_eps_ncv", &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetEPSDimensions() did not insert an EPS ncv option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_eps_mpd", &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetEPSDimensions() did not insert an EPS mpd option string");
+  }
+  if (test_svd_api) {
+    PetscInt  nsv[] = {12}, ncv[] = {13}, mpd[] = {12};
+    PetscReal threshold[] = {10.0};
+
+    PetscCall(PCHPDDMSetHarmonicOverlap(pc, 2));
+    PetscCall(PCHPDDMSetEPSThreshold(pc, threshold, 1, PETSC_TRUE));
+    PetscCall(PCHPDDMSetSVDDimensions(pc, nsv, ncv, mpd, 1));
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_harmonic_overlap", &flg));
+    PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetHarmonicOverlap() inserted an option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_svd_nsv", &flg));
+    PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetSVDDimensions() inserted an SVD nsv option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_svd_ncv", &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetSVDDimensions() did not insert an SVD ncv option string");
+    PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_levels_1_svd_mpd", &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMSetSVDDimensions() did not insert an SVD mpd option string");
+  }
   flg = PETSC_FALSE;
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-reset", &flg, NULL));
   if (flg) {
@@ -112,6 +148,12 @@ int main(int argc, char **args)
     PetscCall(PCSetFromOptions(pc));
     PetscCall(PCSetUp(pc));
     PetscCall(PetscOptionsClearValue(NULL, "-pc_hpddm_block_splitting"));
+  }
+  if (test_eps_api || test_svd_api) {
+    PetscCall(PetscObjectReference((PetscObject)is));
+    reset_is = is;
+    PetscCall(PetscObjectReference((PetscObject)aux));
+    reset_aux = aux;
   }
   PetscCall(PCHPDDMSetAuxiliaryMat(pc, is, aux, NULL, NULL));
   PetscCall(PCHPDDMHasNeumannMat(pc, PETSC_FALSE)); /* PETSC_TRUE is fine as well, just testing */
@@ -150,6 +192,10 @@ int main(int argc, char **args)
   }
 #else
   (void)share;
+  (void)reset_aux;
+  (void)reset_is;
+  (void)test_eps_api;
+  (void)test_svd_api;
 #endif
   PetscCall(MatDestroy(&aux));
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-skip_set_from_options", &skip_set_from_options, NULL));
@@ -172,6 +218,71 @@ int main(int argc, char **args)
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-transpose", &transpose, NULL));
   if (!transpose) PetscCall(KSPSolve(ksp, b, b));
   else PetscCall(KSPSolveTranspose(ksp, b, b));
+#if PetscDefined(HAVE_HPDDM) && PetscDefined(HAVE_DYNAMIC_LIBRARIES) && PetscDefined(USE_SHARED_LIBRARIES)
+  if (test_eps_api || test_svd_api) {
+    KSP       subksp;
+    PetscBool errorifnotconverged;
+
+    PetscCall(PCHPDDMGetSubKSP(pc, 1, &subksp));
+    PetscCheck(subksp, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMGetSubKSP() returned NULL");
+    PetscCall(KSPGetErrorIfNotConverged(subksp, &errorifnotconverged));
+    PetscCheck(errorifnotconverged == PetscNot(skip_set_from_options), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Unexpected nested KSP option state before resetting the hierarchy");
+    if (test_eps_api) {
+      PetscReal threshold[] = {PETSC_CURRENT, PETSC_CURRENT, PETSC_CURRENT, 0.1};
+
+      PetscCall(PCHPDDMSetEPSThreshold(pc, threshold, 4, PETSC_FALSE));
+    }
+    PetscCall(PCHPDDMSetAuxiliaryMat(pc, reset_is, reset_aux, NULL, NULL));
+    PetscCall(PCHPDDMHasNeumannMat(pc, PETSC_FALSE));
+    PetscCall(ISDestroy(&reset_is));
+    PetscCall(MatDestroy(&reset_aux));
+    PetscCall(PCSetUp(pc));
+    PetscCall(PCHPDDMGetSubKSP(pc, 2, &subksp)); /* confirms that the coarsening API state survived */
+    PetscCall(PCHPDDMGetSubKSP(pc, 1, &subksp));
+    PetscCheck(subksp, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMGetSubKSP() returned NULL after replacing the auxiliary matrix");
+    PetscCall(KSPGetErrorIfNotConverged(subksp, &errorifnotconverged));
+    PetscCheck(errorifnotconverged == PetscNot(skip_set_from_options), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Unexpected nested KSP option state after replacing the auxiliary matrix");
+    if (test_eps_api) {
+      PetscInt  nev[] = {29}, ncv[] = {30}, mpd[] = {29};
+      PetscReal threshold[] = {9.0};
+
+      PetscCall(PCHPDDMSetEPSThreshold(pc, threshold, 1, PETSC_TRUE));
+      PetscCall(PCSetUp(pc));
+      PetscCall(PCHPDDMSetEPSDimensions(pc, nev, ncv, mpd, 1));
+      PetscCall(PCSetUp(pc));
+      PetscCall(PCHPDDMSetHarmonicOverlap(pc, 2));
+    } else {
+      PetscInt nsv[] = {11}, ncv[] = {12}, mpd[] = {11};
+
+      PetscCall(PCHPDDMSetSVDDimensions(pc, nsv, ncv, mpd, 1));
+    }
+    PetscCall(PCSetUp(pc));
+    PetscCall(PCHPDDMGetSubKSP(pc, 1, &subksp));
+    PetscCheck(subksp, PETSC_COMM_SELF, PETSC_ERR_PLIB, "PCHPDDMGetSubKSP() returned NULL after resetting the hierarchy");
+    PetscCall(KSPGetErrorIfNotConverged(subksp, &errorifnotconverged));
+    PetscCheck(errorifnotconverged == PetscNot(skip_set_from_options), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Unexpected nested KSP option state after resetting the hierarchy");
+    if (test_svd_api) {
+      PetscObjectId before, after;
+      const char   *thresholds[] = {"0.1", "0.2"};
+
+      for (PetscInt i = 0; i < PETSC_STATIC_ARRAY_LENGTH(thresholds); ++i) {
+        PetscCall(PetscObjectGetId((PetscObject)subksp, &before));
+        PetscCall(PetscOptionsSetValue(NULL, "-pc_hpddm_levels_1_svd_threshold_relative", thresholds[i]));
+        PetscCall(PCSetFromOptions(pc));
+        PetscCall(PCSetUp(pc));
+        PetscCall(PCHPDDMGetSubKSP(pc, 1, &subksp));
+        PetscCall(PetscObjectGetId((PetscObject)subksp, &after));
+        PetscCheck(before != after, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Changed SVD threshold did not rebuild the hierarchy");
+        PetscCall(PCSetFromOptions(pc));
+        PetscCall(PCSetUp(pc));
+        PetscCall(PCHPDDMGetSubKSP(pc, 1, &subksp));
+        PetscCall(PetscObjectGetId((PetscObject)subksp, &before));
+        PetscCheck(before == after, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Unchanged SVD threshold rebuilt the hierarchy");
+      }
+      PetscCall(PetscOptionsClearValue(NULL, "-pc_hpddm_levels_1_svd_threshold_relative"));
+    }
+  }
+#endif
   PetscCall(VecGetLocalSize(b, &m));
   PetscCall(VecDestroy(&b));
   if (N > 1) {
@@ -217,7 +328,7 @@ int main(int argc, char **args)
 #if PetscDefined(HAVE_HPDDM) && PetscDefined(HAVE_DYNAMIC_LIBRARIES) && PetscDefined(USE_SHARED_LIBRARIES)
   if (flg) PetscCall(PCHPDDMGetSTShareSubKSP(pc, &flg));
 #endif
-  if (flg && PetscDefined(USE_LOG)) {
+  if (flg && PetscDefined(USE_LOG) && !test_eps_api && !test_svd_api) {
     PetscCall(PetscOptionsHasName(NULL, NULL, "-pc_hpddm_harmonic_overlap", &flg));
     if (!flg) {
       PetscLogEvent      event;
@@ -394,6 +505,15 @@ int main(int argc, char **args)
         filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 1[0-3]/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
         args: -pc_hpddm_harmonic_overlap 1 -pc_hpddm_levels_1_eps_nev 30 -pc_hpddm_levels_1_eps_threshold_relative 1e+1 -pc_hpddm_levels_1_st_pc_type lu -pc_hpddm_levels_1_eps_pc_type lu -mat_type baij
       test:
+        suffix: harmonic_overlap_1_api
+        output_file: output/ex76_geneo_share.out
+        filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 1[0-3]/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
+        args: -test_eps_api -malloc_dump -pc_hpddm_levels_1_ksp_error_if_not_converged -pc_hpddm_levels_1_st_pc_type lu -pc_hpddm_levels_1_eps_pc_type lu -mat_type baij
+      test:
+        suffix: harmonic_overlap_1_api_skip_set_from_options
+        output_file: output/empty.out
+        args: -test_eps_api -skip_set_from_options -malloc_dump -options_left no -pc_hpddm_levels_1_ksp_error_if_not_converged -pc_hpddm_levels_1_st_pc_type lu -pc_hpddm_levels_1_eps_pc_type lu -mat_type baij
+      test:
         requires: cuda
         suffix: harmonic_overlap_1_cuda
         output_file: output/ex76_geneo_share.out
@@ -438,6 +558,11 @@ int main(int argc, char **args)
         output_file: output/ex76_geneo_share.out
         filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 9/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
         args: -pc_hpddm_harmonic_overlap 2 -pc_hpddm_levels_1_svd_nsv 12 -pc_hpddm_levels_1_svd_type {{trlanczos randomized}shared output} -pc_hpddm_levels_1_st_share_sub_ksp -mat_type sbaij
+      test:
+        suffix: harmonic_overlap_2_api
+        output_file: output/ex76_geneo_share.out
+        filter: sed -e "s/Linear solve converged due to CONVERGED_RTOL iterations 9/Linear solve converged due to CONVERGED_RTOL iterations 15/g"
+        args: -test_svd_api -pc_hpddm_levels_1_ksp_error_if_not_converged -pc_hpddm_levels_1_svd_type trlanczos -pc_hpddm_levels_1_st_share_sub_ksp -mat_type sbaij
       test:
         requires: cuda
         suffix: harmonic_overlap_2_cuda

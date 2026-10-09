@@ -514,7 +514,7 @@ PetscErrorCode PCMGSetLevels_MG(PC pc, PetscInt levels, MPI_Comm *comms)
   Use comms = `PETSC_NULL_MPI_COMM` as the equivalent of `NULL` in the C interface. Note `PETSC_NULL_MPI_COMM`
   is not `MPI_COMM_NULL`. It is more like `PETSC_NULL_INTEGER`, `PETSC_NULL_REAL` etc.
 
-.seealso: [](ch_ksp), `PCMGSetType()`, `PCMGGetLevels()`
+.seealso: [](ch_ksp), `PCMGSetType()`, `PCMGGetLevels()`, `PCGAMGSetNlevels()`, `PCHPDDMSetEPSThreshold()`, `PCHPDDMSetEPSDimensions()`, `PCHPDDMSetSVDDimensions()`
 @*/
 PetscErrorCode PCMGSetLevels(PC pc, PetscInt levels, MPI_Comm *comms)
 {
@@ -1327,7 +1327,7 @@ PetscErrorCode PCMGGetLevels_MG(PC pc, PetscInt *levels)
 
   Level: advanced
 
-.seealso: [](ch_ksp), `PCMG`, `PCMGSetLevels()`
+.seealso: [](ch_ksp), `PCMG`, `PCMGSetLevels()`, `PCGAMGSetNlevels()`, `PCHPDDMGetSubKSP()`
 @*/
 PetscErrorCode PCMGGetLevels(PC pc, PetscInt *levels)
 {

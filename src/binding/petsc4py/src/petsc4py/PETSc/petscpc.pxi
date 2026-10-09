@@ -337,6 +337,11 @@ cdef extern from * nogil:
                                                         void*) except PETSC_ERR_PYTHON
     PetscErrorCode PCHPDDMSetAuxiliaryMat(PetscPC, PetscIS, PetscMat, PetscPCHPDDMAuxiliaryMat, void*)
     PetscErrorCode PCHPDDMSetRHSMat(PetscPC, PetscMat)
+    PetscErrorCode PCHPDDMSetHarmonicOverlap(PetscPC, PetscInt)
+    PetscErrorCode PCHPDDMSetEPSThreshold(PetscPC, PetscReal[], PetscInt, PetscBool)
+    PetscErrorCode PCHPDDMSetEPSDimensions(PetscPC, PetscInt[], PetscInt[], PetscInt[], PetscInt)
+    PetscErrorCode PCHPDDMSetSVDDimensions(PetscPC, PetscInt[], PetscInt[], PetscInt[], PetscInt)
+    PetscErrorCode PCHPDDMGetSubKSP(PetscPC, PetscInt, PetscKSP*)
     PetscErrorCode PCHPDDMGetComplexities(PetscPC, PetscReal*, PetscReal*)
     PetscErrorCode PCHPDDMHasNeumannMat(PetscPC, PetscBool)
     PetscErrorCode PCHPDDMSetCoarseCorrectionType(PetscPC, PetscPCHPDDMCoarseCorrectionType)

@@ -2746,6 +2746,150 @@ cdef class PC(Object):
         """
         CHKERR(PCHPDDMSetRHSMat(self.pc, B.mat))
 
+    def setHPDDMHarmonicOverlap(self, overlap: int) -> None:
+        """Set the overlap used to compute local harmonic extensions.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        overlap
+            The amount of overlap.
+
+        See Also
+        --------
+        petsc.PCHPDDMSetHarmonicOverlap
+
+        """
+        cdef PetscInt coverlap = asInt(overlap)
+        CHKERR(PCHPDDMSetHarmonicOverlap(self.pc, coverlap))
+
+    def setHPDDMEPSThreshold(
+        self,
+        thresholds: Sequence[float],
+        relative: bool = False,
+    ) -> None:
+        """Set thresholds for selecting local deflation vectors.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        thresholds
+            Thresholds for the finest levels.
+        relative
+            Use a threshold relative to the smallest eigenvalue.
+
+        See Also
+        --------
+        petsc.PCHPDDMSetEPSThreshold
+
+        """
+        cdef PetscInt n = 0
+        cdef PetscReal *cthresholds = NULL
+        cdef PetscBool crelative = relative
+        thresholds = iarray_r(thresholds, &n, &cthresholds)
+        CHKERR(PCHPDDMSetEPSThreshold(self.pc, cthresholds, n, crelative))
+
+    def setHPDDMEPSDimensions(
+        self,
+        nev: Sequence[int],
+        ncv: Sequence[int],
+        mpd: Sequence[int],
+    ) -> None:
+        """Set dimensions of the local SLEPc eigensolvers.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        nev
+            Numbers of eigenvalues to compute at the finest levels.
+        ncv
+            Maximum subspace dimensions at the finest levels.
+        mpd
+            Maximum projected dimensions at the finest levels.
+
+        See Also
+        --------
+        petsc.PCHPDDMSetEPSDimensions
+
+        """
+        cdef PetscInt n = 0, nncv = 0, nmpd = 0
+        cdef PetscInt *cnev = NULL
+        cdef PetscInt *cncv = NULL
+        cdef PetscInt *cmpd = NULL
+        nev = iarray_i(nev, &n, &cnev)
+        ncv = iarray_i(ncv, &nncv, &cncv)
+        mpd = iarray_i(mpd, &nmpd, &cmpd)
+        if nncv != n or nmpd != n:
+            raise ValueError("nev, ncv, and mpd must have the same length")
+        CHKERR(PCHPDDMSetEPSDimensions(self.pc, cnev, cncv, cmpd, n))
+
+    def setHPDDMSVDDimensions(
+        self,
+        nsv: Sequence[int],
+        ncv: Sequence[int],
+        mpd: Sequence[int],
+    ) -> None:
+        """Set dimensions of the local SLEPc singular value solvers.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        nsv
+            Sequence whose first entry is the number of singular values
+            to compute at the finest level.
+        ncv
+            Sequence whose first entry is the maximum subspace dimension
+            at the finest level.
+        mpd
+            Sequence whose first entry is the maximum projected dimension
+            at the finest level.
+
+        Notes
+        -----
+        SVD is supported only with harmonic overlap at the finest level.
+        Entries after the first are ignored.
+
+        See Also
+        --------
+        petsc.PCHPDDMSetSVDDimensions
+
+        """
+        cdef PetscInt n = 0, nncv = 0, nmpd = 0
+        cdef PetscInt *cnsv = NULL
+        cdef PetscInt *cncv = NULL
+        cdef PetscInt *cmpd = NULL
+        nsv = iarray_i(nsv, &n, &cnsv)
+        ncv = iarray_i(ncv, &nncv, &cncv)
+        mpd = iarray_i(mpd, &nmpd, &cmpd)
+        if nncv != n or nmpd != n:
+            raise ValueError("nsv, ncv, and mpd must have the same length")
+        CHKERR(PCHPDDMSetSVDDimensions(self.pc, cnsv, cncv, cmpd, n))
+
+    def getHPDDMSubKSP(self, level: int) -> KSP:
+        """Return a `KSP` used by the preconditioner.
+
+        Not collective.
+
+        Parameters
+        ----------
+        level
+            The level to supply, with 1 being the finest.
+
+        See Also
+        --------
+        petsc.PCHPDDMGetSubKSP
+
+        """
+        cdef PetscInt clevel = asInt(level)
+        cdef KSP ksp = KSP()
+        CHKERR(PCHPDDMGetSubKSP(self.pc, clevel, &ksp.ksp))
+        CHKERR(PetscINCREF(ksp.obj))
+        return ksp
+
     def getHPDDMComplexities(self) -> tuple[float, float]:
         """Compute the grid and operator complexities.
 

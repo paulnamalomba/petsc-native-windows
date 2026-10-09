@@ -542,6 +542,10 @@ PETSC_EXTERN PetscErrorCode PCDeflationGetPC(PC, PC *);
 
 PETSC_EXTERN PetscErrorCode PCHPDDMSetAuxiliaryMat(PC, IS, Mat, PetscErrorCode (*)(Mat, PetscReal, Vec, Vec, PetscReal, IS, void *), void *);
 PETSC_EXTERN PetscErrorCode PCHPDDMSetRHSMat(PC, Mat);
+PETSC_EXTERN PetscErrorCode PCHPDDMSetHarmonicOverlap(PC, PetscInt);
+PETSC_EXTERN PetscErrorCode PCHPDDMSetEPSThreshold(PC, PetscReal[], PetscInt, PetscBool);
+PETSC_EXTERN PetscErrorCode PCHPDDMSetEPSDimensions(PC, PetscInt[], PetscInt[], PetscInt[], PetscInt);
+PETSC_EXTERN PetscErrorCode PCHPDDMSetSVDDimensions(PC, PetscInt[], PetscInt[], PetscInt[], PetscInt);
 PETSC_EXTERN PetscErrorCode PCHPDDMHasNeumannMat(PC, PetscBool);
 PETSC_EXTERN PetscErrorCode PCHPDDMSetCoarseCorrectionType(PC, PCHPDDMCoarseCorrectionType);
 PETSC_EXTERN PetscErrorCode PCHPDDMGetCoarseCorrectionType(PC, PCHPDDMCoarseCorrectionType *);

@@ -1167,7 +1167,7 @@ PetscErrorCode PCGASMSetSubdomains(PC pc, PetscInt n, IS iis[], IS ois[])
   PETSc to extend that overlap further, if desired.
 
 .seealso: [](ch_ksp), `PCGASM`, `PCGASMSetSubdomains()`, `PCGASMGetSubKSP()`,
-          `PCGASMCreateSubdomains2D()`, `PCGASMGetSubdomains()`
+          `PCGASMCreateSubdomains2D()`, `PCGASMGetSubdomains()`, `PCHPDDMSetHarmonicOverlap()`
 @*/
 PetscErrorCode PCGASMSetOverlap(PC pc, PetscInt ovl)
 {
@@ -1264,7 +1264,7 @@ PetscErrorCode PCGASMSetSortIndices(PC pc, PetscBool doSort)
   Call `PCGASMRestoreSubKSP()` when the array of `KSP` is no longer needed
 
 .seealso: [](ch_ksp), `PCGASM`, `PCGASMSetSubdomains()`, `PCGASMSetOverlap()`,
-          `PCGASMCreateSubdomains2D()`
+          `PCGASMCreateSubdomains2D()`, `PCHPDDMGetSubKSP()`
 @*/
 PetscErrorCode PCGASMGetSubKSP(PC pc, PetscInt *n_local, PetscInt *first_local, KSP *ksp[])
 {

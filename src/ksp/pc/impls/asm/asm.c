@@ -1119,7 +1119,7 @@ PetscErrorCode PCASMSetTotalSubdomains(PC pc, PetscInt N, IS is[], IS is_local[]
   if desired.
 
 .seealso: [](ch_ksp), `PCASM`, `PCASMSetTotalSubdomains()`, `PCASMSetLocalSubdomains()`, `PCASMGetSubKSP()`,
-          `PCASMCreateSubdomains2D()`, `PCASMGetLocalSubdomains()`, `MatIncreaseOverlap()`, `PCGASM`
+          `PCASMCreateSubdomains2D()`, `PCASMGetLocalSubdomains()`, `MatIncreaseOverlap()`, `PCGASM`, `PCHPDDMSetHarmonicOverlap()`
 @*/
 PetscErrorCode PCASMSetOverlap(PC pc, PetscInt ovl)
 {
@@ -1452,7 +1452,7 @@ PetscErrorCode PCASMSetSortIndices(PC pc, PetscBool doSort)
   Call `PCASMRestoreSubKSP()` when access to the array of `KSP` is no longer needed. Pass `PETSC_NULL_KSP_POINTER` for `ksp` if not needed.
 
 .seealso: [](ch_ksp), `PCASM`, `PCASMSetTotalSubdomains()`, `PCASMSetOverlap()`,
-          `PCASMCreateSubdomains2D()`
+          `PCASMCreateSubdomains2D()`, `PCHPDDMGetSubKSP()`
 @*/
 PetscErrorCode PCASMGetSubKSP(PC pc, PetscInt *n_local, PetscInt *first_local, KSP *ksp[])
 {

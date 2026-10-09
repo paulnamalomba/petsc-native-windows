@@ -21,15 +21,32 @@ PetscLogEvent PC_HPDDM_Solve[PETSC_PCHPDDM_MAXLEVELS];
 const char *const PCHPDDMCoarseCorrectionTypes[] = {"DEFLATED", "ADDITIVE", "BALANCED", "NONE", "DEFLATED_REVERSED", "PCHPDDMCoarseCorrectionType", "PC_HPDDM_COARSE_CORRECTION_", nullptr};
 const char *const PCHPDDMSchurPreTypes[]         = {"LEAST_SQUARES", "GENEO", "PCHPDDMSchurPreType", "PC_HPDDM_SCHUR_PRE", nullptr};
 
-static PetscErrorCode PCHPDDMInitializeLevels_Private(PC_HPDDM *data)
+static PetscErrorCode PCHPDDMInitializeLevels_Private(PC_HPDDM *data, PetscInt level)
 {
   PetscFunctionBegin;
-  if (!data->levels) { /* usually allocated in PCSetFromOptions_HPDDM(), but PCSetUp_HPDDM() may be called without a prior PCSetFromOptions() */
-    PetscCall(PetscCalloc1(PETSC_PCHPDDM_MAXLEVELS, &data->levels));
-    PetscCall(PetscNew(data->levels));
-    data->levels[0]->parent = data;
-    data->N                 = 1;
+  if (!data->levels) PetscCall(PetscCalloc1(PETSC_PCHPDDM_MAXLEVELS, &data->levels));
+  for (PetscInt i = 0; i <= level; ++i) {
+    if (!data->levels[i]) {
+      PetscCall(PetscNew(data->levels + i));
+      data->levels[i]->threshold = -1.0;
+      data->levels[i]->parent    = data;
+    }
   }
+  if (!data->N) data->N = 1;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMUpdateLevels_Private(PC pc)
+{
+  PC_HPDDM   *data = (PC_HPDDM *)pc->data;
+  PetscMPIInt size;
+
+  PetscFunctionBegin;
+  PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)pc), &size));
+  data->N = 1;
+  /* A single-process level cannot be coarsened further, as in PCSetFromOptions_HPDDM(). */
+  while (size > 1 && data->levels && data->N < PETSC_PCHPDDM_MAXLEVELS && data->levels[data->N - 1] && (data->levels[data->N - 1]->threshold > 0.0 || data->levels[data->N - 1]->nu > 0 || (data->deflation && data->N == 1))) ++data->N;
+  PetscCall(PCHPDDMInitializeLevels_Private(data, data->N - 1));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -54,8 +71,62 @@ static PetscErrorCode PCReset_HPDDM(PC pc)
   data->correction = PC_HPDDM_COARSE_CORRECTION_DEFLATED;
   data->Neumann    = PETSC_BOOL3_UNKNOWN;
   data->deflation  = PETSC_FALSE;
+  data->overlap    = -1;
+  data->svd        = PETSC_FALSE;
+  data->relative   = PETSC_FALSE;
   data->setup      = nullptr;
   data->setup_ctx  = nullptr;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMResetSetup_Private(PC pc, PetscBool resetauxiliary)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+  IS        is   = data->is;
+  Mat       aux = data->aux, B = data->B;
+  PetscErrorCode (*setup)(Mat, PetscReal, Vec, Vec, PetscReal, IS, void *) = data->setup;
+  void                       *setup_ctx                                    = data->setup_ctx;
+  PetscReal                   threshold[PETSC_PCHPDDM_MAXLEVELS];
+  PetscInt                    nu[PETSC_PCHPDDM_MAXLEVELS], overlap = data->overlap, n = 0;
+  PCHPDDMCoarseCorrectionType correction     = data->correction;
+  PetscBool3                  Neumann        = data->Neumann;
+  PetscBool                   setfromoptions = PetscBool(data->levels && data->levels[0] && data->levels[0]->ksp && data->levels[0]->ksp->setfromoptionscalled);
+  PetscBool                   log_separate = data->log_separate, share = data->share, deflation = data->deflation, svd = data->svd, relative = data->relative;
+
+  PetscFunctionBegin;
+  for (; n < PETSC_PCHPDDM_MAXLEVELS && data->levels && data->levels[n]; ++n) {
+    threshold[n] = data->levels[n]->threshold;
+    nu[n]        = data->levels[n]->nu;
+  }
+  if (!resetauxiliary) {
+    PetscCall(PetscObjectReference((PetscObject)is));
+    PetscCall(PetscObjectReference((PetscObject)aux));
+    PetscCall(PetscObjectReference((PetscObject)B));
+  }
+  PetscCall(PCReset_HPDDM(pc));
+  if (setfromoptions) pc->setfromoptionscalled = 1;
+  data->correction   = correction;
+  data->log_separate = log_separate;
+  data->share        = share;
+  data->overlap      = overlap;
+  data->svd          = svd;
+  data->relative     = relative;
+  if (!resetauxiliary) {
+    data->is        = is;
+    data->aux       = aux;
+    data->B         = B;
+    data->Neumann   = Neumann;
+    data->deflation = deflation;
+    data->setup     = setup;
+    data->setup_ctx = setup_ctx;
+  }
+  for (PetscInt i = 0; i < n; ++i) {
+    PetscCall(PCHPDDMInitializeLevels_Private(data, i));
+    data->levels[i]->threshold = threshold[i];
+    data->levels[i]->nu        = nu[i];
+  }
+  if (!resetauxiliary) PetscCall(PCHPDDMUpdateLevels_Private(pc));
+  pc->setupcalled = PETSC_FALSE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -70,6 +141,11 @@ static PetscErrorCode PCDestroy_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetAuxiliaryMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMHasNeumannMat_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetRHSMat_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetHarmonicOverlap_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetEPSThreshold_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetEPSDimensions_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSVDDimensions_C", nullptr));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSubKSP_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetCoarseCorrectionType_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseCorrectionType_C", nullptr));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSTShareSubKSP_C", nullptr));
@@ -81,8 +157,8 @@ static PetscErrorCode PCDestroy_HPDDM(PC pc)
 
 static inline PetscErrorCode PCHPDDMSetAuxiliaryMat_Private(PC pc, IS is, Mat A, PetscBool deflation)
 {
-  PC_HPDDM                   *data = (PC_HPDDM *)pc->data;
-  PCHPDDMCoarseCorrectionType type = data->correction;
+  PC_HPDDM *data  = (PC_HPDDM *)pc->data;
+  PetscBool reset = PetscBool(is && data->is);
 
   PetscFunctionBegin;
   PetscValidLogicalCollectiveBool(pc, deflation, 4);
@@ -93,23 +169,19 @@ static inline PetscErrorCode PCHPDDMSetAuxiliaryMat_Private(PC pc, IS is, Mat A,
     PetscCall(MatGetLocalSize(A, m + 1, nullptr));
     PetscCheck(m[0] == m[1], PETSC_COMM_SELF, PETSC_ERR_USER_INPUT, "Inconsistent IS and Mat sizes (%" PetscInt_FMT " v. %" PetscInt_FMT ")", m[0], m[1]);
   }
+  PetscCall(PetscObjectReference((PetscObject)A));
   if (is) {
     PetscCall(PetscObjectReference((PetscObject)is));
-    if (data->is) { /* new overlap definition resets the PC */
-      PetscCall(PCReset_HPDDM(pc));
-      pc->setfromoptionscalled = 0;
-      pc->setupcalled          = PETSC_FALSE;
-      data->correction         = type;
-    }
+    if (reset) PetscCall(PCHPDDMResetSetup_Private(pc, PETSC_TRUE)); /* new overlap definition resets the PC */
     PetscCall(ISDestroy(&data->is));
     data->is = is;
   }
   if (A) {
-    PetscCall(PetscObjectReference((PetscObject)A));
     PetscCall(MatDestroy(&data->aux));
     data->aux = A;
   }
   data->deflation = deflation;
+  if (reset) PetscCall(PCHPDDMUpdateLevels_Private(pc));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -337,60 +409,369 @@ PetscErrorCode PCHPDDMSetRHSMat(PC pc, Mat B)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode PCHPDDMGetSLEPcDimension_Private(PC pc, PetscInt level, const char solver[], const char dimension[], PetscInt *v)
+{
+  const char *prefix;
+  char        option[PETSC_MAX_OPTION_NAME];
+
+  PetscFunctionBegin;
+  PetscCall(PCGetOptionsPrefix(pc, &prefix));
+  PetscCall(PetscSNPrintf(option, sizeof(option), "-pc_hpddm_levels_%" PetscInt_FMT "_%s_%s", level, solver, dimension));
+  *v = PETSC_DETERMINE;
+  PetscCall(PetscOptionsGetInt(((PetscObject)pc)->options, prefix, option, v, nullptr));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetSLEPcDimension_Private(PC pc, PetscInt level, const char solver[], const char dimension[], PetscInt v)
+{
+  const char *prefix;
+  char        option[PETSC_MAX_OPTION_NAME], value[64];
+
+  PetscFunctionBegin;
+  PetscCall(PCGetOptionsPrefix(pc, &prefix));
+  PetscCall(PetscSNPrintf(option, sizeof(option), "-%spc_hpddm_levels_%" PetscInt_FMT "_%s_%s", prefix ? prefix : "", level, solver, dimension));
+  if (v == PETSC_DETERMINE) PetscCall(PetscOptionsClearValue(((PetscObject)pc)->options, option));
+  else {
+    PetscCall(PetscSNPrintf(value, sizeof(value), "%" PetscInt_FMT, v));
+    PetscCall(PetscOptionsSetValue(((PetscObject)pc)->options, option, value));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetHarmonicOverlap_HPDDM(PC pc, PetscInt ovl)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  PetscCheck(ovl >= 1, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Overlap %" PetscInt_FMT " must be positive", ovl);
+  if (pc->setupcalled && ovl != data->overlap) PetscCall(PCHPDDMResetSetup_Private(pc, PETSC_FALSE));
+  data->overlap = ovl;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMSetHarmonicOverlap - Sets the overlap used to compute local harmonic extensions.
+
+  Logically Collective
+
+  Input Parameters:
++ pc  - the preconditioner context
+- ovl - the amount of overlap, `ovl` >= 1
+
+  Options Database Key:
+. -pc_hpddm_harmonic_overlap overlap - overlap used to compute local harmonic extensions
+
+  Level: intermediate
+
+  Note:
+  If the preconditioner has already been set up and `ovl` differs from its current value, the computed hierarchy is reset and rebuilt by the next `PCSetUp()`.
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCASMSetOverlap()`, `PCGASMSetOverlap()`, `PCHPDDMSetEPSThreshold()`, `PCHPDDMSetSVDDimensions()`
+@*/
+PetscErrorCode PCHPDDMSetHarmonicOverlap(PC pc, PetscInt ovl)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidLogicalCollectiveInt(pc, ovl, 2);
+  PetscTryMethod(pc, "PCHPDDMSetHarmonicOverlap_C", (PC, PetscInt), (pc, ovl));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetThreshold_Private(PC pc, PetscReal v[], PetscInt n, PetscBool relative, PetscBool svd)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+  PetscInt  i, N = PetscMin(n, relative ? 1 : PETSC_PCHPDDM_MAXLEVELS - 1);
+  PetscBool changed = PETSC_FALSE;
+
+  PetscFunctionBegin;
+  for (i = 0; i < N; ++i) {
+    if (v[i] == static_cast<PetscReal>(PETSC_CURRENT)) continue;
+    PetscCheck(v[i] >= 0.0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Threshold %g at level %" PetscInt_FMT " must be nonnegative or PETSC_CURRENT", (double)v[i], i + 1);
+    if (!data->levels || !data->levels[i] || v[i] != data->levels[i]->threshold || (!i && (data->relative != relative || data->svd != svd))) changed = PETSC_TRUE;
+  }
+  /* Preserve the level count limited by PCSetFromOptions() or PCSetUp() for unchanged settings. */
+  if (!changed) PetscFunctionReturn(PETSC_SUCCESS);
+  if (pc->setupcalled) PetscCall(PCHPDDMResetSetup_Private(pc, PETSC_FALSE));
+  for (i = 0; i < N; ++i) {
+    if (v[i] == static_cast<PetscReal>(PETSC_CURRENT)) continue;
+    PetscCall(PCHPDDMInitializeLevels_Private(data, i));
+    data->levels[i]->threshold = v[i];
+    if (!i) {
+      data->svd      = svd;
+      data->relative = relative;
+    }
+  }
+  PetscCall(PCHPDDMUpdateLevels_Private(pc));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetEPSThreshold_HPDDM(PC pc, PetscReal v[], PetscInt n, PetscBool relative)
+{
+  PetscFunctionBegin;
+  PetscCall(PCHPDDMSetThreshold_Private(pc, v, n, relative, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMSetEPSThreshold - Sets thresholds for selecting deflation vectors returned by SLEPc eigensolvers.
+
+  Logically Collective
+
+  Input Parameters:
++ pc       - the preconditioner context
+. v        - array of threshold values for the finest `n` levels
+. n        - number of threshold values provided in `v`
+- relative - whether the threshold is relative to the smallest eigenvalue
+
+  Options Database Keys:
++ -pc_hpddm_levels_%d_eps_threshold_absolute value - absolute threshold at level `%d`
+- -pc_hpddm_levels_1_eps_threshold_relative value  - relative threshold at the finest level
+
+  Level: intermediate
+
+  Notes:
+  Relative thresholds are currently supported only at the finest level and require harmonic overlap.
+
+  Use `PETSC_CURRENT` to preserve a threshold. If the preconditioner has already been set up and a threshold changes, the computed hierarchy is reset and rebuilt by the next `PCSetUp()`. If `n` exceeds the number of supported levels, excess entries are ignored.
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCGAMGSetThreshold()`, `PCHPDDMSetHarmonicOverlap()`, `PCHPDDMSetEPSDimensions()`, `PCMGSetLevels()`, `PCGAMGSetNlevels()`
+@*/
+PetscErrorCode PCHPDDMSetEPSThreshold(PC pc, PetscReal v[], PetscInt n, PetscBool relative)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidLogicalCollectiveInt(pc, n, 3);
+  PetscValidLogicalCollectiveBool(pc, relative, 4);
+  PetscCheck(n >= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of thresholds %" PetscInt_FMT " must be nonnegative", n);
+  if (n) PetscAssertPointer(v, 2);
+  PetscTryMethod(pc, "PCHPDDMSetEPSThreshold_C", (PC, PetscReal[], PetscInt, PetscBool), (pc, v, n, relative));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetDimensions_Private(PC pc, PetscInt nev[], PetscInt ncv[], PetscInt mpd[], PetscInt n, PetscBool svd)
+{
+  PC_HPDDM   *data   = (PC_HPDDM *)pc->data;
+  const char *solver = svd ? "svd" : "eps";
+  PetscInt    i, v, N = PetscMin(n, PETSC_PCHPDDM_MAXLEVELS - 1);
+  PetscBool   changed = PETSC_FALSE;
+
+  PetscFunctionBegin;
+  for (i = 0; i < N; ++i) {
+    if (nev[i] != PETSC_CURRENT) {
+      PetscCheck(nev[i] >= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of requested vectors %" PetscInt_FMT " at level %" PetscInt_FMT " must be nonnegative or PETSC_CURRENT", nev[i], i + 1);
+      if (!data->levels || !data->levels[i] || nev[i] != data->levels[i]->nu || (!i && data->svd != svd)) changed = PETSC_TRUE;
+    }
+    PetscCheck(ncv[i] > 0 || ncv[i] == PETSC_DETERMINE || ncv[i] == PETSC_CURRENT, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Subspace dimension %" PetscInt_FMT " at level %" PetscInt_FMT " must be positive, PETSC_DETERMINE, or PETSC_CURRENT", ncv[i], i + 1);
+    if (ncv[i] != PETSC_CURRENT) {
+      PetscCall(PCHPDDMGetSLEPcDimension_Private(pc, i + 1, solver, "ncv", &v));
+      if (ncv[i] != v) changed = PETSC_TRUE;
+    }
+    PetscCheck(mpd[i] > 0 || mpd[i] == PETSC_DETERMINE || mpd[i] == PETSC_CURRENT, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Projected dimension %" PetscInt_FMT " at level %" PetscInt_FMT " must be positive, PETSC_DETERMINE, or PETSC_CURRENT", mpd[i], i + 1);
+    if (mpd[i] != PETSC_CURRENT) {
+      PetscCall(PCHPDDMGetSLEPcDimension_Private(pc, i + 1, solver, "mpd", &v));
+      if (mpd[i] != v) changed = PETSC_TRUE;
+    }
+  }
+  if (!changed) PetscFunctionReturn(PETSC_SUCCESS);
+  if (pc->setupcalled) PetscCall(PCHPDDMResetSetup_Private(pc, PETSC_FALSE));
+  for (i = 0; i < N; ++i) {
+    if (nev[i] != PETSC_CURRENT) {
+      PetscCall(PCHPDDMInitializeLevels_Private(data, i));
+      data->levels[i]->nu = nev[i];
+      if (!i && data->svd != svd) {
+        data->levels[0]->threshold = -1.0;
+        data->relative             = PETSC_FALSE;
+        data->svd                  = svd;
+      }
+    }
+    if (ncv[i] != PETSC_CURRENT) PetscCall(PCHPDDMSetSLEPcDimension_Private(pc, i + 1, solver, "ncv", ncv[i]));
+    if (mpd[i] != PETSC_CURRENT) PetscCall(PCHPDDMSetSLEPcDimension_Private(pc, i + 1, solver, "mpd", mpd[i]));
+  }
+  PetscCall(PCHPDDMUpdateLevels_Private(pc));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetEPSDimensions_HPDDM(PC pc, PetscInt nev[], PetscInt ncv[], PetscInt mpd[], PetscInt n)
+{
+  PetscFunctionBegin;
+  PetscCall(PCHPDDMSetDimensions_Private(pc, nev, ncv, mpd, n, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMSetEPSDimensions - Sets dimensions of the SLEPc eigensolvers used to compute deflation vectors.
+
+  Logically Collective
+
+  Input Parameters:
++ pc  - the preconditioner context
+. nev - array of numbers of eigenvalues to compute at the finest `n` levels
+. ncv - array of maximum subspace dimensions at the finest `n` levels
+. mpd - array of maximum projected dimensions at the finest `n` levels
+- n   - number of entries in `nev`, `ncv`, and `mpd`
+
+  Options Database Keys:
++ -pc_hpddm_levels_%d_eps_nev nev - number of eigenvalues at level `%d`
+. -pc_hpddm_levels_%d_eps_ncv ncv - maximum subspace dimension at level `%d`
+- -pc_hpddm_levels_%d_eps_mpd mpd - maximum projected dimension at level `%d`
+
+  Level: intermediate
+
+  Notes:
+  `PCHPDDM` can currently set only `-eps_nev` directly when constructing its internal `EPS` objects. Since these objects are not otherwise available through the API, `-eps_ncv` and `-eps_mpd` are forwarded through string options. See [EPSSetDimensions()](https://slepc.upv.es/release/manualpages/EPS/EPSSetDimensions.html).
+
+  Use `PETSC_CURRENT` to preserve a dimension and `PETSC_DETERMINE` for `ncv` or `mpd` to use a solver default. If the preconditioner has already been set up and a dimension changes, the computed hierarchy is reset and rebuilt by the next `PCSetUp()`. If `n` exceeds the number of supported levels, excess entries are ignored.
+
+  Setting `nev[0]` to a value other than `PETSC_CURRENT` switches the finest level from SVD to EPS, if needed, and clears the SVD threshold and its relative flag. An existing EPS threshold is preserved.
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetEPSThreshold()`, `PCHPDDMSetSVDDimensions()`, `PCMGSetLevels()`, `PCGAMGSetNlevels()`
+@*/
+PetscErrorCode PCHPDDMSetEPSDimensions(PC pc, PetscInt nev[], PetscInt ncv[], PetscInt mpd[], PetscInt n)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidLogicalCollectiveInt(pc, n, 5);
+  PetscCheck(n >= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of dimensions %" PetscInt_FMT " must be nonnegative", n);
+  if (n) {
+    PetscAssertPointer(nev, 2);
+    PetscAssertPointer(ncv, 3);
+    PetscAssertPointer(mpd, 4);
+  }
+  PetscTryMethod(pc, "PCHPDDMSetEPSDimensions_C", (PC, PetscInt[], PetscInt[], PetscInt[], PetscInt), (pc, nev, ncv, mpd, n));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMSetSVDDimensions_HPDDM(PC pc, PetscInt nsv[], PetscInt ncv[], PetscInt mpd[], PetscInt n)
+{
+  PetscFunctionBegin;
+  PetscCall(PCHPDDMSetDimensions_Private(pc, nsv, ncv, mpd, PetscMin(n, 1), PETSC_TRUE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMSetSVDDimensions - Sets dimensions of the SLEPc singular value solvers used to compute deflation vectors.
+
+  Logically Collective
+
+  Input Parameters:
++ pc  - the preconditioner context
+. nsv - array whose first entry is the number of singular values to compute at the finest level
+. ncv - array whose first entry is the maximum subspace dimension at the finest level
+. mpd - array whose first entry is the maximum projected dimension at the finest level
+- n   - number of entries in `nsv`, `ncv`, and `mpd`
+
+  Options Database Keys:
++ -pc_hpddm_levels_1_svd_nsv nsv - number of singular values at the finest level
+. -pc_hpddm_levels_1_svd_ncv ncv - maximum subspace dimension at the finest level
+- -pc_hpddm_levels_1_svd_mpd mpd - maximum projected dimension at the finest level
+
+  Level: intermediate
+
+  Notes:
+  `PCHPDDM` can currently set only `-svd_nsv` directly when constructing its internal `SVD` objects. Since these objects are not otherwise available through the API, `-svd_ncv` and `-svd_mpd` are forwarded through string options. See [SVDSetDimensions()](https://slepc.upv.es/release/manualpages/SVD/SVDSetDimensions.html).
+
+  Use `PETSC_CURRENT` to preserve a dimension and `PETSC_DETERMINE` for `ncv` or `mpd` to use a solver default. SVD is currently supported only with harmonic overlap at the finest level, so entries after the first are ignored. If the preconditioner has already been set up and a dimension changes, the computed hierarchy is reset and rebuilt by the next `PCSetUp()`.
+
+  Setting `nsv[0]` to a value other than `PETSC_CURRENT` switches the finest level from EPS to SVD, if needed, and clears the EPS threshold and its relative flag. An existing SVD threshold is preserved.
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCHPDDMSetHarmonicOverlap()`, `PCHPDDMSetEPSDimensions()`, `PCMGSetLevels()`, `PCGAMGSetNlevels()`
+@*/
+PetscErrorCode PCHPDDMSetSVDDimensions(PC pc, PetscInt nsv[], PetscInt ncv[], PetscInt mpd[], PetscInt n)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidLogicalCollectiveInt(pc, n, 5);
+  PetscCheck(n >= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of dimensions %" PetscInt_FMT " must be nonnegative", n);
+  if (n) {
+    PetscAssertPointer(nsv, 2);
+    PetscAssertPointer(ncv, 3);
+    PetscAssertPointer(mpd, 4);
+  }
+  PetscTryMethod(pc, "PCHPDDMSetSVDDimensions_C", (PC, PetscInt[], PetscInt[], PetscInt[], PetscInt), (pc, nsv, ncv, mpd, n));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode PCSetFromOptions_HPDDM(PC pc, PetscOptionItems PetscOptionsObject)
 {
   PC_HPDDM                   *data = (PC_HPDDM *)pc->data;
   char                        prefix[256], deprecated[256];
   int                         i = 1;
   PetscMPIInt                 size, previous;
-  PetscInt                    n, overlap = 1;
+  PetscInt                    current[PETSC_PCHPDDM_MAXLEVELS - 1], dimensions[PETSC_PCHPDDM_MAXLEVELS - 1], n, overlap = data->overlap == -1 ? 1 : data->overlap;
+  PetscReal                   thresholds[PETSC_PCHPDDM_MAXLEVELS - 1];
   PCHPDDMCoarseCorrectionType type;
   PetscBool                   flg = PETSC_TRUE, set;
 
   PetscFunctionBegin;
-  PetscCall(PCHPDDMInitializeLevels_Private(data));
+  PetscCall(PCHPDDMInitializeLevels_Private(data, 0));
+  for (n = 0; n < PETSC_PCHPDDM_MAXLEVELS - 1; ++n) {
+    current[n]    = PETSC_CURRENT;
+    dimensions[n] = PETSC_CURRENT;
+    thresholds[n] = static_cast<PetscReal>(PETSC_CURRENT);
+  }
   PetscOptionsHeadBegin(PetscOptionsObject, "PCHPDDM options");
   PetscCall(PetscOptionsBoundedInt("-pc_hpddm_harmonic_overlap", "Overlap prior to computing local harmonic extensions", "PCHPDDM", overlap, &overlap, &set, 1));
-  if (!set) overlap = -1;
+  if (set) PetscCall(PCHPDDMSetHarmonicOverlap(pc, overlap));
+  overlap = data->overlap;
   PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)pc), &size));
   previous = size;
   while (i < PETSC_PCHPDDM_MAXLEVELS) {
-    PetscInt p = 1;
+    PetscInt  nev = 0, p = 1;
+    PetscReal threshold = -1.0;
+    PetscBool epsNevSet, epsThresholdSet;
 
-    if (!data->levels[i - 1]) PetscCall(PetscNew(data->levels + i - 1));
-    data->levels[i - 1]->parent = data;
+    PetscCall(PCHPDDMInitializeLevels_Private(data, i - 1));
+    if (!(i == 1 && data->svd)) nev = data->levels[i - 1]->nu;
+    if (!(i == 1 && overlap != -1)) threshold = data->levels[i - 1]->threshold;
     /* if the previous level has a single process, it is not possible to coarsen further */
     if (previous == 1 || !flg) break;
-    data->levels[i - 1]->nu        = 0;
-    data->levels[i - 1]->threshold = -1.0;
     PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_nev", i));
-    PetscCall(PetscOptionsBoundedInt(prefix, "Local number of deflation vectors computed by SLEPc", "EPSSetDimensions", data->levels[i - 1]->nu, &data->levels[i - 1]->nu, nullptr, 0));
+    PetscCall(PetscOptionsBoundedInt(prefix, "Local number of deflation vectors computed by SLEPc", "EPSSetDimensions", nev, &nev, &epsNevSet, 0));
     PetscCall(PetscSNPrintf(deprecated, sizeof(deprecated), "-pc_hpddm_levels_%d_eps_threshold", i));
     PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_threshold_absolute", i));
     PetscCall(PetscOptionsDeprecated(deprecated, prefix, "3.24", nullptr));
-    PetscCall(PetscOptionsReal(prefix, "Local absolute threshold for selecting deflation vectors returned by SLEPc", "PCHPDDM", data->levels[i - 1]->threshold, &data->levels[i - 1]->threshold, nullptr));
+    PetscCall(PetscOptionsReal(prefix, "Local absolute threshold for selecting deflation vectors returned by SLEPc", "PCHPDDMSetEPSThreshold", threshold, &threshold, &epsThresholdSet));
+    if (epsNevSet) {
+      dimensions[i - 1] = nev;
+      PetscCall(PCHPDDMSetEPSDimensions(pc, dimensions, current, current, i));
+      dimensions[i - 1] = PETSC_CURRENT;
+    }
+    if (epsThresholdSet) {
+      thresholds[i - 1] = threshold;
+      PetscCall(PCHPDDMSetEPSThreshold(pc, thresholds, i, PETSC_FALSE));
+      thresholds[i - 1] = static_cast<PetscReal>(PETSC_CURRENT);
+    }
     if (i == 1) {
-      PetscCheck(overlap == -1 || PetscAbsReal(data->levels[i - 1]->threshold + static_cast<PetscReal>(1.0)) < PETSC_MACHINE_EPSILON, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_threshold_absolute and -pc_hpddm_harmonic_overlap");
+      PetscInt  nsv          = data->svd ? data->levels[0]->nu : 0;
+      PetscReal epsThreshold = data->svd ? -1.0 : data->levels[0]->threshold, svdThreshold = data->svd ? data->levels[0]->threshold : -1.0;
+      PetscBool nsvSet;
+      PetscBool thresholdSet[2] = {PETSC_FALSE, PETSC_FALSE};
+
       PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_svd_nsv", i));
       if (overlap != -1) {
-        PetscInt  nsv    = 0;
-        PetscBool set[2] = {PETSC_FALSE, PETSC_FALSE};
-
-        PetscCall(PetscOptionsBoundedInt(prefix, "Local number of deflation vectors computed by SLEPc", "SVDSetDimensions", nsv, &nsv, nullptr, 0));
-        PetscCheck(data->levels[0]->nu == 0 || nsv == 0, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_nev and -pc_hpddm_levels_1_svd_nsv");
-        if (data->levels[0]->nu == 0) { /* -eps_nev has not been used, so nu is 0 */
-          data->levels[0]->nu = nsv;    /* nu may still be 0 if -svd_nsv has not been used */
-          PetscCall(PetscSNPrintf(deprecated, sizeof(deprecated), "-pc_hpddm_levels_%d_svd_relative_threshold", i));
-          PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_svd_threshold_relative", i));
-          PetscCall(PetscOptionsDeprecated(deprecated, prefix, "3.24", nullptr));
-          PetscCall(PetscOptionsReal(prefix, "Local relative threshold for selecting deflation vectors returned by SLEPc", "PCHPDDM", data->levels[0]->threshold, &data->levels[0]->threshold, set)); /* cache whether this option has been used or not to error out in case of exclusive options being used simultaneously later on */
+        PetscCall(PetscOptionsBoundedInt(prefix, "Local number of deflation vectors computed by SLEPc", "SVDSetDimensions", nsv, &nsv, &nsvSet, 0));
+        PetscCheck(!epsNevSet || !nsvSet || nev == 0 || nsv == 0, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_nev and -pc_hpddm_levels_1_svd_nsv");
+        PetscCall(PetscSNPrintf(deprecated, sizeof(deprecated), "-pc_hpddm_levels_%d_svd_relative_threshold", i));
+        PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_svd_threshold_relative", i));
+        PetscCall(PetscOptionsDeprecated(deprecated, prefix, "3.24", nullptr));
+        PetscCall(PetscOptionsReal(prefix, "Local relative threshold for selecting deflation vectors returned by SLEPc", "PCHPDDM", svdThreshold, &svdThreshold, thresholdSet));
+        PetscCall(PetscSNPrintf(deprecated, sizeof(deprecated), "-pc_hpddm_levels_%d_eps_relative_threshold", i));
+        PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_threshold_relative", i));
+        PetscCall(PetscOptionsDeprecated(deprecated, prefix, "3.24", nullptr));
+        PetscCall(PetscOptionsReal(prefix, "Local relative threshold for selecting deflation vectors returned by SLEPc", "PCHPDDMSetEPSThreshold", epsThreshold, &epsThreshold, thresholdSet + 1));
+        PetscCheck(!thresholdSet[0] || !thresholdSet[1], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_threshold_relative and -pc_hpddm_levels_1_svd_threshold_relative");
+        PetscCheck(!epsNevSet || nev == 0 || !thresholdSet[0], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_nev and -pc_hpddm_levels_1_svd_threshold_relative");
+        PetscCheck(!nsvSet || nsv == 0 || !thresholdSet[1], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_svd_nsv and -pc_hpddm_levels_1_eps_threshold_relative");
+        if (nsvSet && (!epsNevSet || nev == 0)) {
+          dimensions[0] = nsv;
+          PetscCall(PCHPDDMSetSVDDimensions(pc, dimensions, current, current, 1));
+          dimensions[0] = PETSC_CURRENT;
         }
-        if (data->levels[0]->nu == 0 || nsv == 0) { /* if neither -eps_nev nor -svd_nsv has been used */
-          PetscCall(PetscSNPrintf(deprecated, sizeof(deprecated), "-pc_hpddm_levels_%d_eps_relative_threshold", i));
-          PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_threshold_relative", i));
-          PetscCall(PetscOptionsDeprecated(deprecated, prefix, "3.24", nullptr));
-          PetscCall(PetscOptionsReal(prefix, "Local relative threshold for selecting deflation vectors returned by SLEPc", "PCHPDDM", data->levels[0]->threshold, &data->levels[0]->threshold, set + 1));
-          PetscCheck(!set[0] || !set[1], PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply both -pc_hpddm_levels_1_eps_threshold_relative and -pc_hpddm_levels_1_svd_threshold_relative");
+        if (thresholdSet[0]) PetscCall(PCHPDDMSetThreshold_Private(pc, &svdThreshold, 1, PETSC_TRUE, PETSC_TRUE));
+        if (thresholdSet[1]) {
+          thresholds[0] = epsThreshold;
+          PetscCall(PCHPDDMSetEPSThreshold(pc, thresholds, 1, PETSC_TRUE));
+          thresholds[0] = static_cast<PetscReal>(PETSC_CURRENT);
         }
         PetscCheck(data->levels[0]->nu || PetscAbsReal(data->levels[i - 1]->threshold + static_cast<PetscReal>(1.0)) > PETSC_MACHINE_EPSILON, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Need to supply at least one of 1) -pc_hpddm_levels_1_eps_nev, 2) -pc_hpddm_levels_1_svd_nsv, 3) -pc_hpddm_levels_1_eps_threshold_relative, 4) -pc_hpddm_levels_1_svd_threshold_relative (for nonsymmetric matrices, only option 2 and option 4 are appropriate)");
       } else if (PetscDefined(USE_DEBUG)) {
@@ -406,18 +787,24 @@ static PetscErrorCode PCSetFromOptions_HPDDM(PC pc, PetscOptionItems PetscOption
         PetscCheck(!flg, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot supply -%spc_hpddm_levels_%d_eps_threshold_relative without -%spc_hpddm_harmonic_overlap, maybe you meant to use -%spc_hpddm_levels_%d_eps_threshold_absolute?",
                    PetscOptionsObject->prefix ? PetscOptionsObject->prefix : "", i, PetscOptionsObject->prefix ? PetscOptionsObject->prefix : "", PetscOptionsObject->prefix ? PetscOptionsObject->prefix : "", i);
       }
+      PetscCheck(data->levels[0]->threshold < 0.0 || (data->relative ? overlap != -1 : overlap == -1), PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "A finest-level relative threshold requires harmonic overlap, while a finest-level absolute threshold cannot be used with harmonic overlap");
+      PetscCheck(overlap != -1 || !data->svd || data->levels[0]->nu <= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "Finest-level SVD dimensions require harmonic overlap");
       PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_1_st_share_sub_ksp"));
-      PetscCall(PetscOptionsBool(prefix, "Shared KSP between SLEPc ST and the fine-level subdomain solver", "PCHPDDMSetSTShareSubKSP", PETSC_FALSE, &data->share, nullptr));
+      PetscCall(PetscOptionsBool(prefix, "Shared KSP between SLEPc ST and the fine-level subdomain solver", "PCHPDDMSetSTShareSubKSP", data->share, &flg, &set));
+      if (set) PetscCall(PCHPDDMSetSTShareSubKSP(pc, flg));
     }
     /* if there is no prescribed coarsening, just break out of the loop */
     if (data->levels[i - 1]->threshold <= PetscReal() && data->levels[i - 1]->nu <= 0 && !(data->deflation && i == 1)) break;
     else {
       ++i;
-      PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_nev", i));
-      PetscCall(PetscOptionsHasName(PetscOptionsObject->options, PetscOptionsObject->prefix, prefix, &flg));
+      flg = PetscBool(data->levels[i - 1] && (data->levels[i - 1]->threshold > 0.0 || data->levels[i - 1]->nu > 0));
       if (!flg) {
-        PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_threshold_absolute", i));
+        PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_nev", i));
         PetscCall(PetscOptionsHasName(PetscOptionsObject->options, PetscOptionsObject->prefix, prefix, &flg));
+        if (!flg) {
+          PetscCall(PetscSNPrintf(prefix, sizeof(prefix), "-pc_hpddm_levels_%d_eps_threshold_absolute", i));
+          PetscCall(PetscOptionsHasName(PetscOptionsObject->options, PetscOptionsObject->prefix, prefix, &flg));
+        }
       }
       if (flg) {
         /* if there are coarsening options for the next level, then register it  */
@@ -501,6 +888,45 @@ static PetscErrorCode PCMatApply_HPDDM(PC pc, Mat X, Mat Y)
   if (!transpose) PetscCall(KSPMatSolve(data->levels[0]->ksp, X, Y));
   else PetscCall(KSPMatSolveTranspose(data->levels[0]->ksp, X, Y));
   PetscCall(KSPCheckMatSolve(data->levels[0]->ksp, pc, Y));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCHPDDMGetSubKSP_HPDDM(PC pc, PetscInt level, KSP *ksp)
+{
+  PC_HPDDM *data = (PC_HPDDM *)pc->data;
+
+  PetscFunctionBegin;
+  PetscCheck(pc->setupcalled, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "PCHPDDMGetSubKSP() must be called after PCSetUp()");
+  PetscCheck(level >= 1 && level <= data->N, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Level %" PetscInt_FMT " must be in [1, %" PetscInt_FMT "]", level, data->N);
+  *ksp = data->levels ? data->levels[level - 1]->ksp : nullptr;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  PCHPDDMGetSubKSP - Gets a `KSP` context used by `PCHPDDM`.
+
+  Not Collective
+
+  Input Parameters:
++ pc    - the preconditioner context
+- level - the level to supply, with 1 being the finest
+
+  Output Parameter:
+. ksp - the solver at `level`
+
+  Level: advanced
+
+  Notes:
+  `PCSetUp()` must be called before this routine. The returned `KSP` is owned by `PCHPDDM` and must not be destroyed by the caller. It may be `NULL` on processes that do not participate in `level`.
+
+.seealso: [](ch_ksp), `PCHPDDM`, `PCASMGetSubKSP()`, `PCGASMGetSubKSP()`, `PCBJacobiGetSubKSP()`, `PCMGGetSmoother()`, `PCMGGetLevels()`
+@*/
+PetscErrorCode PCHPDDMGetSubKSP(PC pc, PetscInt level, KSP *ksp)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscAssertPointer(ksp, 3);
+  PetscUseMethod(pc, "PCHPDDMGetSubKSP_C", (PC, PetscInt, KSP *), (pc, level, ksp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1804,8 +2230,12 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
 
   PetscFunctionBegin;
   if (!data->levels) PetscCall(PetscInfo(pc, "No level allocated, defaulting to a single level, PCSetFromOptions() should be called before PCSetUp() to avoid this\n"));
-  PetscCall(PCHPDDMInitializeLevels_Private(data));
+  PetscCall(PCHPDDMInitializeLevels_Private(data, 0)); /* usually allocated in PCSetFromOptions_HPDDM(), but PCSetUp_HPDDM() may be called without a prior PCSetFromOptions() */
   requested = data->N;
+  if (requested > 1) {
+    PetscCheck(data->levels[0]->threshold < 0.0 || (data->relative ? data->overlap != -1 : data->overlap == -1), PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_INCOMP, "A finest-level relative threshold requires harmonic overlap, while a finest-level absolute threshold cannot be used with harmonic overlap");
+    PetscCheck(data->overlap != -1 || !data->svd || data->levels[0]->nu <= 0, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_INCOMP, "Finest-level SVD dimensions require harmonic overlap");
+  }
   PetscCall(PCGetOptionsPrefix(pc, &pcpre));
   PetscCall(PCGetOperators(pc, &A, &P));
   if (!data->levels[0]->ksp) {
@@ -1900,7 +2330,7 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
   if (!ismatis) {
     PetscCall(PCHPDDMSetUpNeumannOverlap_Private(pc));
     PetscCall(PetscOptionsGetBool(((PetscObject)pc)->options, pcpre, "-pc_hpddm_block_splitting", &block, nullptr));
-    PetscCall(PetscOptionsGetInt(((PetscObject)pc)->options, pcpre, "-pc_hpddm_harmonic_overlap", &overlap, nullptr));
+    overlap = data->overlap;
     PetscCall(PetscObjectTypeCompare((PetscObject)P, MATSCHURCOMPLEMENT, &flg));
     if (data->is || flg) {
       if (block || overlap != -1) {
@@ -2386,11 +2816,7 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
             PetscCall(PetscNew(&h));
             h->ksp = nullptr;
             PetscCall(PetscCalloc1(2, &h->A));
-            PetscCall(PetscOptionsHasName(((PetscObject)pc)->options, prefix, "-eps_nev", &flg));
-            if (!flg) {
-              PetscCall(PetscOptionsHasName(((PetscObject)pc)->options, prefix, "-svd_nsv", &flg));
-              if (!flg) PetscCall(PetscOptionsHasName(((PetscObject)pc)->options, prefix, "-svd_threshold_relative", &flg));
-            } else flg = PETSC_FALSE;
+            flg = data->svd;
             PetscCall(ISSort(ov[0]));
             if (!flg) PetscCall(ISSort(ov[1]));
             PetscCall(PetscCalloc1(5, &h->is));
@@ -3312,7 +3738,8 @@ PetscErrorCode HPDDMLoadDL_Private(PetscBool *found)
 
 .seealso: [](ch_ksp), `PCCreate()`, `PCSetType()`, `PCType`, `PC`, `PCHPDDMSetAuxiliaryMat()`, `MATIS`, `PCBDDC`, `PCDEFLATION`, `PCTELESCOPE`, `PCASM`,
           `PCHPDDMSetCoarseCorrectionType()`, `PCHPDDMHasNeumannMat()`, `PCHPDDMSetRHSMat()`, `PCHPDDMSetDeflationMat()`, `PCHPDDMSetSTShareSubKSP()`,
-          `PCHPDDMGetSTShareSubKSP()`, `PCHPDDMGetCoarseCorrectionType()`, `PCHPDDMGetComplexities()`
+          `PCHPDDMGetSTShareSubKSP()`, `PCHPDDMGetCoarseCorrectionType()`, `PCHPDDMGetComplexities()`, `PCHPDDMSetHarmonicOverlap()`,
+          `PCHPDDMSetEPSThreshold()`, `PCHPDDMSetEPSDimensions()`, `PCHPDDMSetSVDDimensions()`, `PCHPDDMGetSubKSP()`
 M*/
 PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
 {
@@ -3328,6 +3755,8 @@ PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
   PetscCall(PetscNew(&data));
   pc->data                   = data;
   data->Neumann              = PETSC_BOOL3_UNKNOWN;
+  data->overlap              = -1;
+  data->relative             = PETSC_FALSE;
   pc->ops->reset             = PCReset_HPDDM;
   pc->ops->destroy           = PCDestroy_HPDDM;
   pc->ops->setfromoptions    = PCSetFromOptions_HPDDM;
@@ -3342,6 +3771,11 @@ PETSC_EXTERN PetscErrorCode PCCreate_HPDDM(PC pc)
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetAuxiliaryMat_C", PCHPDDMSetAuxiliaryMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMHasNeumannMat_C", PCHPDDMHasNeumannMat_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetRHSMat_C", PCHPDDMSetRHSMat_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetHarmonicOverlap_C", PCHPDDMSetHarmonicOverlap_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetEPSThreshold_C", PCHPDDMSetEPSThreshold_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetEPSDimensions_C", PCHPDDMSetEPSDimensions_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSVDDimensions_C", PCHPDDMSetSVDDimensions_HPDDM));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetSubKSP_C", PCHPDDMGetSubKSP_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetCoarseCorrectionType_C", PCHPDDMSetCoarseCorrectionType_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMGetCoarseCorrectionType_C", PCHPDDMGetCoarseCorrectionType_HPDDM));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCHPDDMSetSTShareSubKSP_C", PCHPDDMSetSTShareSubKSP_HPDDM));

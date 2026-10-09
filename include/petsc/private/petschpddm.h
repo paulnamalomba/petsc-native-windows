@@ -39,7 +39,10 @@ struct PC_HPDDM {
   PetscBool                   share;                                        /* shared subdomain KSP between SLEPc and PETSc? */
   PetscBool                   deflation;                                    /* aux is the local deflation space? */
   PetscErrorCode (*setup)(Mat, PetscReal, Vec, Vec, PetscReal, IS, void *); /* setup function for the auxiliary matrix */
-  void *setup_ctx;                                                          /* context for setup */
+  void     *setup_ctx;                                                      /* context for setup */
+  PetscInt  overlap;                                                        /* overlap used for harmonic extensions */
+  PetscBool svd;                                                            /* finest-level deflation vectors are computed with an SVD? */
+  PetscBool relative;                                                       /* finest-level threshold is relative? */
 };
 
 struct KSP_HPDDM {

@@ -342,7 +342,7 @@ static PetscErrorCode PCBJacobiGetLocalBlocks_BJacobi(PC pc, PetscInt *blocks, c
   Fortran Note:
   Call `PCBJacobiRestoreSubKSP()` when you no longer need access to the array of `KSP`
 
-.seealso: [](ch_ksp), `PCBJACOBI`, `PCASM`, `PCASMGetSubKSP()`
+.seealso: [](ch_ksp), `PCBJACOBI`, `PCASM`, `PCASMGetSubKSP()`, `PCHPDDMGetSubKSP()`
 @*/
 PetscErrorCode PCBJacobiGetSubKSP(PC pc, PetscInt *n_local, PetscInt *first_local, KSP *ksp[])
 {

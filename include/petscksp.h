@@ -266,6 +266,7 @@ PETSC_EXTERN PetscErrorCode PCKSPSetKSP(PC, KSP);
 PETSC_EXTERN PetscErrorCode PCBJacobiGetSubKSP(PC, PetscInt *, PetscInt *, KSP *[]);
 PETSC_EXTERN PetscErrorCode PCASMGetSubKSP(PC, PetscInt *, PetscInt *, KSP *[]);
 PETSC_EXTERN PetscErrorCode PCGASMGetSubKSP(PC, PetscInt *, PetscInt *, KSP *[]);
+PETSC_EXTERN PetscErrorCode PCHPDDMGetSubKSP(PC, PetscInt, KSP *);
 PETSC_EXTERN PetscErrorCode PCPatchGetSubKSP(PC, PetscInt *, KSP *[]);
 PETSC_EXTERN PetscErrorCode PCFieldSplitGetSubKSP(PC, PetscInt *, KSP *[]);
 PETSC_EXTERN PetscErrorCode PCFieldSplitSchurGetSubKSP(PC, PetscInt *, KSP *[]);
