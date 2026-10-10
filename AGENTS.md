@@ -27,6 +27,7 @@ Shared rules are below; optional skills provide task procedures through the codi
 - Final test changes must exercise successful behavior: do not add expected-error cases, assertions of expected error codes, or `PetscPushErrorHandler()`/`PetscPopErrorHandler()` calls.
 - The user selects `PETSC_ARCH`; reuse the value already supplied for the task. Ask if it is missing before configuring or building PETSc or petsc4py, running PETSc-dependent tests or executables, or importing petsc4py; pass it explicitly and never infer or change it unless asked. Architecture-independent checks need no architecture. Targets managing a dedicated default architecture, such as `make docs`, are exempt when using that default.
 - A documentation audit or review does not authorize a documentation build; run it only when explicitly requested or approved for the task.
+- In `doc/changes/dev.md`, do not add blank lines between bullet entries within the same section. Keep entries contiguous and preserve the blank lines around section rubrics.
 - All changes are expected to arrive through focused, reviewable GitLab merge requests.
 
 ## Conditional Conventions
