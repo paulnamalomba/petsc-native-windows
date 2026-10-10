@@ -1,24 +1,27 @@
-"""pde-sim Purple-agent binding for petscagent-bench.
+"""pde-sim runner for petscagent-bench problems.
 
-Exposes the pde-sim multi-agent pipeline behind the A2A "Purple agent" contract
-that petscagent-bench's Green agent expects, without modifying any bench code.
+Drives the pde-sim multi-agent pipeline non-interactively with the Claude CLI
+(``claude -p`` in autonomous mode) on one benchmark problem description, and
+harvests the generated source and the run parameters from the pipeline's
+``results-manifest.json`` (schema:
+.agents/pde-sim/contracts/results-manifest.schema.json).
 
-The Green agent talks to a Purple agent purely over A2A/HTTP by URL: it sends a
-plain-text problem description and expects back a single message containing
+Two entry points share that work:
 
-  * exactly one TextPart shaped as
+  * ``pdesim_purple.py run --problem FILE --study-dir DIR`` runs one problem and
+    writes ``case-result.json`` beside the study's artifacts. It needs only the
+    Python standard library and the Claude CLI; run_pdesim.sh drives it.
+  * ``pdesim_purple.py serve`` exposes the same run behind the A2A "Purple agent"
+    contract that petscagent-bench's Green agent expects. Green sends a
+    plain-text problem description and gets back one TextPart shaped as
         Code generation successful ...
         nsize: <int>
         cli_args: <string>
-  * one or more FileParts holding the generated PETSc source (first = main).
+    plus one or more FileParts holding the generated source (first = main).
+    This mode must be launched from the bench repo root inside the bench's uv
+    env, which provides the A2A dependencies.
 
-This server satisfies that contract by driving pde-sim non-interactively with
-the Claude CLI (``claude -p`` in autonomous mode), then harvesting the generated
-source and the run parameters from the pipeline's ``results-manifest.json``
-(schema: .agents/pde-sim/contracts/results-manifest.schema.json).
-
-Run it from an environment that has the A2A server deps installed (the simplest
-is petscagent-bench's own uv env); see the sibling README.md for the full recipe.
+See the sibling README.md for the full recipe.
 """
 
 import argparse
@@ -32,25 +35,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-import uvicorn
-from starlette.applications import Starlette
-from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.events import EventQueue
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore
-
-# The bench migrated to the protobuf-based A2A 1.x SDK and provides its types and
-# the telemetry contract through local shims (src.util.*). This binding is
-# launched from the bench repo root (see README), so add the cwd to sys.path to
-# resolve `src.*`, exactly as the bench's own agents rely on.
-sys.path.insert(0, os.getcwd())
-from src.util.a2a_v1 import (  # noqa: E402  (import after sys.path fix-up)
-    AgentCapabilities, AgentCard, AgentInterface, AgentSkill,
-    new_agent_parts_message, new_data_part, new_raw_part, new_text_part,
-)
-from src.util.telemetry import PURPLE_TELEMETRY_SCHEMA  # noqa: E402
 
 # Repo root: this file lives at <repo>/.agents/pde-sim/bindings/petscagent-bench/pdesim_purple.py
 REPO_DIR = Path(__file__).resolve().parents[4]
@@ -409,6 +393,51 @@ class PdeSimTimeout(RuntimeError):
     def __init__(self, message: str, usage: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(message)
         self.usage = usage
+
+
+class PdeSimLlmUnavailable(RuntimeError):
+    """The run stopped because the LLM account could not be used: its credit or
+    usage budget ran out. Carries what is needed to resume the same session once
+    the budget is restored, and the stopped run's usage."""
+
+    def __init__(self, message: str, session_id: Optional[str], returncode: int,
+                 usage: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.returncode = returncode
+        self.usage = usage
+
+
+# The CLI tags the assistant message that wraps an API error with an ``error``
+# kind. These two mean the account has no budget left (an API key's credit
+# balance, or a subscription's usage limit), which adding funds or waiting for
+# the limit to reset fixes; the CLI does not retry them. The text pattern covers
+# a run that reported the failure only in its result text or on stderr.
+_BUDGET_ERRORS = {"billing_error", "rate_limit"}
+_BUDGET_TEXT = re.compile(r"credit balance is too low|out of (?:extra )?usage|usage limit"
+                          r"|spend(?:ing)? limit|add funds", re.I)
+
+
+def _llm_unavailable(events: List[Any], rc: int, stderr: str) -> Optional[str]:
+    """The CLI's own explanation when a run ended because the LLM budget ran out.
+
+    Returns None for a run that finished normally, even if a subagent hit the
+    limit along the way and the run recovered, and for any other failure.
+    """
+    result = next((e for e in reversed(events)
+                   if isinstance(e, dict) and e.get("type") == "result"), None)
+    if rc == 0 and not (result or {}).get("is_error"):
+        return None
+    err = next((e for e in reversed(events)
+                if isinstance(e, dict) and e.get("type") == "assistant" and e.get("error")), None)
+    if err is not None and err["error"] in _BUDGET_ERRORS:
+        text = " ".join(c.get("text", "") for c in (err.get("message") or {}).get("content") or []
+                        if isinstance(c, dict) and c.get("type") == "text").strip()
+        return text or err["error"]
+    for text in ((result or {}).get("result"), stderr):
+        if isinstance(text, str) and _BUDGET_TEXT.search(text):
+            return next(l.strip() for l in text.splitlines() if _BUDGET_TEXT.search(l))
+    return None
 
 
 def _extract_result(events: List[Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
@@ -824,10 +853,16 @@ def _render_spec_companions(study_dir: Path) -> None:
         print(f"@@@ pde-sim purple: could not render spec companions in {study_dir}: {e}", flush=True)
 
 
-async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str, str, Optional[Dict[str, Any]]]:
+async def _run_claude(prompt: str, study_dir: Path, cwd: Path, resume: Optional[str] = None,
+                      timeout_sec: Optional[float] = None) -> Tuple[int, str, str, Optional[Dict[str, Any]]]:
     """Drive the Claude CLI for the active config, streaming the transcript live.
 
-    Returns (returncode, final_text, stderr, usage_info). Runs with
+    Returns (returncode, final_text, stderr, usage_info). With ``resume``, the
+    named session is continued: the CLI does not replay its earlier messages, so
+    they are read back from the saved transcript and the new ones appended, and
+    the final ``result`` event's cost and token totals cover the whole session.
+    Raises PdeSimTimeout after ``timeout_sec`` (default PDESIM_TIMEOUT) and
+    PdeSimLlmUnavailable when the LLM budget runs out. Runs with
     ``--output-format stream-json --verbose`` so each transcript event arrives as
     its own line: they are appended to ``<study_dir>/transcript.stream.jsonl`` as
     they happen (tail it to watch the run grow), and the readable per-role
@@ -835,6 +870,8 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
     """
     argv: List[str] = [SETTINGS.claude_bin, "-p", prompt, "--output-format", "stream-json", "--verbose"]
     argv += shlex.split(SETTINGS.permission_flag)
+    if resume:
+        argv += ["--resume", resume]
     if SETTINGS.claude_model:
         argv += ["--model", SETTINGS.claude_model]
     if SETTINGS.disallowed_tools.strip():
@@ -866,7 +903,15 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
         limit=256 * 1024 * 1024,
     )
 
+    stream_path = study_dir / "transcript.stream.jsonl"
     events: List[Any] = []
+    if resume and stream_path.is_file():
+        for line in stream_path.read_text(errors="replace").splitlines():
+            try:
+                events.append(json.loads(line))
+            except ValueError:            # a partially flushed trailing line
+                pass
+    first_new = len(events)
     stderr_chunks: List[bytes] = []
 
     async def _drain_stderr() -> None:
@@ -874,7 +919,7 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
             stderr_chunks.append(chunk)
 
     async def _read_stdout() -> None:
-        stream_f = open(study_dir / "transcript.stream.jsonl", "w") if save else None
+        stream_f = open(stream_path, "a" if resume else "w") if save else None
         last_render = 0.0
         try:
             async for raw in proc.stdout:                        # one JSON event per line
@@ -903,7 +948,7 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
 
     try:
         await asyncio.wait_for(asyncio.gather(_read_stdout(), _drain_stderr()),
-                               timeout=SETTINGS.timeout_sec)
+                               timeout=timeout_sec or SETTINGS.timeout_sec)
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
@@ -919,8 +964,18 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
     if save:
         _save_transcript(study_dir, events, err_b)               # final complete render
         _render_spec_companions(study_dir)                        # <name>.md for each spec JSON
-    text, usage = _extract_result(events)
-    return proc.returncode, text, err_b.decode("utf-8", "replace"), usage
+    stderr = err_b.decode("utf-8", "replace")
+    new = events[first_new:]
+    # Only this run's own result counts: without one, the last result on file is
+    # an earlier run's.
+    has_result = any(isinstance(e, dict) and e.get("type") == "result" for e in new)
+    text, usage = _extract_result(events) if has_result else ("", None)
+    why = _llm_unavailable(new, proc.returncode, stderr)
+    if why:
+        session = next((e["session_id"] for e in reversed(new)
+                        if isinstance(e, dict) and e.get("session_id")), resume)
+        raise PdeSimLlmUnavailable(why, session, proc.returncode, usage or _partial_usage(events))
+    return proc.returncode, text, stderr, usage
 
 
 def _find_manifest(stdout: str, study_dir: Path, since_ts: float) -> Optional[Path]:
@@ -1100,6 +1155,8 @@ def _build_telemetry(usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
     both cover the whole run, including any subagents the pipeline dispatched.
     Also self-reports this agent's model name for output naming.
     """
+    from src.util.telemetry import PURPLE_TELEMETRY_SCHEMA
+
     if not usage:
         # Still report identity even when usage capture failed, so the run is named.
         return {"schema_version": PURPLE_TELEMETRY_SCHEMA, "model": _purple_model_label()}
@@ -1124,7 +1181,8 @@ def _build_telemetry(usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
     return t
 
 
-def _append_usage_log(usage: Optional[Dict[str, Any]], context_id: str, since: float, rc: int) -> None:
+def _append_usage_log(usage: Optional[Dict[str, Any]], context_id: str, since: float, rc: int,
+                      extra: Optional[Dict[str, Any]] = None) -> None:
     """Append one JSON record of this request's usage to the per-config sidecar.
 
     Captures total_cost_usd (the trustworthy subagent-inclusive figure for config 3)
@@ -1147,6 +1205,8 @@ def _append_usage_log(usage: Optional[Dict[str, Any]], context_id: str, since: f
     }
     if usage:
         rec.update(usage)
+    if extra:
+        rec.update(extra)
     try:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -1190,153 +1250,270 @@ def _write_stub_manifest(study_dir: Path, reason: str, sources: List[Tuple[str, 
         print(f"@@@ pde-sim purple: could not write stub manifest: {e}", flush=True)
 
 
-class PdeSimPurpleExecutor(AgentExecutor):
-    """A2A executor that maps a problem description to a pde-sim study."""
+_RESUME_PROMPT = (
+    "This run was stopped partway because the LLM could not be used ({reason}). Access "
+    "has been restored, so continue the same task from where it stopped. Do NOT start "
+    "over: what was done so far is on disk under {study_dir}, so look there first. "
+    "If a step or a dispatched stage was cut off, redo only that one, then carry on. "
+    "Finish exactly as the original instructions require, ending with the PDESIM_DONE line.\n"
+)
 
-    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-        problem_description = context.get_user_input()
-        ctx = (context.context_id or "study").replace("/", "_")
-        study_dir = SETTINGS.artifacts_dir / f"bench-{ctx}-{int(time.time())}"
-        study_dir.mkdir(parents=True, exist_ok=True)
 
-        # Bound before the try so the failure handler can report telemetry for a
-        # request that fell over early.
-        usage: Optional[Dict[str, Any]] = None
-        since = time.time()
-        rc = -1
-        timed_out = False
+async def run_case(problem_description: str, study_dir: Path, ctx: str,
+                   resume: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Run the active config on one problem and harvest what it produced.
 
-        try:
+    Returns a dict with the program's run parameters (``nsize``, ``cli_args``,
+    ``command``), the generated ``sources`` as (name, bytes) pairs, the
+    ``manifest`` path, ``usage``, ``rc``, ``timed_out``, a ``degraded`` note for
+    a partial answer, and ``error``, which is set when there is nothing to submit.
+
+    When the LLM budget runs out, ``paused`` is set instead, with the CLI's
+    ``pause_reason`` and the ``session_id`` to continue. Passing that result back
+    as ``resume`` continues the same session where it stopped. ``active_sec`` is
+    the time spent running, summed over every resumed part; time spent paused
+    counts toward neither it nor PDESIM_TIMEOUT.
+    """
+    study_dir.mkdir(parents=True, exist_ok=True)
+    usage: Optional[Dict[str, Any]] = None
+    resume = resume or {}
+    since = resume.get("started_at") or time.time()   # the case's start, for _find_manifest
+    part_start = time.time()
+    active_before = float(resume.get("active_sec") or 0.0)
+    part = int(resume.get("parts") or 0) + 1
+    rc = -1
+    timed_out = False
+    out: Dict[str, Any] = {"study_dir": str(study_dir), "nsize": 1, "cli_args": "", "command": None,
+                           "manifest": None, "sources": [], "degraded": "", "error": None,
+                           "paused": False, "pause_reason": None, "session_id": None}
+
+    try:
+        if resume:
+            prompt = _RESUME_PROMPT.format(reason=resume.get("pause_reason") or "budget exhausted",
+                                           study_dir=study_dir)
+        else:
             prompt = _prompt_for(problem_description, study_dir)
-            # All configs run at the repo root so they share identical project
-            # context (CLAUDE.md/AGENTS.md); the ONLY difference across the ladder
-            # is the tool gating (PDESIM_DISALLOWED_TOOLS): config 1 blocks the
-            # subagent (Task/Agent) and Skill tools, config 2 blocks only the
-            # subagent tool, config 3 blocks nothing. Running config 1 elsewhere
-            # would also strip project context, confounding the 1->2 comparison.
-            try:
-                rc, stdout, stderr, usage = await _run_claude(prompt, study_dir, SETTINGS.repo_dir)
-                print(f"@@@ pde-sim purple: pipeline exit code {rc}", flush=True)
-                if usage:
-                    print(f"@@@ pde-sim purple: usage prompt={usage['prompt_tokens']} "
-                          f"completion={usage['completion_tokens']} cached={usage['cached_tokens']} "
-                          f"cost_usd={usage['total_cost_usd']} turns={usage['num_turns']} "
-                          f"subagents={usage['subagents_spawned']} "
-                          f"skill_tool={usage['skill_tool_calls']} "
-                          f"skills_read={usage['pdesim_skills_read']}", flush=True)
-                # Locate and parse the manifest once; fold how often code generation
-                # had to fix something into usage, so the sidecar records the cost of
-                # getting the program right alongside the stage dispatch counts.
-                manifest_path = _find_manifest(stdout, study_dir, since)
-                manifest = json.loads(manifest_path.read_text()) if manifest_path else None
-                if usage is not None and isinstance(manifest, dict):
-                    attempts = manifest.get("attempts")
-                    # Only build and run can fail in a way that says anything: the
-                    # journal's third action, format, just runs PETSc's formatter
-                    # and succeeds. Absent means the config never wrote the journal
-                    # (only config 3 follows results-manifest.schema.json), which is
-                    # not the same as a run that failed nothing — leave the field out
-                    # rather than report a zero that reads as a clean run.
-                    if isinstance(attempts, list):
-                        usage["code_generation_failures"] = sum(
-                            1 for a in attempts
-                            if isinstance(a, dict) and a.get("status") == "failure"
-                            and a.get("action") in ("build", "run"))
-            except PdeSimTimeout as e:
-                # Out of time is not the same as nothing to show: the pipeline
-                # writes the manifest and the source as it goes, so whatever it
-                # had finished is on disk. Pick that up and deliver it instead of
-                # reporting a failure, which would throw away a program that may
-                # well compile and run. A killed run reports no cost, but it still
-                # consumed tokens; keep what it did report so the spend is not lost.
-                timed_out = True
-                usage = e.usage
-                print(f"@@@ pde-sim purple: ⏱ {e}; delivering whatever finished",
-                      flush=True)
-                # No stdout to read a PDESIM_DONE marker from, so _find_manifest
-                # falls back to the newest manifest this run wrote.
-                manifest_path = _find_manifest("", study_dir, since)
-                manifest = json.loads(manifest_path.read_text()) if manifest_path else None
-                stderr = str(e)
-            finally:
-                # Record usage on EVERY path — success, timeout, or failure — so a
-                # run's consumption always lands in the sidecar.
-                _append_usage_log(usage, ctx, since, rc)
+        # All configs run at the repo root so they share identical project
+        # context (CLAUDE.md/AGENTS.md); the ONLY difference across the ladder
+        # is the tool gating (PDESIM_DISALLOWED_TOOLS): config 1 blocks the
+        # subagent (Task/Agent) and Skill tools, config 2 blocks only the
+        # subagent tool, config 3 blocks nothing. Running config 1 elsewhere
+        # would also strip project context, confounding the 1->2 comparison.
+        try:
+            rc, stdout, stderr, usage = await _run_claude(
+                prompt, study_dir, SETTINGS.repo_dir, resume=resume.get("session_id"),
+                timeout_sec=max(60.0, SETTINGS.timeout_sec - active_before))
+            print(f"@@@ pde-sim purple: pipeline exit code {rc}", flush=True)
+            if usage:
+                print(f"@@@ pde-sim purple: usage prompt={usage['prompt_tokens']} "
+                      f"completion={usage['completion_tokens']} cached={usage['cached_tokens']} "
+                      f"cost_usd={usage['total_cost_usd']} turns={usage['num_turns']} "
+                      f"subagents={usage['subagents_spawned']} "
+                      f"skill_tool={usage['skill_tool_calls']} "
+                      f"skills_read={usage['pdesim_skills_read']}", flush=True)
+            # Locate and parse the manifest once; fold how often code generation
+            # had to fix something into usage, so the sidecar records the cost of
+            # getting the program right alongside the stage dispatch counts.
+            manifest_path = _find_manifest(stdout, study_dir, since)
+            manifest = json.loads(manifest_path.read_text()) if manifest_path else None
+            if usage is not None and isinstance(manifest, dict):
+                attempts = manifest.get("attempts")
+                # Only build and run can fail in a way that says anything: the
+                # journal's third action, format, just runs PETSc's formatter
+                # and succeeds. Absent means the config never wrote the journal
+                # (only config 3 follows results-manifest.schema.json), which is
+                # not the same as a run that failed nothing — leave the field out
+                # rather than report a zero that reads as a clean run.
+                if isinstance(attempts, list):
+                    usage["code_generation_failures"] = sum(
+                        1 for a in attempts
+                        if isinstance(a, dict) and a.get("status") == "failure"
+                        and a.get("action") in ("build", "run"))
+        except PdeSimTimeout as e:
+            # Out of time is not the same as nothing to show: the pipeline
+            # writes the manifest and the source as it goes, so whatever it
+            # had finished is on disk. Pick that up and deliver it instead of
+            # reporting a failure, which would throw away a program that may
+            # well compile and run. A killed run reports no cost, but it still
+            # consumed tokens; keep what it did report so the spend is not lost.
+            timed_out = True
+            usage = e.usage
+            print(f"@@@ pde-sim purple: ⏱ {e}; delivering whatever finished",
+                  flush=True)
+            # No stdout to read a PDESIM_DONE marker from, so _find_manifest
+            # falls back to the newest manifest this run wrote.
+            manifest_path = _find_manifest("", study_dir, since)
+            manifest = json.loads(manifest_path.read_text()) if manifest_path else None
+            stderr = str(e)
+        except PdeSimLlmUnavailable as e:
+            # Nothing is wrong with the study, only with the account, so keep it
+            # as it stands rather than harvest a half-finished program: the
+            # session is resumed once the budget is back.
+            usage, rc = e.usage, e.returncode
+            out.update(paused=True, pause_reason=str(e), session_id=e.session_id)
+            print(f"@@@ pde-sim purple: ⏸ LLM unavailable: {e}; session {e.session_id} "
+                  "can be resumed", flush=True)
+        finally:
+            # Record usage on EVERY path — success, timeout, failure or pause — so
+            # a run's consumption always lands in the sidecar. Each part of a
+            # resumed case gets its own record; the CLI's totals are cumulative
+            # over the session, so a case's last record covers all of its parts.
+            _append_usage_log(usage, ctx, part_start, rc,
+                              {"part": part, "paused": out["paused"]})
+        if out["paused"]:
+            return out
 
-            # The manifest is written once a run has been made, but the source is
-            # written before that, so a stop in between leaves a program with no
-            # record of how to invoke it. Send it anyway on the bench's own terms:
-            # serially, with no arguments of our own, leaving the test case's
-            # declared args to stand alone. The bench compiles what it is given, so
-            # this can only do better than reporting nothing — a program that does
-            # not build scores the zero it would have scored regardless.
-            run = _pick_run(manifest) if manifest else None
-            if run is not None:
-                exe, cli_args = _split_command(run["command"])
-                nsize = max(1, min(int(run.get("mpi_ranks") or 1), SETTINGS.max_nsize))
-                degraded = ""
-            else:
-                exe, cli_args, nsize = None, "", 1
-                degraded = "no run was recorded"
+        # The manifest is written once a run has been made, but the source is
+        # written before that, so a stop in between leaves a program with no
+        # record of how to invoke it. Send it anyway on the bench's own terms:
+        # serially, with no arguments of our own, leaving the test case's
+        # declared args to stand alone. The bench compiles what it is given, so
+        # this can only do better than reporting nothing — a program that does
+        # not build scores the zero it would have scored regardless.
+        run = _pick_run(manifest) if manifest else None
+        if run is not None:
+            exe, cli_args = _split_command(run["command"])
+            out["nsize"] = max(1, min(int(run.get("mpi_ranks") or 1), SETTINGS.max_nsize))
+            out["cli_args"], out["command"] = cli_args, run["command"]
+        else:
+            exe = None
+            out["degraded"] = "no run was recorded"
 
-            sources = _collect_sources(manifest_path.parent if manifest_path else study_dir, exe)
-            if manifest_path is None:
-                # Leave a record in the study dir of why the pipeline never wrote
-                # one, so a stopped run is legible without reading its transcript.
-                _write_stub_manifest(
-                    study_dir,
-                    "stopped at PDESIM_TIMEOUT" if timed_out else f"pipeline exited {rc}",
-                    sources, time.time() - since)
-            if not sources:
-                why = "ran out of time" if timed_out else f"exit={rc}"
-                raise RuntimeError(
-                    "The pde-sim pipeline produced no generated source "
-                    f"({why}). stderr tail: {stderr[-500:]!r}"
-                )
-
-            print(f"@@@ pde-sim purple: nsize={nsize} cli_args={cli_args!r} "
-                  f"files={[n for n, _ in sources]}"
-                  f"{' [' + degraded + ']' if degraded else ''}", flush=True)
-
-            # Green parses this with ^Code generation successful[^\n]*\n, so the
-            # note rides on the first line without breaking the match.
-            why = ["stopped at the time limit"] if timed_out else []
-            if degraded:
-                why.append(degraded)
-            note = f" (partial: {', '.join(why)})" if why else ""
-            parts_list = [new_text_part(f"Code generation successful ✅{note}\n"
-                                        f"nsize: {nsize}\n"
-                                        f"cli_args: {cli_args}\n")]
-            telemetry = _build_telemetry(usage)
-            if telemetry:
-                # Green reads token/cost/effort from this versioned data Part.
-                parts_list.append(new_data_part(telemetry))
-            for name, data in sources:
-                parts_list.append(new_raw_part(data, filename=name, media_type="text/plain"))
-            await event_queue.enqueue_event(
-                new_agent_parts_message(parts_list, context_id=context.context_id)
+        sources = _collect_sources(manifest_path.parent if manifest_path else study_dir, exe)
+        out["manifest"] = str(manifest_path) if manifest_path else None
+        out["sources"] = sources
+        if manifest_path is None:
+            # Leave a record in the study dir of why the pipeline never wrote
+            # one, so a stopped run is legible without reading its transcript.
+            _write_stub_manifest(
+                study_dir,
+                "stopped at PDESIM_TIMEOUT" if timed_out else f"pipeline exited {rc}",
+                sources, time.time() - since)
+        if not sources:
+            why = "ran out of time" if timed_out else f"exit={rc}"
+            raise RuntimeError(
+                "The pde-sim pipeline produced no generated source "
+                f"({why}). stderr tail: {stderr[-500:]!r}"
             )
-        except Exception as e:  # noqa: BLE001 - report every failure over A2A
-            print(f"@@@ pde-sim purple: ❌ {type(e).__name__}: {e}", flush=True)
-            parts_list = [new_text_part(f"Code generation failed ❌\nerror: {e}\n")]
-            # Report telemetry here too, or Green has no model to name the result
-            # from and files every failure as "unknown-judged-by-<judge>.json".
+        print(f"@@@ pde-sim purple: nsize={out['nsize']} cli_args={out['cli_args']!r} "
+              f"files={[n for n, _ in sources]}"
+              f"{' [' + out['degraded'] + ']' if out['degraded'] else ''}", flush=True)
+    except Exception as e:  # noqa: BLE001 - every failure is reported to the caller
+        print(f"@@@ pde-sim purple: ❌ {type(e).__name__}: {e}", flush=True)
+        out["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        out.update(rc=rc, timed_out=timed_out, usage=usage, started_at=since, parts=part,
+                   active_sec=round(active_before + time.time() - part_start, 1))
+    return out
+
+
+def _partial_note(result: Dict[str, Any]) -> str:
+    """Why an answer is partial, as ' (partial: ...)', or '' for a complete one."""
+    why = ["stopped at the time limit"] if result["timed_out"] else []
+    if result["degraded"]:
+        why.append(result["degraded"])
+    return f" (partial: {', '.join(why)})" if why else ""
+
+
+# Exit status of `run` for a case paused because the LLM budget ran out
+# (EX_TEMPFAIL: try again later), distinct from success (0) and failure (1).
+EXIT_PAUSED = 75
+
+
+def run_one(problem_file: Path, study_dir: Path, resume: bool = False) -> int:
+    """Run one benchmark problem file and record the outcome in case-result.json.
+
+    The problem file is a petscagent-bench problem: a JSON object holding at least
+    ``problem_name`` and ``problem_description``. With ``resume``, the paused case
+    recorded in the study's case-result.json is continued in the same session.
+    Returns 0 when the run produced source to submit, EXIT_PAUSED when it was
+    paused because the LLM budget ran out, 1 otherwise.
+    """
+    problem = json.loads(problem_file.read_text(encoding="utf-8"))
+    name = problem.get("problem_name") or problem_file.stem
+    record_path = study_dir / "case-result.json"
+    state = None
+    if resume:
+        state = json.loads(record_path.read_text())
+        if not (state.get("paused") and state.get("session_id")):
+            sys.exit(f"{record_path} is not a paused case with a session to resume")
+    result = asyncio.run(run_case(problem["problem_description"], study_dir, name, state))
+    # Paths inside the study are recorded relative to it, so the record stays
+    # right when the study dir is moved after the run; run_dir is where it ran,
+    # which is where a resumed session expects to find it.
+    record = {k: v for k, v in result.items() if k not in ("sources", "study_dir")}
+    if result["manifest"]:
+        manifest = Path(result["manifest"])
+        record["manifest"] = (str(manifest.relative_to(study_dir))
+                              if manifest.is_relative_to(study_dir) else str(manifest))
+    record.update(problem_name=name, problem_file=str(problem_file.resolve()),
+                  run_dir=str(study_dir), config=SETTINGS.config, model=_purple_model_label(
+                      (result["usage"] or {}).get("model_name")),
+                  partial=_partial_note(result).strip(" ()") or None,
+                  source_files=[n for n, _ in result["sources"]],
+                  wall_sec=result["active_sec"])
+    record_path.write_text(json.dumps(record, indent=2) + "\n")
+    if result["paused"]:
+        return EXIT_PAUSED
+    return 1 if result["error"] else 0
+
+
+def start(host: str = "localhost", port: int = 9002, card_url: Optional[str] = None) -> None:
+    """Serve run_case() as an A2A Purple agent for petscagent-bench's Green agent."""
+    import uvicorn
+    from starlette.applications import Starlette
+    from a2a.server.agent_execution import AgentExecutor, RequestContext
+    from a2a.server.events import EventQueue
+    from a2a.server.request_handlers import DefaultRequestHandler
+    from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+    from a2a.server.tasks import InMemoryTaskStore
+
+    # The bench migrated to the protobuf-based A2A 1.x SDK and provides its types
+    # and the telemetry contract through local shims (src.util.*). This mode is
+    # launched from the bench repo root (see README), so add the cwd to sys.path
+    # to resolve `src.*`, exactly as the bench's own agents rely on.
+    sys.path.insert(0, os.getcwd())
+    from src.util.a2a_v1 import (
+        AgentCapabilities, AgentCard, AgentInterface, AgentSkill,
+        new_agent_parts_message, new_data_part, new_raw_part, new_text_part,
+    )
+
+    class PdeSimPurpleExecutor(AgentExecutor):
+        """A2A executor that maps a problem description to a pde-sim study."""
+
+        async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+            ctx = (context.context_id or "study").replace("/", "_")
+            study_dir = SETTINGS.artifacts_dir / f"bench-{ctx}-{int(time.time())}"
+            result = await run_case(context.get_user_input(), study_dir, ctx)
+            if result["paused"]:
+                result["error"] = f"LLM unavailable: {result['pause_reason']}"
+            if result["error"] is None:
+                # Green parses this with ^Code generation successful[^\n]*\n, so the
+                # note rides on the first line without breaking the match.
+                parts_list = [new_text_part(f"Code generation successful ✅{_partial_note(result)}\n"
+                                            f"nsize: {result['nsize']}\n"
+                                            f"cli_args: {result['cli_args']}\n")]
+            else:
+                parts_list = [new_text_part(f"Code generation failed ❌\nerror: {result['error']}\n")]
+            # Report telemetry on failure too, or Green has no model to name the
+            # result from and files every failure as "unknown-judged-by-<judge>.json".
             # One name for all of them means the configs overwrite each other's
             # failures, since a live run replaces the unnumbered aggregate.
             # _build_telemetry still reports this agent's identity when usage is
             # None, which is the case for a request that failed before running.
-            telemetry = _build_telemetry(usage)
+            telemetry = _build_telemetry(result["usage"])
             if telemetry:
+                # Green reads token/cost/effort from this versioned data Part.
                 parts_list.append(new_data_part(telemetry))
+            for name, data in result["sources"] if result["error"] is None else []:
+                parts_list.append(new_raw_part(data, filename=name, media_type="text/plain"))
             await event_queue.enqueue_event(
                 new_agent_parts_message(parts_list, context_id=context.context_id)
             )
 
-    async def cancel(self, context, event_queue) -> None:
-        raise NotImplementedError
+        async def cancel(self, context, event_queue) -> None:
+            raise NotImplementedError
 
-
-def prepare_agent_card(url: str) -> AgentCard:
     skill = AgentSkill(
         id="pdesim_petsc_code_generation",
         name="pde-sim PETSc Code Generation",
@@ -1345,7 +1522,8 @@ def prepare_agent_card(url: str) -> AgentCard:
         tags=["purple agent", "pde-sim", "PETSc", "multi-agent", "HPC"],
         examples=["Solve the 2-D steady Darcy flow problem on the unit square."],
     )
-    return AgentCard(
+    url = card_url or f"http://{host}:{port}"
+    card = AgentCard(
         name=f"pdesim_purple_c{SETTINGS.config}",
         description="pde-sim binding for petscagent-bench: an A2A Purple agent that generates "
                     f"verified PETSc code (ablation config {SETTINGS.config}).",
@@ -1358,10 +1536,6 @@ def prepare_agent_card(url: str) -> AgentCard:
         capabilities=AgentCapabilities(),
         skills=[skill],
     )
-
-
-def start(host: str = "localhost", port: int = 9002, card_url: Optional[str] = None) -> None:
-    card = prepare_agent_card(card_url or f"http://{host}:{port}")
     request_handler = DefaultRequestHandler(
         agent_executor=PdeSimPurpleExecutor(),
         task_store=InMemoryTaskStore(),
@@ -1377,9 +1551,18 @@ def start(host: str = "localhost", port: int = 9002, card_url: Optional[str] = N
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the pde-sim Purple-agent binding for petscagent-bench.")
-    parser.add_argument("--host", type=str, default="localhost", help="Host to bind")
-    parser.add_argument("--port", type=int, default=9002, help="Port to bind")
-    parser.add_argument("--card-url", type=str, help="External URL to advertise in the agent card")
+    parser = argparse.ArgumentParser(description="Run pde-sim on petscagent-bench problems.")
+    sub = parser.add_subparsers(dest="mode", required=True)
+    run_p = sub.add_parser("run", help="Run one problem file and write case-result.json")
+    run_p.add_argument("--problem", type=Path, required=True, help="petscagent-bench problem JSON file")
+    run_p.add_argument("--study-dir", type=Path, required=True, help="Directory the study is written to")
+    run_p.add_argument("--resume", action="store_true",
+                       help="Continue the paused case recorded in the study dir's case-result.json")
+    serve_p = sub.add_parser("serve", help="Serve as an A2A Purple agent for the bench's Green agent")
+    serve_p.add_argument("--host", type=str, default="localhost", help="Host to bind")
+    serve_p.add_argument("--port", type=int, default=9002, help="Port to bind")
+    serve_p.add_argument("--card-url", type=str, help="External URL to advertise in the agent card")
     args = parser.parse_args()
+    if args.mode == "run":
+        sys.exit(run_one(args.problem, args.study_dir.resolve(), args.resume))
     start(host=args.host, port=args.port, card_url=args.card_url)

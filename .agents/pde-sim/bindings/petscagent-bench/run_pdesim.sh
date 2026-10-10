@@ -1,50 +1,42 @@
 #!/usr/bin/env bash
-# Run one or more pde-sim configs over one or more benchmark problems with no
-# state carried between configs, so no config's score can be influenced by
-# another's.
+# Run one or more pde-sim configs over one or more petscagent-bench problems,
+# one case (problem x config) at a time, and keep every case's artifacts in a
+# directory outside $PETSC_DIR.
 #
-# Before each config this clears the three things that leak between runs:
+# This does not use the bench's main.py, Green agent or A2A server. It reads the
+# problem descriptions from the bench's data/*.json and runs the pde-sim pipeline
+# on each one directly through `pdesim_purple.py run`. Nothing is graded.
+#
+# No state is carried from one case to the next, so no case can be influenced by
+# another. Before each case this clears the two things that leak between runs:
 #   artifacts/          code generation cribs a prior solution from a study dir
 #   case-index.json     the pde-sim case index remembers earlier cases
-#   purple_agent_cache/ Green serves a recorded Purple response from here
-# Nothing is deleted: prior results and study dirs move into $ARCHIVE.
+# Nothing is deleted: anything in artifacts/ is moved into the output directory.
 #
 # Usage: ./run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
-#                        [-i|--progress SECS] [-b|--bench DIR] [-o|--output DIR]
+#                        [-i|--progress SECS] [-t|--timeout MIN] [-b|--bench DIR]
+#                        [-o|--output DIR]
 #
 # PETSC_DIR and PETSC_ARCH must both be set: they select the PETSc build, and the
-# pde-sim binding and artifacts/ are taken from PETSC_DIR. The bench repo is a
-# separate checkout, so it comes from --bench, else $PETSCAGENT_BENCH, else
-# ~/petscagent-bench.
+# pde-sim pipeline runs from PETSC_DIR. The bench repo is a separate checkout
+# that supplies only the problem files; it comes from --bench, else
+# $PETSCAGENT_BENCH, else ~/petscagent-bench.
 #
-#   -p, --problems LIST  comma-separated problem terms, as main.py --problems
-#                        takes them, e.g. darcy or darcy,robertson (default advection)
-#   -c, --configs LIST   comma-separated pde-sim configs, e.g. 1,2   (default 1)
-#   -m, --model NAME     model the Purple generates with, as PDESIM_CLAUDE_MODEL
-#                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
-#   -i, --progress SECS  seconds between progress lines, 0 to silence (default 30)
-#   -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
-#                        finished. Also raises Green's own budget for the call to
-#                        MIN minutes + 5, so it outlasts the stop and still gets
-#                        the partial answer                 (default 1440, i.e. 24h)
-#   -o, --output DIR     one directory for everything this run produces: Green's
-#                        results, the Purple's usage sidecar and its study dirs
-#                        (default $BENCH/output/pdesim_<timestamp>, one per run)
+# Each case's study dir ends up in $OUTPUT/c<config>/<problem>/, holding the
+# generated source, the specs, results-manifest.json, the transcripts and
+# case-result.json (the run parameters, sources and usage this script reports).
+# $OUTPUT also gets the usage sidecar usage-pdesim-<model>-c<config>.jsonl and
+# summary.tsv, one line per case.
 #
-# -p takes a glob, so -p '*' is the full matrix: ./run_pdesim.sh -p '*' -c 1,2,3
+# If the LLM stops being usable partway (the API credit balance or the usage
+# limit runs out), the case is paused, not failed: its study, case index and
+# Claude session are parked in $OUTPUT/paused/c<config>-<problem>/ and the CLI's
+# message is shown. At a terminal the script waits for Enter, after funds are
+# added, and then continues that same session where it stopped; otherwise, or on
+# q, it exits with status 75 and prints the command that resumes. Rerunning with
+# the same --output resumes the paused case and skips the finished ones.
 #
-# Quote a model id containing brackets, or the shell globs it away:
-#   -m 'claudeopus48[1m]'   Opus 4.8 with a 1M context window rather than 200K.
-# The bare id takes the 200K default, and a pde-sim run has been seen to peak at
-# ~220K tokens of context, so the 1M form is what avoids mid-run compaction.
-#
-# Each run writes to its own output directory, so nothing collides with an earlier
-# run's and nothing has to be parked first. It ends up holding Green's aggregate
-# JSON per config beside the code/ and scores/ trees, the Purple's usage sidecar
-# per config, and artifacts/c<N>/ with that config's study dirs. Building a report
-# from them is a separate step.
-#
-# Logs: this script to stdout, per-config detail to /tmp/pdesim_{purple,launch}_c<N>.log
+# Logs: this script to stdout, per-case detail to $OUTPUT/logs/c<N>-<problem>.log
 set -u
 
 PROBLEMS=advection
@@ -55,28 +47,32 @@ TIMEOUT_MIN=1440          # 24h: effectively off unless asked for
 BENCH=${PETSCAGENT_BENCH:-$HOME/petscagent-bench}
 OUTPUT=
 RUN_ID=$(date +%Y%m%d-%H%M%S)
+ORIG_ARGS=("$@")          # to print the command that resumes a paused run
+# Ask before resuming a case paused for budget only when someone is there to answer.
+INTERACTIVE=
+[ -t 0 ] && INTERACTIVE=1
 
 usage() {
   cat <<'EOF'
 Usage: run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
-                     [-i|--progress SECS] [-b|--bench DIR]
+                     [-i|--progress SECS] [-t|--timeout MIN] [-b|--bench DIR]
+                     [-o|--output DIR]
 
-  -p, --problems LIST  comma-separated problem terms, as main.py --problems takes
-                       them, e.g. darcy or darcy,robertson  (default: advection)
-                       a term may be a glob, so '*' runs the full matrix
+  -p, --problems LIST  comma-separated terms matched against the bench's problem
+                       names, ignoring case: a plain term matches a substring, a
+                       term with a wildcard is a glob, so '*' runs every problem
+                       e.g. darcy or darcy,robertson        (default: advection)
   -c, --configs LIST   comma-separated pde-sim configs, e.g. 1,2    (default: 1)
-  -m, --model NAME     model the Purple generates with, as PDESIM_CLAUDE_MODEL
+  -m, --model NAME     model the pipeline generates with, as PDESIM_CLAUDE_MODEL
                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
                                                        (default: claudeopus48)
   -i, --progress SECS  seconds between progress lines, 0 to silence (default: 30)
-  -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
-                       finished; also raises Green's budget for the call to MIN+5
-                       minutes                            (default: 1440, i.e. 24h)
-  -b, --bench DIR      petscagent-bench repo root
+  -t, --timeout MIN    stop a case after MIN minutes and keep whatever it
+                       finished                          (default: 1440, i.e. 24h)
+  -b, --bench DIR      petscagent-bench checkout whose data/*.json are the problems
                              (default: $PETSCAGENT_BENCH, else ~/petscagent-bench)
-  -o, --output DIR     one directory for everything this run produces: Green's
-                       results, the Purple's usage sidecar and its study dirs
-                       (default: $BENCH/output/pdesim_<timestamp>, one per run)
+  -o, --output DIR     where every case's artifacts are kept; must be outside
+                       PETSC_DIR    (default: ~/pdesim-runs/<timestamp>, one per run)
   -h, --help           this message
 
 PETSC_DIR and PETSC_ARCH select the PETSc build to run against. Both must be set
@@ -102,9 +98,9 @@ while [ $# -gt 0 ]; do
     -m | --model) [ $# -ge 2 ] || die "$1 needs a value"; MODEL=$2; shift 2 ;;
     --model=*) MODEL=${1#*=}; shift ;;
     -i | --progress) [ $# -ge 2 ] || die "$1 needs a value"; PROGRESS_EVERY=$2; shift 2 ;;
+    --progress=*) PROGRESS_EVERY=${1#*=}; shift ;;
     -t | --timeout) [ $# -ge 2 ] || die "$1 needs a value"; TIMEOUT_MIN=$2; shift 2 ;;
     --timeout=*) TIMEOUT_MIN=${1#*=}; shift ;;
-    --progress=*) PROGRESS_EVERY=${1#*=}; shift ;;
     -b | --bench) [ $# -ge 2 ] || die "$1 needs a value"; BENCH=$2; shift 2 ;;
     --bench=*) BENCH=${1#*=}; shift ;;
     -o | --output) [ $# -ge 2 ] || die "$1 needs a value"; OUTPUT=$2; shift 2 ;;
@@ -114,14 +110,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# The config loop wants whitespace separation; main.py --problems wants the
-# comma-separated form as typed.
 CONFIG_LIST=$(echo "$CONFIGS" | tr ',' ' ')
 [ -n "${PROBLEMS//[[:space:],]/}" ] || die "--problems is empty"
 [ -n "${CONFIG_LIST//[[:space:]]/}" ] || die "--configs is empty"
+for c in $CONFIG_LIST; do
+  case $c in 1 | 2 | 3) ;; *) die "--configs takes 1, 2 or 3, got '$c'" ;; esac
+done
 [ -n "${MODEL//[[:space:]]/}" ] || die "--model is empty"
 [ -n "${BENCH//[[:space:]]/}" ] || die "--bench is empty"
-case ${TIMEOUT_MIN:-1} in
+case $TIMEOUT_MIN in
   "" | *[!0-9]* | 0) die "--timeout wants a whole number of minutes, got '$TIMEOUT_MIN'" ;;
 esac
 case $PROGRESS_EVERY in
@@ -135,177 +132,149 @@ case $OUTPUT in "") ;; *[![:space:]]*) ;; *) die "--output is empty" ;; esac
 [ -n "${PETSC_DIR:-}" ] || die "PETSC_DIR is not set; set it to the PETSc root"
 [ -n "${PETSC_ARCH:-}" ] || die "PETSC_ARCH is not set; set it to the build to run against"
 
-# Make both absolute before anything is derived from them. The script cd's to
-# $BENCH further down, after which a relative path would re-resolve against the
-# new directory — quietly, because the parking globs would just match nothing.
-# Logical pwd, so a path given through a symlink stays as the caller wrote it.
-abs=$(cd "$PETSC_DIR" 2>/dev/null && pwd) || die "PETSC_DIR=$PETSC_DIR is not a directory"
+# Physical paths, so the outside-PETSC_DIR check below cannot be fooled by a
+# symlink into the tree.
+abs=$(cd "$PETSC_DIR" 2>/dev/null && pwd -P) || die "PETSC_DIR=$PETSC_DIR is not a directory"
 PETSC_DIR=$abs
-abs=$(cd "$BENCH" 2>/dev/null && pwd) || die "no petscagent-bench at $BENCH; set --bench or PETSCAGENT_BENCH"
+abs=$(cd "$BENCH" 2>/dev/null && pwd -P) || die "no petscagent-bench at $BENCH; set --bench or PETSCAGENT_BENCH"
 BENCH=$abs
+DATA=$BENCH/data
 
-PURPLE=$PETSC_DIR/.agents/pde-sim/bindings/petscagent-bench/pdesim_purple.py
+RUNNER=$PETSC_DIR/.agents/pde-sim/bindings/petscagent-bench/pdesim_purple.py
 ARTIFACTS=$PETSC_DIR/artifacts
 CASE_INDEX=$PETSC_DIR/.agents/pde-sim/components/case-index.json
-# One directory per invocation holding everything the run produced, so its
-# results stand alone without having to park the previous run's out of the way
-# first. Green writes the aggregate JSON plus its code/ and scores/ trees here,
-# one set per config (the configs differ in their model slug, pdesim-<model>-c<N>,
-# so they share a directory without colliding); the Purple appends its usage
-# sidecar here; and each config's study dirs are stashed into artifacts/ below.
-OUTPUT=${OUTPUT:-$BENCH/output/pdesim_$RUN_ID}
-# The pipeline writes studies into $ARTIFACTS as it works, since the orchestration
-# skill places them under the repo's artifacts/; they are moved here afterwards so
-# the whole run ends up in one place.
-ARCHIVE=$OUTPUT/artifacts
-[ -f "$PURPLE" ] || die "no pde-sim binding under PETSC_DIR=$PETSC_DIR (looked for $PURPLE)"
+[ -f "$RUNNER" ] || die "no pde-sim runner under PETSC_DIR=$PETSC_DIR (looked for $RUNNER)"
 [ -f "$PETSC_DIR/$PETSC_ARCH/lib/petsc/conf/petscvariables" ] ||
   die "PETSC_ARCH=$PETSC_ARCH is not a configured build of $PETSC_DIR"
-[ -f "$BENCH/main.py" ] || die "no petscagent-bench at $BENCH (looked for main.py); set --bench or PETSCAGENT_BENCH"
+[ -d "$DATA" ] || die "no problem files at $DATA; set --bench or PETSCAGENT_BENCH"
 
-PURPLE_PORT=9002
-PURPLE_URL=http://localhost:$PURPLE_PORT/
+OUTPUT_GIVEN=$OUTPUT
+OUTPUT=${OUTPUT:-$HOME/pdesim-runs/$RUN_ID}
+created=
+[ -d "$OUTPUT" ] || created=1
+mkdir -p "$OUTPUT" || die "cannot create --output $OUTPUT"
+OUTPUT=$(cd "$OUTPUT" && pwd -P)
+case $OUTPUT/ in
+  "$PETSC_DIR"/*)
+    [ -n "$created" ] && rmdir "$OUTPUT"
+    die "--output $OUTPUT is inside PETSC_DIR=$PETSC_DIR; choose a directory outside it" ;;
+esac
+LOGS=$OUTPUT/logs
+SUMMARY=$OUTPUT/summary.tsv
+mkdir -p "$LOGS"
 
 # PETSC_DIR and PETSC_ARCH need no export: they came from the environment, so
-# the Purple and the pipeline below it already inherit them.
+# the runner and the pipeline below it already inherit them.
 export PDESIM_CLAUDE_MODEL=$MODEL
-# Minutes here, seconds in the binding. A problem stopped at the limit still
-# delivers whatever it had finished, so this is a budget rather than a failure.
-[ -n "$TIMEOUT_MIN" ] && export PDESIM_TIMEOUT=$((TIMEOUT_MIN * 60))
-# Green keeps its own budget for one Purple call, and it has to outlast the
-# binding's or Green abandons the call while the Purple is still saving its
-# transcript and composing the partial answer. Give it the same limit plus
-# enough to do that. It lives in the bench's config file with no flag or
-# variable to override it, so the file is edited for the run and put back by
-# the EXIT trap, backup first so an interrupted run cannot leave it changed.
-GREEN_CFG=$BENCH/config/green_agent_config.yaml
-GREEN_CFG_BAK=
-PURPLE_BUDGET_SLACK=300
-
-set_purple_budget() {
-  [ -n "$TIMEOUT_MIN" ] || return 0
-  [ -f "$GREEN_CFG" ] || { say "WARNING: no $GREEN_CFG; leaving Green's budget alone"; return 0; }
-  GREEN_CFG_BAK=$(mktemp) && cp "$GREEN_CFG" "$GREEN_CFG_BAK" || {
-    GREEN_CFG_BAK=; say "WARNING: could not back up $GREEN_CFG; leaving Green's budget alone"; return 0; }
-  python3 - "$GREEN_CFG" "$((PDESIM_TIMEOUT + PURPLE_BUDGET_SLACK))" <<'PY' || return 0
-import re, sys
-path, budget = sys.argv[1], sys.argv[2]
-text = open(path).read()
-new, n = re.subn(r"(?m)^(\s*purple_budget_sec\s*:\s*)[0-9.]+", rf"\g<1>{budget}", text)
-if n != 1:
-    sys.exit(f"expected one purple_budget_sec, found {n}")
-open(path, "w").write(new)
-PY
-  say "Green's purple_budget_sec set to $((PDESIM_TIMEOUT + PURPLE_BUDGET_SLACK))s for this run"
-}
-
-restore_purple_budget() {
-  [ -n "$GREEN_CFG_BAK" ] || return 0
-  cp "$GREEN_CFG_BAK" "$GREEN_CFG" 2>/dev/null
-  rm -f "$GREEN_CFG_BAK"
-  GREEN_CFG_BAK=
-}
+# Minutes here, seconds in the runner. A case stopped at the limit still keeps
+# whatever it had finished, so this is a budget rather than a failure.
+export PDESIM_TIMEOUT=$((TIMEOUT_MIN * 60))
+# The runner appends one usage record per case to
+# $OUTPUT/usage-pdesim-<model>-c<config>.jsonl.
+export PDESIM_USAGE_DIR=$OUTPUT
 
 ts() { date '+%F %T'; }
 say() { echo "[$(ts)] $*"; }
 
-# Run a command in a new session so it leads its own process group and stop_purple
-# can signal the whole subtree. macOS has no setsid binary; os.setsid() is the same
-# POSIX call, so fall back to a one-line Python exec wrapper that does it in-process.
-if command -v setsid >/dev/null 2>&1; then
-  new_session() { setsid "$@"; }
-else
-  new_session() { python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"; }
-fi
+# Resolve the problem terms now, so a typo fails before anything runs. Prints
+# one "<file><TAB><problem_name>" line per selected problem, in file order. The
+# matching is the bench's own: case-insensitive substring, or glob when the term
+# holds a wildcard; hidden and non-.json files are ignored.
+select_problems() {
+  python3 -I - "$DATA" "$PROBLEMS" <<'PY'
+import fnmatch, json, sys
+from pathlib import Path
 
-# port_free reports whether a TCP port has no listener; port_pids lists the PIDs
-# of its listeners (newline-separated, empty if none). Both share one backend so
-# they never disagree. lsof is present on macOS and on most Linux boxes; ss
-# (iproute2) covers Linux installs without lsof. In the interactive shell `ss` is
-# aliased to start_ssh, so call the binary by its path.
-if command -v lsof >/dev/null 2>&1; then
-  port_free() { ! lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
-  port_pids() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null; }
-elif [ -x /usr/sbin/ss ] || [ -x /usr/bin/ss ]; then
-  SS=$([ -x /usr/sbin/ss ] && echo /usr/sbin/ss || echo /usr/bin/ss)
-  port_free() { ! $SS -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"; }
-  port_pids() { $SS -ltnp 2>/dev/null | grep -E "[:.]$1 " | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u; }
-else
-  die "need lsof or ss to check ports; install one and retry"
-fi
-
-# Move rather than delete, so a run is always recoverable from $ARCHIVE.
-stash() {                                # stash <dest-subdir> <path>...
-  local dest=$ARCHIVE/$1; shift
-  [ $# -eq 0 ] && return 0
-  mkdir -p "$dest"
-  mv "$@" "$dest"/ 2>/dev/null
-}
-
-PURPLE_PID=""
-PURPLE_PGID=""
-PROGRESS_PID=""
-MY_PGID=$(ps -o pgid= -p $$ | tr -d ' ')
-# One marker per finished study, so a problem is reported once however often the
-# watcher and the post-launch sweep both look at it.
-DONE_DIR=$(mktemp -d)
-
-# Report every problem that has finished since the last look. The per-problem
-# figures come from the `result` event the CLI writes at the end of a study's
-# transcript.stream.jsonl; a run killed at PDESIM_TIMEOUT never emits one, so it
-# stays unreported here rather than being shown with invented numbers.
-report_done() {                          # report_done <config>
-  local c=$1
-  python3 - "$ARTIFACTS" "$DONE_DIR" <<'PY' | while IFS= read -r line; do say "  done c$c $line"; done
-import json, os, sys
-
-artifacts, marks = sys.argv[1], sys.argv[2]
-if not os.path.isdir(artifacts):
-    sys.exit()
-
-for study in sorted(os.listdir(artifacts)):
-    if not study.startswith("bench-"):
-        continue
-    mark = os.path.join(marks, study)
-    if os.path.exists(mark):
-        continue
-    result = None
+data, spec = Path(sys.argv[1]), sys.argv[2]
+problems = []
+for f in sorted(p for p in data.iterdir()
+                if p.is_file() and p.suffix.lower() == ".json" and not p.name.startswith(".")):
     try:
-        with open(os.path.join(artifacts, study, "transcript.stream.jsonl"), errors="replace") as fh:
-            for line in fh:
-                try:
-                    event = json.loads(line)
-                except ValueError:        # a partially flushed trailing line
-                    continue
-                if event.get("type") == "result":
-                    result = event
-    except OSError:                       # no transcript yet; still running
-        continue
-    if result is None:
-        continue
-    open(mark, "w").close()
+        prob = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        sys.exit(f"{f} cannot be read: {e}")
+    if not isinstance(prob, dict) or not prob.get("problem_name") or not prob.get("problem_description"):
+        sys.exit(f"{f} has no problem_name or problem_description")
+    problems.append((f, prob["problem_name"]))
 
-    problem = study[len("bench-"):].rsplit("-", 1)[0]
-    secs = int((result.get("duration_ms") or 0) / 1000)
-    cost = result.get("total_cost_usd")
-    cost = f"${cost:,.2f}" if isinstance(cost, (int, float)) else "cost unreported"
-    status = result.get("subtype") or result.get("terminal_reason") or "?"
-    print(f"{problem}  {secs // 60}m{secs % 60:02d}s  {cost}  {status}")
+terms = [t.strip().lower() for t in spec.split(",") if t.strip()]
+match = lambda t, n: fnmatch.fnmatch(n, t) if any(c in t for c in "*?[") else t in n  # noqa: E731
+unmatched = [t for t in terms if not any(match(t, n.lower()) for _, n in problems)]
+if unmatched:
+    sys.exit(f"no problem matches: {', '.join(unmatched)}\n"
+             f"available: {', '.join(sorted(n for _, n in problems))}")
+for f, n in problems:
+    if any(match(t, n.lower()) for t in terms):
+        print(f"{f}\t{n}")
 PY
 }
 
-# The pde-sim pipeline flushes one JSON event per line into the study dir's
-# transcript.stream.jsonl expressly so it can be followed live, and it is the
-# only thing that moves during a run: the launch log goes quiet between
-# "Sending..." and "Terminating agents...", which can be the better part of an
-# hour. Summarize the newest study dir rather than tail the raw stream, since a
-# run writes one dir per problem and several transcripts per dir.
+# Move whatever is in artifacts/ into <dest>. Nothing is deleted, so a stray
+# study is always recoverable from $OUTPUT.
+stash_artifacts() {                      # stash_artifacts <dest>
+  local dest=$1 entries
+  shopt -s nullglob dotglob
+  entries=("$ARTIFACTS"/*)
+  shopt -u nullglob dotglob
+  [ ${#entries[@]} -eq 0 ] && return 0
+  mkdir -p "$dest"
+  mv "${entries[@]}" "$dest"/
+}
+
+reset_case_index() {
+  printf '{\n  "schema_version": "1.0",\n  "cases": []\n}\n' > "$CASE_INDEX"
+}
+
+# A paused case keeps exactly what it had: everything in artifacts/ (its study,
+# and anything else the pipeline wrote there) and the case index, so a resumed
+# session finds its files at the same paths.
+park_case() {                            # park_case <dir>
+  mkdir -p "$1"
+  cp "$CASE_INDEX" "$1/case-index.json"
+  stash_artifacts "$1/artifacts"
+}
+
+unpark_case() {                          # unpark_case <dir>
+  local entries
+  shopt -s nullglob dotglob
+  entries=("$1"/artifacts/*)
+  shopt -u nullglob dotglob
+  mkdir -p "$ARTIFACTS"
+  [ ${#entries[@]} -eq 0 ] || mv "${entries[@]}" "$ARTIFACTS"/
+  cp "$1/case-index.json" "$CASE_INDEX"
+  rm -f "$1/case-index.json"
+  rmdir "$1/artifacts" "$1" 2>/dev/null
+  rmdir "$OUTPUT/paused" 2>/dev/null
+  return 0
+}
+
+# A field of a study's case-result.json, empty when absent.
+case_field() {                           # case_field <study-dir> <key>
+  python3 -I -c 'import json, sys
+try:
+    v = json.load(open(sys.argv[1] + "/case-result.json")).get(sys.argv[2])
+except (OSError, ValueError):
+    v = None
+print("" if v is None else v)' "$1" "$2"
+}
+
+# The command that picks this run up again: the same arguments and output dir.
+resume_command() {
+  local args=("${ORIG_ARGS[@]}")
+  [ -n "$OUTPUT_GIVEN" ] || args+=(-o "$OUTPUT")
+  printf 'PETSC_DIR=%q PETSC_ARCH=%q %q' "$PETSC_DIR" "$PETSC_ARCH" "$0"
+  printf ' %q' "${args[@]}"
+  echo
+}
+
+# The pipeline flushes one JSON event per line into the study dir's
+# transcript.stream.jsonl expressly so it can be followed live. Summarize it
+# rather than tail the raw stream.
 summarize_stream() {                     # summarize_stream <study-dir>
-  python3 - "$1" <<'PY'
+  python3 -I - "$1" <<'PY'
 import json, os, sys
 
-study = sys.argv[1].rstrip("/")
-path = os.path.join(study, "transcript.stream.jsonl")
+path = os.path.join(sys.argv[1], "transcript.stream.jsonl")
 
 def descr(block):
     """Shortest useful identifier for a tool call: what it acts on."""
@@ -334,34 +303,72 @@ try:
                 elif block.get("type") == "text" and block.get("text", "").strip():
                     last = "say " + block["text"].strip().split("\n")[0][:56]
 except FileNotFoundError:
-    print(f"{os.path.basename(study)}  starting up")
+    print("starting up")
     sys.exit()
 
-print(f"{os.path.basename(study)}  {events} events  last: {last or '-'}")
+print(f"{events} events  last: {last or '-'}")
+PY
+}
+
+# One line for the case: wall time and cost from the transcript's final `result`
+# event (absent for a run killed at PDESIM_TIMEOUT), and the outcome from
+# case-result.json. Also appended to $SUMMARY.
+report_case() {                          # report_case <config> <problem> <study-dir> <rc>
+  python3 -I - "$@" "$SUMMARY" <<'PY'
+import json, os, sys
+
+c, problem, study, rc, summary = sys.argv[1:6]
+result = None
+try:
+    with open(os.path.join(study, "transcript.stream.jsonl"), errors="replace") as fh:
+        for line in fh:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "result":
+                result = event
+except OSError:
+    pass
+try:
+    case = json.load(open(os.path.join(study, "case-result.json")))
+except (OSError, ValueError):
+    case = {}
+
+secs = case.get("wall_sec")             # the runner's own clock, else the CLI's
+secs = int(secs if secs is not None else ((result or {}).get("duration_ms") or 0) / 1000)
+cost = (result or {}).get("total_cost_usd")
+cost = f"${cost:,.2f}" if isinstance(cost, (int, float)) else "-"
+if case.get("error"):
+    outcome = "failed: " + case["error"][:80]
+elif case:
+    outcome = "ok" + (f" ({case['partial']})" if case.get("partial") else "")
+else:
+    outcome = f"no case-result.json (runner exit {rc})"
+cmd = case.get("command") or "-"
+print(f"c{c} {problem}  {secs // 60}m{secs % 60:02d}s  {cost}  {outcome}  {cmd}")
+new = not os.path.exists(summary)
+with open(summary, "a") as fh:
+    if new:
+        fh.write("config\tproblem\twall_sec\tcost_usd\toutcome\tcommand\tstudy_dir\n")
+    fh.write("\t".join([c, problem, str(secs), cost.lstrip("$").replace(",", ""),
+                        outcome, cmd, study]) + "\n")
 PY
 }
 
 elapsed() { local s=$((SECONDS - $1)); printf '%dm%02ds' $((s / 60)) $((s % 60)); }
 
-start_progress() {                       # start_progress <config>
+PROGRESS_PID=""
+RUNNER_PID=""
+EXIT_PAUSED=75            # the runner's status for a case paused for LLM budget
+
+start_progress() {                       # start_progress <label> <study-dir>
   PROGRESS_PID=""
   [ "$PROGRESS_EVERY" -gt 0 ] || return 0
-  local c=$1 start=$SECONDS
+  local label=$1 study=$2 start=$SECONDS
   (
     while sleep "$PROGRESS_EVERY"; do
-      # Newest first, so this follows the pipeline from one problem to the next.
-      report_done "$c"                   # announce problems as they finish
-      # ls -dt sorts by mtime newest-first on both BSD and GNU; find -printf is
-      # GNU-only. nullglob keeps the glob from passing a literal 'bench-*' to ls
-      # when nothing has been created yet.
-      shopt -s nullglob
-      newest=$(ls -dt "$ARTIFACTS"/bench-*/ 2>/dev/null | head -1)
-      shopt -u nullglob
-      if [ -n "$newest" ]; then
-        say "  c$c $(elapsed $start)  $(summarize_stream "$newest")"
-      else
-        say "  c$c $(elapsed $start)  waiting for a study dir"
-      fi
+      say "  $label $(elapsed $start)  $(summarize_stream "$study")"
     done
   ) &
   PROGRESS_PID=$!
@@ -374,155 +381,126 @@ stop_progress() {
   PROGRESS_PID=""
 }
 
-start_purple() {                         # start_purple <config>
-  local c=$1
-  # setsid puts the Purple in its own process group so stop_purple can take down
-  # the claude CLI it spawns too; without that a killed Purple leaves the
-  # generation running, which is how an orphan once finished after a Ctrl-C.
-  # Green takes its own telemetry in-band, from the petscagent.telemetry.v1 data
-  # Part the Purple returns over A2A. The sidecar carries what that contract has
-  # no field for — stage_attempts and code_generation_failures — and a record of
-  # a run that failed before Green could score it. It lands in $OUTPUT beside the
-  # results as usage-pdesim-<model>-c<config>.jsonl, so the configs do not
-  # collide and each run's records stand alone.
-  PDESIM_CONFIG=$c PDESIM_USAGE_DIR=$OUTPUT \
-    new_session uv run python "$PURPLE" > "/tmp/pdesim_purple_c$c.log" 2>&1 &
-  PURPLE_PID=$!
-  # Advisory only: new_session()'s setsid() may not have run yet, so this can read
-  # the inherited (script) group. stop_purple re-reads the pgid when it actually
-  # matters, and reaps by port regardless.
-  PURPLE_PGID=$(ps -o pgid= -p "$PURPLE_PID" 2>/dev/null | tr -d ' ')
-  say "started Purple (config=$c) pid=$PURPLE_PID pgid=${PURPLE_PGID:-?}"
-}
+# Prefix that runs a command in a new session, so it leads its own process group
+# and an interrupt can signal the whole subtree, including the claude CLI it
+# spawns. macOS has no setsid binary; os.setsid() is the same POSIX call. An
+# array rather than a function: a backgrounded function runs in a forked
+# subshell, so $! would name the subshell and not the group leader.
+if command -v setsid >/dev/null 2>&1; then
+  NEW_SESSION=(setsid)
+else
+  NEW_SESSION=(python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])')
+fi
 
-stop_purple() {
-  [ -z "$PURPLE_PID" ] && return 0
-  # Re-read the pgid now rather than trusting start_purple's snapshot: by this
-  # point setsid() has long since run, so the launcher's real group is readable.
-  # Signal that group when it is distinct from ours; killing our own group would
-  # take down this script.
-  local pgid target
-  pgid=$(ps -o pgid= -p "$PURPLE_PID" 2>/dev/null | tr -d ' ')
-  target=$PURPLE_PID
-  if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then target=-$pgid; fi
-  kill -TERM "$target" 2>/dev/null
+stop_runner() {
+  [ -n "$RUNNER_PID" ] || return 0
+  kill -TERM "-$RUNNER_PID" 2>/dev/null || kill -TERM "$RUNNER_PID" 2>/dev/null
   for _ in $(seq 1 20); do
-    kill -0 "$PURPLE_PID" 2>/dev/null || break
+    kill -0 "$RUNNER_PID" 2>/dev/null || break
     sleep 1
   done
-  if kill -0 "$PURPLE_PID" 2>/dev/null; then
-    say "Purple $PURPLE_PID ignored SIGTERM; sending SIGKILL"
-    kill -KILL "$target" 2>/dev/null
-  fi
-  wait "$PURPLE_PID" 2>/dev/null
-  PURPLE_PID=""; PURPLE_PGID=""
-  port_free "$PURPLE_PORT" && return 0
-  # `uv run` can place the A2A server in a process group of its own, escaping the
-  # group kill above. Reap by port (ours only, matched on the pdesim_purple.py
-  # command line) so 9002 is free for the next config instead of being left for
-  # the next run's preflight to clean up.
-  reap_orphan_purple && port_free "$PURPLE_PORT" && return 0
-  say "WARNING: port $PURPLE_PORT still bound after teardown"
+  kill -KILL "-$RUNNER_PID" 2>/dev/null
+  wait "$RUNNER_PID" 2>/dev/null
+  RUNNER_PID=""
 }
 
-# A run killed uncleanly (Ctrl-C before setsid, SIGKILL, a crash) can leave its
-# Purple alive, holding $PURPLE_PORT and blocking the next run's preflight. Reap
-# such an orphan, but ONLY when the listener is one of our own Purples: match the
-# pdesim_purple.py path in its command line so an unrelated listener (an editor's
-# port forwarder, another service) is never touched and still fails the preflight.
-reap_orphan_purple() {
-  local pid pgid ours=0
-  for pid in $(port_pids "$PURPLE_PORT"); do
-    ps -p "$pid" -o command= 2>/dev/null | grep -qF "$PURPLE" || continue
-    ours=1
-    pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')
-    say "reaping orphaned Purple on port $PURPLE_PORT (pid=$pid pgid=${pgid:-?})"
-    # Kill the whole group when it is its own, matching stop_purple; never signal
-    # our own group, which would take down this script.
-    if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then kill -TERM "-$pgid" 2>/dev/null; else kill -TERM "$pid" 2>/dev/null; fi
-    for _ in $(seq 1 10); do
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 1
-    done
-    if kill -0 "$pid" 2>/dev/null; then
-      say "orphan $pid ignored SIGTERM; sending SIGKILL"
-      if [ -n "$pgid" ] && [ "$pgid" != "$MY_PGID" ]; then kill -KILL "-$pgid" 2>/dev/null; else kill -KILL "$pid" 2>/dev/null; fi
-    fi
-  done
-  [ "$ours" -eq 1 ] || return 0
-  # Confirm the port actually freed before the caller's preflight re-checks it.
-  for _ in $(seq 1 15); do
-    port_free "$PURPLE_PORT" && return 0
-    sleep 1
-  done
-  return 1
-}
+# Ctrl-C must not leave a pipeline generating in the background, and whatever
+# the interrupted case wrote is still moved out of the tree.
+trap 'echo; say "interrupted - stopping the current case"; stop_progress; stop_runner;
+      stash_artifacts "$OUTPUT/interrupted"; exit 130' INT TERM
+trap 'stop_progress; stop_runner' EXIT
 
-# Ctrl-C and errors must not leave a Purple generating in the background.
-trap 'echo; say "interrupted - stopping Purple"; stop_progress; stop_purple; exit 130' INT TERM
-trap 'stop_progress; stop_purple; restore_purple_budget; rm -rf "$DONE_DIR"' EXIT
+SELECTED=$(select_problems) || exit 1
+NPROB=$(printf '%s\n' "$SELECTED" | grep -c .)
 
-cd "$BENCH" || exit 1
-mkdir -p "$ARCHIVE" "$OUTPUT"
+say "=== $NPROB problem(s) x configs $CONFIGS on model $MODEL ==="
+say "problems from $DATA"
+say "output -> $OUTPUT"
 
-say "=== $PROBLEMS x configs $CONFIGS on model $MODEL ==="
-say "output  -> $(cd "$OUTPUT" && pwd)"   # resolve portably; readlink -f is GNU-only
-say "archive -> $ARCHIVE"
-
-set_purple_budget
-
-# Resolve the problem terms now: a typo should fail here, not after a server is up.
-uv run main.py problems "$PROBLEMS" || exit 1
-
-# Ports must be clear, or `launch` binds nothing and every compile fails. On
-# $PURPLE_PORT a busy port may be one of our own orphaned Purples from a run that
-# died without teardown; reap that before giving up. 8080 and 9001 are bound by
-# `launch`, never by us, so a listener there is always someone else's — fail.
-for p in 8080 9001 $PURPLE_PORT; do
-  port_free "$p" && continue
-  if [ "$p" = "$PURPLE_PORT" ] && reap_orphan_purple && port_free "$p"; then continue; fi
-  say "ERROR: port $p is already in use"
-  exit 1
-done
+# Studies left over from an earlier run would be cribbed from; park them first.
+if [ -n "$(ls -A "$ARTIFACTS" 2>/dev/null)" ]; then
+  say "moving what was already in $ARTIFACTS to $OUTPUT/stale"
+  stash_artifacts "$OUTPUT/stale"
+fi
 
 for c in $CONFIG_LIST; do
   say "===== CONFIG $c ====="
+  while IFS=$'\t' read -r pfile pname; do
+    [ -n "$pfile" ] || continue
+    slug=$(printf '%s' "$pname" | tr -c 'A-Za-z0-9._-' '_')
+    final=$OUTPUT/c$c/$slug
+    park=$OUTPUT/paused/c$c-$slug
+    log=$LOGS/c$c-$slug.log
+    if [ -e "$final" ]; then
+      say "c$c $pname: $final already exists; skipping"
+      continue
+    fi
+    resume=()
+    if [ -d "$park" ]; then
+      # Back where it ran, so the resumed session finds its files.
+      unpark_case "$park"
+      study=$(case_field "$(ls -d "$ARTIFACTS"/bench-"$slug"-* | head -1)" run_dir)
+      case $study in
+        "$ARTIFACTS"/bench-*) [ -d "$study" ] || die "paused case c$c $pname: no study at $study" ;;
+        *) die "paused case c$c $pname ran at '$study', not under $ARTIFACTS; resume it with the same PETSC_DIR" ;;
+      esac
+      resume=(--resume)
+      say "c$c $pname: resuming the paused session (log $log)"
+    else
+      # The pipeline runs inside the tree, as the orchestration skill expects its
+      # studies under artifacts/; the study is moved out once the case ends.
+      study=$ARTIFACTS/bench-$slug-$(date +%s)
+      reset_case_index
+      mkdir -p "$ARTIFACTS"
+      say "c$c $pname: running (log $log)"
+    fi
 
-  # Clean slate for this config.
-  shopt -s nullglob
-  stash "stale_c$c" "$ARTIFACTS"/bench-*
-  shopt -u nullglob
-  printf '{\n  "schema_version": "1.0",\n  "cases": []\n}\n' > "$CASE_INDEX"
-  rm -rf "${BENCH:?}/purple_agent_cache"/*
+    while :; do
+      start_progress "c$c $pname" "$study"
+      PDESIM_CONFIG=$c "${NEW_SESSION[@]}" python3 "$RUNNER" run --problem "$pfile" --study-dir "$study" \
+        ${resume[@]+"${resume[@]}"} >> "$log" 2>&1 &
+      RUNNER_PID=$!
+      wait "$RUNNER_PID"
+      rc=$?
+      RUNNER_PID=""
+      stop_progress
+      [ "$rc" -eq "$EXIT_PAUSED" ] || break
 
-  start_purple "$c"
-  up=0
-  for _ in $(seq 1 150); do               # up to 5 min
-    port_free "$PURPLE_PORT" || { up=1; break; }
-    sleep 2
-  done
-  if [ $up -ne 1 ]; then
-    say "ERROR: Purple did not come up for config $c; skipping"
-    stop_purple
-    continue
-  fi
-  say "Purple up; running $PROBLEMS"
+      # Out of LLM budget: the case is intact, so keep it and say why.
+      ran=$(case_field "$study" active_sec)
+      ran=${ran%.*}
+      why=$(case_field "$study" pause_reason)
+      park_case "$park"
+      say "c$c $pname PAUSED after $((ran / 60))m$((ran % 60))s of work: the LLM can no longer be used:"
+      say "    ${why:-no reason reported; see $log}"
+      say "  Its study and Claude session are saved in $park; nothing is lost."
+      if [ -n "$INTERACTIVE" ]; then
+        say "  Add funds (or wait for the usage limit to reset), then press Enter to"
+        say "  continue this case where it stopped, or type q and Enter to stop here."
+        answer=q
+        read -r answer < /dev/tty || answer=q
+      else
+        answer=q
+      fi
+      if [ "$answer" = q ]; then
+        say "  To continue later, run:"
+        echo "    $(resume_command)"
+        exit "$EXIT_PAUSED"
+      fi
+      unpark_case "$park"
+      resume=(--resume)
+      say "c$c $pname: resuming the paused session"
+    done
 
-  start_progress "$c"
-  uv run main.py launch --purple-url "$PURPLE_URL" --problems "$PROBLEMS" \
-    --output "$OUTPUT" > "/tmp/pdesim_launch_c$c.log" 2>&1
-  rc=$?                                  # capture before stop_progress clobbers it
-  stop_progress
-  # Catch whatever finished after the watcher's last look, and cover -i 0.
-  report_done "$c"
-  say "config $c launch exited rc=$rc"
-
-  stop_purple
-  shopt -s nullglob
-  stash "c$c" "$ARTIFACTS"/bench-*        # keep this config's study dirs
-  shopt -u nullglob
-  say "config $c done; study dirs in $ARCHIVE/c$c"
+    # The study dir becomes the case's final directory; anything else the
+    # pipeline left in artifacts/ goes beside it rather than being lost.
+    mkdir -p "$OUTPUT/c$c"
+    if [ -d "$study" ]; then mv "$study" "$final"; else mkdir -p "$final"; fi
+    stash_artifacts "$final/other-artifacts"
+    report_case "$c" "$pname" "$final" "$rc" | while IFS= read -r line; do say "  done $line"; done
+  done <<<"$SELECTED"
 done
 
+reset_case_index
 say "=== complete ==="
-say "results:"; ls -1 "$OUTPUT"/*.json 2>/dev/null
+say "summary: $SUMMARY"
