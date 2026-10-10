@@ -28,6 +28,7 @@ struct _p_DMAdaptor {
   /*   control */
   DMAdaptationCriterion adaptCriterion;
   PetscBool             femType;
+  PetscBool             transferInjection; /* Transfer the solution with the injection rather than the interpolation */
   PetscInt              numSeq;           /* Number of sequential adaptations */
   PetscInt              Nadapt;           /* Target number of vertices */
   PetscReal             refinementFactor; /* N_adapt = r^dim N_orig */

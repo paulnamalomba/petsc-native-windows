@@ -481,7 +481,8 @@ PetscErrorCode DMAdaptorSetOptionsPrefix(DMAdaptor adaptor, const char prefix[])
 . -adaptor_sequence_num num          - Number of adaptations to generate an optimal grid
 . -adaptor_target_num num            - Set the target number of vertices N_adapt, -1 for automatic determination
 . -adaptor_refinement_factor r       - Set r such that N_adapt = r^dim N_orig
-- -adaptor_mixed_setup_function func - Set the function func that sets up the mixed problem
+. -adaptor_mixed_setup_function func - Set the function func that sets up the mixed problem
+- -adaptor_transfer_injection        - Transfer the solution onto the adapted `DM` with `DMCreateInjection()` rather than `DMCreateInterpolation()`
 
   Level: beginner
 
@@ -505,6 +506,7 @@ PetscErrorCode DMAdaptorSetFromOptions(DMAdaptor adaptor)
   PetscCall(PetscOptionsInt("-adaptor_sequence_num", "Number of adaptations to generate an optimal grid", "DMAdaptorSetSequenceLength", adaptor->numSeq, &adaptor->numSeq, NULL));
   PetscCall(PetscOptionsInt("-adaptor_target_num", "Set the target number of vertices N_adapt, -1 for automatic determination", "DMAdaptor", adaptor->Nadapt, &adaptor->Nadapt, NULL));
   PetscCall(PetscOptionsReal("-adaptor_refinement_factor", "Set r such that N_adapt = r^dim N_orig", "DMAdaptor", adaptor->refinementFactor, &adaptor->refinementFactor, NULL));
+  PetscCall(PetscOptionsBool("-adaptor_transfer_injection", "Transfer the solution with the injection rather than the interpolation", "DMAdaptor", adaptor->transferInjection, &adaptor->transferInjection, NULL));
   PetscCall(PetscOptionsString("-adaptor_mixed_setup_function", "Function to setup the mixed problem", "DMAdaptorSetMixedSetupFunction", funcname, funcname, sizeof(funcname), &flg));
   if (flg) {
     PetscErrorCode (*setupFunc)(DMAdaptor, DM);
@@ -825,8 +827,19 @@ static PetscErrorCode DMAdaptorTransferSolution(DMAdaptor adaptor, DM dm, Vec x,
     case DM_ADAPTATION_REFINE:
     case DM_ADAPTATION_METRIC:
       PetscCall(DMCreateInterpolation(dm, adm, &interp, NULL));
-      PetscCall(MatInterpolate(interp, x, ax));
-      PetscCall(DMInterpolate(dm, interp, adm));
+      if (adaptor->transferInjection) {
+        Mat inject;
+
+        /* The interpolate hooks transfer the auxiliary data, such as boundary values, that the injection can use */
+        PetscCall(DMInterpolate(dm, interp, adm));
+        /* The adapted DM takes the place of the coarse DM: the injection maps a solution on dm onto adm */
+        PetscCall(DMCreateInjection(adm, dm, &inject));
+        PetscCall(MatRestrict(inject, x, ax));
+        PetscCall(MatDestroy(&inject));
+      } else {
+        PetscCall(MatInterpolate(interp, x, ax));
+        PetscCall(DMInterpolate(dm, interp, adm));
+      }
       PetscCall(MatDestroy(&interp));
       break;
     default:
