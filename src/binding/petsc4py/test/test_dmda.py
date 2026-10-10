@@ -426,6 +426,42 @@ class TestDMKSPCreateOperators(unittest.TestCase):
         PETSc.garbage_cleanup()
 
 
+class TestDMRefineHook(unittest.TestCase):
+    def setUp(self):
+        self.da = PETSc.DMDA().create([3], comm=PETSc.COMM_SELF)
+
+    def tearDown(self):
+        self.da.destroy()
+        PETSc.garbage_cleanup()
+
+    def testRefineHook(self):
+        calls = []
+
+        def refinehook(coarse, fine, a, c=0):
+            calls.append((coarse, fine, a, c))
+
+        self.da.addRefineHook(refinehook, None, args=('a',), kargs={'c': 1})
+        fine = self.da.refine()
+        self.assertEqual(calls, [(self.da, fine, 'a', 1)])
+        calls.clear()
+        fine.destroy()
+
+    def testInterpolateHook(self):
+        calls = []
+
+        def interphook(coarse, interp, fine, a, c=0):
+            calls.append((coarse, interp, fine, a, c))
+
+        fine = self.da.refine()
+        fine.addRefineHook(None, interphook, args=('a',), kargs={'c': 1})
+        interp, _ = self.da.createInterpolation(fine)
+        self.da.interpolateHooks(interp, fine)
+        self.assertEqual(calls, [(self.da, interp, fine, 'a', 1)])
+        calls.clear()
+        interp.destroy()
+        fine.destroy()
+
+
 MIRROR = PETSc.DMDA.BoundaryType.MIRROR
 GHOSTED = PETSc.DMDA.BoundaryType.GHOSTED
 PERIODIC = PETSc.DMDA.BoundaryType.PERIODIC

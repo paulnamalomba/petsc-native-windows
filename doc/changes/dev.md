@@ -9,6 +9,10 @@
 ```{rubric} General:
 ```
 
+- Add the petsc4py methods `DM.addRefineHook()` and `DM.interpolateHooks()`, with the callback
+  types `DMRefineHookFunction` and `DMInterpolateHookFunction`, for callbacks on finer `DM`s;
+  the hook arguments of `DM.addRefineHook()` and `DM.addCoarsenHook()` are optional
+
 ```{rubric} Configure/Build:
 ```
 
