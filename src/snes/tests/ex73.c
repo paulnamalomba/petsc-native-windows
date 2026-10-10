@@ -64,11 +64,12 @@ static PetscErrorCode TestSNESSolve(void)
 {
   DM   dm;
   SNES snes;
-  Vec  x;
+  Vec  x, xtemplate;
 
   PetscFunctionBeginUser;
   PetscCall(RefineShell(NULL, PETSC_COMM_WORLD, &dm));
-  PetscCall(DMCreateGlobalVector(dm, &x));
+  /* The solution has no DM, so the DMShell cannot recognize it as one of its own vectors */
+  PetscCall(VecCreateMPI(PETSC_COMM_WORLD, 1, PETSC_DETERMINE, &x));
   PetscCall(VecSet(x, 0.0));
   PetscCall(SNESCreate(PETSC_COMM_WORLD, &snes));
   PetscCall(SNESSetDM(snes, dm));
@@ -77,6 +78,8 @@ static PetscErrorCode TestSNESSolve(void)
   PetscCall(PetscObjectReference((PetscObject)dm));
   PetscCall(SNESSolve(snes, NULL, x));
   PetscCall(SNESDestroy(&snes));
+  PetscCall(DMShellGetGlobalVector(dm, &xtemplate));
+  PetscCheck(xtemplate != x, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "The DMShell keeps the solution as its template global vector");
   PetscCall(CheckCallerReference((PetscObject)x));
   PetscCall(VecDestroy(&x));
   PetscCall(CheckCallerReference((PetscObject)dm));
