@@ -28,7 +28,6 @@ class Configure(config.package.GNUPackage):
 
   def setupDependencies(self, framework):
     config.package.GNUPackage.setupDependencies(self, framework)
-    self.openmp        = framework.require('config.packages.OpenMP',self)
     self.cxxlibs       = framework.require('config.packages.cxxlibs',self)
     self.blasLapack    = framework.require('config.packages.BlasLapack',self)
     self.mpi           = framework.require('config.packages.MPI',self)

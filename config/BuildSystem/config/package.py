@@ -139,9 +139,11 @@ class Package(config.base.Configure):
       if self.include:        output += '  Includes:   '+self.headers.toStringNoDupes(self.include)+'\n'
       if self.lib:            output += '  Libraries:  '+self.libraries.toStringNoDupes(self.lib)+'\n'
       if self.executablename: output += '  Executable: '+getattr(self,self.executablename)+'\n'
-      if self.usesopenmp == 'yes': output += '  uses OpenMP; use export OMP_NUM_THREADS=<p> or -omp_num_threads <p> to control the number of threads\n'
-      if self.usesopenmp == 'unknown': output += '  Unknown if this uses OpenMP (try export OMP_NUM_THREADS=<1-4> yourprogram -log_view) \n'
-      if self.usespthreads == 'yes': output += '  uses PTHREADS; please consult the documentation on how to control the number of threads\n'
+      if self.usesopenmp == 'yes': output += ('  uses OpenMP; use export OMP_NUM_THREADS=<p> or -omp_num_threads <p> to control the number of threads\n'
+                                              + '    For more information see https://petsc.org/release/manual/getting_started/#cpu-openmp-parallelism\n')
+      if self.usesopenmp == 'unknown': output += '  Unknown if this uses OpenMP (try export OMP_NUM_THREADS=<1-4> yourprogram -log_view)\n'
+      if self.usespthreads == 'yes': output += ('  uses pthreads; use export '+self.name.upper()+'_NUM_THREADS=<p> or export OMP_NUM_THREADS=<p> to control the number of threads\n'
+                                                + '    For more information see https://petsc.org/release/manual/getting_started/#cpu-openmp-parallelism\n')
     return output
 
   def setupDependencies(self, framework):
