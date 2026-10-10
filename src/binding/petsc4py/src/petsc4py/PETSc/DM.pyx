@@ -1697,6 +1697,25 @@ cdef class DM(Object):
         dm.dm = newdm
         return dm
 
+    def interpolate(self, Mat interp, DM fine) -> None:
+        """Run the interpolate hooks of a finer `DM`.
+
+        Collective.
+
+        Parameters
+        ----------
+        interp
+            The interpolation matrix from this `DM` to ``fine``.
+        fine
+            The finer `DM`.
+
+        See Also
+        --------
+        addRefineHook, petsc.DMInterpolate
+
+        """
+        CHKERR(DMInterpolate(self.dm, interp.mat, fine.dm))
+
     def coarsen(self, comm: Comm | None = None) -> DM:
         """Return a coarsened `DM` object.
 
@@ -2586,6 +2605,64 @@ cdef class DM(Object):
             else:
                 restricthooks.append(restrictcontext)
             self.set_attr('__restricthooks__', restricthooks)
+
+    def addRefineHook(
+        self,
+        refinehook: DMRefineHookFunction,
+        interphook: DMInterpolateHookFunction,
+        args: tuple[Any, ...] | None = None,
+        kargs: dict[str, Any] | None = None) -> None:
+        """Add a callback to be executed when interpolating to a finer grid.
+
+        Logically collective.
+
+        Parameters
+        ----------
+        refinehook
+            The refine hook function, called by `refine` with the
+            coarse and the fine `DM`.
+        interphook
+            The interpolate hook function, called by `interpolate` with
+            the coarse `DM`, the interpolation matrix and the fine `DM`.
+        args
+            Positional arguments for the hooks.
+        kargs
+            Keyword arguments for the hooks.
+
+        Notes
+        -----
+        `refine` calls the refine hooks of the coarse `DM`, while
+        `interpolate` calls the interpolate hooks of the fine `DM`.
+
+        See Also
+        --------
+        interpolate, refine, petsc.DMRefineHookAdd
+
+        """
+        if args  is None: args  = ()
+        if kargs is None: kargs = {}
+
+        if refinehook is not None:
+            refinecontext = (refinehook, args, kargs)
+
+            refinehooks = self.get_attr('__refinehooks__')
+            if refinehooks is None:
+                refinehooks = [refinecontext]
+                CHKERR(DMRefineHookAdd(self.dm, DM_PyRefineHook, NULL, <void*>NULL))
+            else:
+                refinehooks.append(refinecontext)
+            self.set_attr('__refinehooks__', refinehooks)
+
+        if interphook is not None:
+            interpcontext = (interphook, args, kargs)
+
+            interphooks = self.get_attr('__interpolatehooks__')
+            if interphooks is None:
+                interphooks = [interpcontext]
+                CHKERR(DMRefineHookAdd(self.dm, NULL, DM_PyInterpolateHook, <void*>NULL))
+            else:
+                interphooks.append(interpcontext)
+            self.set_attr('__interpolatehooks__', interphooks)
 
     # --- application context ---
 
