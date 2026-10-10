@@ -3044,12 +3044,18 @@ static PetscErrorCode DMPlexTransformCoarsen_Private(DM dm, DMLabel adaptLabel, 
   if (!Ncoarsen) PetscFunctionReturn(PETSC_SUCCESS);
   for (cur = dm;; ++Nl) {
     DMLabel active;
+    DM      prev = dm;
 
     PetscCall(DMPlexGetTransform(cur, &tr));
     if (!tr) break;
     PetscCall(DMPlexTransformGetActive(tr, &active));
     PetscCall(DMGetCoarseDM(cur, &cur));
     if (!active || !cur) break;
+    // Linking an ancestor that DMAdaptLabel() returned to a finer mesh as its coarse DM closes a cycle
+    for (PetscInt l = 0; l <= Nl; ++l) {
+      PetscCheck(cur != prev, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "The chain of coarse DMs of the mesh is a cycle");
+      PetscCall(DMGetCoarseDM(prev, &prev));
+    }
   }
   if (!Nl) PetscFunctionReturn(PETSC_SUCCESS);
   // dms[l + 1] was produced from dms[l] by trs[l]
@@ -3061,11 +3067,15 @@ static PetscErrorCode DMPlexTransformCoarsen_Private(DM dm, DMLabel adaptLabel, 
   }
   for (PetscInt l = 0; l <= Nl; ++l) PetscCall(DMPlexCreateGhostBT_Private(dms[l], &ghost[l]));
   for (PetscInt l = 0; l < Nl; ++l) {
-    PetscInt cS, cE;
+    PetscInt cS, cE, trEnd;
 
+    // The parents and the flags below are indexed by the points of the transform, so its charts must match the linked DMs
     PetscCall(DMPlexGetChart(dms[l], NULL, &pEnd));
+    PetscCheck(trs[l]->ctStart[trs[l]->ctOrderOld[DM_NUM_POLYTOPES]] == pEnd, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "The coarse DM of a mesh in the chain is not the mesh its saved transform was applied to");
     PetscCall(PetscCalloc1(pEnd, &flags[l]));
     PetscCall(DMPlexGetChart(dms[l + 1], NULL, &pEnd));
+    PetscCall(DMPlexTransformGetChart(trs[l], NULL, &trEnd));
+    PetscCheck(trEnd == pEnd, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "A mesh in the chain is not the mesh that its saved transform produced");
     PetscCall(PetscMalloc1(pEnd, &parent[l]));
     PetscCall(DMPlexGetHeightStratum(dms[l + 1], 0, &cS, &cE));
     for (PetscInt c = cS; c < cE; ++c) {
