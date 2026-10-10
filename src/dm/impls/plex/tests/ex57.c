@@ -249,4 +249,11 @@ int main(int argc, char *argv[])
           -first_dm_plex_transform_extrude_use_tensor 0
     output_file: output/empty.out
 
+  test:
+    suffix: periodic_sbr
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 6,6 -dm_plex_box_bd periodic,periodic -dm_sparse_localize 0 \
+          -first_dm_plex_transform_type refine_tosimplex -second_dm_plex_transform_type refine_sbr \
+          -cells 0 -second -concrete
+    output_file: output/empty.out
+
 TEST*/

@@ -232,4 +232,13 @@ int main(int argc, char **argv)
             -refine_box_0 -2,2,-2,2,-2,2 -refine_box_1 -2,0,-2,2,-2,2 \
             -coarsen_box_2 -2,2,-2,2,-2,2 -petscpartitioner_type simple -dm_distribute -adapt_dm_view
 
+    # Edges that cross the periodic boundary are measured between the nearest images of their vertices,
+    # so refining the corner of a periodic mesh gives the same mesh sizes as refining an interior square
+    test:
+      suffix: periodic
+      filter: grep "^  Number of"
+      args: -dm_plex_simplex 0 -dm_plex_box_faces 4,4 -dm_plex_box_bd periodic,periodic -dm_sparse_localize 0 \
+            -dm_plex_option_phases sim_ -sim_dm_refine 1 -sim_dm_plex_transform_type refine_tosimplex -refcell -1 -adapt_iter 3 \
+            -refine_box_0 0.75,1,0.75,1 -refine_box_1 0.75,1,0.75,1 -refine_box_2 0.75,1,0.75,1 -adapt_dm_view
+
 TEST*/
