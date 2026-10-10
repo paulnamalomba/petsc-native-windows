@@ -10,6 +10,14 @@
   #error using both nvcc and hipcc at the same time?
 #endif
 
+/*
+  The CUDA Unified Programming Model (CUPM) is PETSc's shared abstraction over the
+  CUDA and HIP runtimes, whose APIs are structurally near-identical. A single
+  templated implementation (see the cupm/ directories under src/) is compiled
+  for either backend. PETSC_HAVE_CUPM is defined whenever either backend is
+  available. See doc/manual/getting_started.md for an overview of CUPM.
+*/
+
 #if PetscDefined(HAVE_CUDA) || PetscDefined(HAVE_HIP)
   #define PETSC_HAVE_CUPM 1
 #endif
