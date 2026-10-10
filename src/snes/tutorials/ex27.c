@@ -679,9 +679,13 @@ int main(int argc, char **argv)
     }
     PetscCall(SNESSolve(snes, NULL, u));
 
-    // Needed if you allow SNES to refine
+    // Mesh adaptation replaces the solution and the DM of the solver
+    PetscCall(VecDestroy(&u));
+    PetscCall(DMDestroy(&dm));
     PetscCall(SNESGetSolution(snes, &u));
-    PetscCall(VecGetDM(u, &dm));
+    PetscCall(SNESGetDM(snes, &dm));
+    PetscCall(PetscObjectReference((PetscObject)u));
+    PetscCall(PetscObjectReference((PetscObject)dm));
   }
 
   PetscCall(PetscObjectSetName((PetscObject)u, "Primal Solution "));

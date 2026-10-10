@@ -1594,11 +1594,18 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       /* Cleanup adaptivity info */
       if (adaptIter > 0) PetscCall(PetscViewerASCIIPopTab(PETSC_VIEWER_STDOUT_(comm)));
       PetscCall(DMForestSetAdaptivityForest(dm, NULL)); /* clear internal references to the previous dm */
-      PetscCall(DMDestroy(&dm));
-      PetscCall(VecDestroy(&x));
+      /* The caller owns the input DM and solution, and this function owns the ones it created */
+      if (adaptIter) {
+        PetscCall(DMDestroy(&dm));
+        PetscCall(VecDestroy(&x));
+      }
       *adm = odm;
       *ax  = ox;
     } else {
+      if (!adaptIter) {
+        PetscCall(PetscObjectReference((PetscObject)dm));
+        PetscCall(PetscObjectReference((PetscObject)x));
+      }
       *adm      = dm;
       *ax       = x;
       adaptIter = numAdapt;
@@ -1636,10 +1643,8 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   Level: intermediate
 
   Note:
-  When the mesh is adapted, one reference to `x` and one reference to the `DM` of the solver are
-  consumed, matching the use in `SNESSolve()` grid sequencing where those objects are replaced by
-  the adapted ones. A caller that keeps using the input objects must take an additional reference
-  to each of them before calling this function.
+  The caller keeps its references to `x` and to the `DM` of the solver, and must destroy `adm` and
+  `ax`. If the mesh is not adapted, `adm` and `ax` are new references to the input objects.
 
 .seealso: [](ch_dmbase), `DMAdaptor`, `DMAdaptationStrategy`, `DMAdaptorSetSolver()`, `DMAdaptorCreate()`
 @*/

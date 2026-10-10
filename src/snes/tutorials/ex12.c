@@ -846,8 +846,13 @@ int main(int argc, char **argv)
     if (user.runType == RUN_FULL) PetscCall(DMProjectFunction(dm, 0.0, initialGuess, NULL, INSERT_VALUES, u));
     PetscCall(VecViewFromOptions(u, NULL, "-guess_vec_view"));
     PetscCall(SNESSolve(snes, NULL, u));
+    /* Mesh adaptation replaces the solution and the DM of the solver */
+    PetscCall(VecDestroy(&u));
+    PetscCall(DMDestroy(&dm));
     PetscCall(SNESGetSolution(snes, &u));
     PetscCall(SNESGetDM(snes, &dm));
+    PetscCall(PetscObjectReference((PetscObject)u));
+    PetscCall(PetscObjectReference((PetscObject)dm));
 
     if (user.showSolution) {
       PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Solution\n"));

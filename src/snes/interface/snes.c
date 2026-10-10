@@ -4944,6 +4944,7 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_initial", &num, &flg));
       if (flg) {
         DMAdaptor adaptor;
+        Vec       ax;
 
         incall = PETSC_TRUE;
         PetscCall(DMAdaptorCreate(PetscObjectComm((PetscObject)snes), &adaptor));
@@ -4951,15 +4952,20 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &x));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        incall = PETSC_FALSE;
+        /* The solver holds the adapted DM, and the adapted solution is released like a created one */
+        PetscCall(DMDestroy(&dm));
+        PetscCall(VecDestroy(&xcreated));
+        x = xcreated = ax;
+        incall       = PETSC_FALSE;
       }
       /* Use grid sequencing to adapt */
       num = 0;
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_sequence", &num, NULL));
       if (num) {
         DMAdaptor   adaptor;
+        Vec         ax;
         const char *prefix;
 
         incall = PETSC_TRUE;
@@ -4971,9 +4977,13 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
         PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &x));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        incall = PETSC_FALSE;
+        /* The solver holds the adapted DM, and the adapted solution is released like a created one */
+        PetscCall(DMDestroy(&dm));
+        PetscCall(VecDestroy(&xcreated));
+        x = xcreated = ax;
+        incall       = PETSC_FALSE;
       }
     }
   }
