@@ -656,7 +656,7 @@ translates to trying to do almost all the computation on the GPU and not constan
 PETSc utilizes GPUs by providing vector and matrix classes (Vec and Mat) specifically written to run on the GPU. However, since it is difficult to
 write an entire PETSc code that runs only on the GPU, one can also access and work with (for example, put entries into) the vectors and matrices
 on the CPU. The vector classes
-are `VECCUDA`, `MATAIJCUSPARSE`, `VECKOKKOS`, `MATAIJKOKKOS`, and `VECHIP` (matrices are not yet supported by PETSc with HIP).
+are `VECCUDA`, `MATAIJCUSPARSE`, `VECKOKKOS`, `MATAIJKOKKOS`, and `VECHIP`.
 
 More details on using GPUs from PETSc will follow in this document.
 
