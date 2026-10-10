@@ -91,13 +91,19 @@ class Settings:
         self.claude_bin = _env("PDESIM_CLAUDE_BIN", "claude")
         self.repo_dir = Path(_env("PDESIM_REPO_DIR", str(REPO_DIR)))
         self.artifacts_dir = Path(_env("PDESIM_ARTIFACTS_DIR", str(self.repo_dir / "artifacts")))
-        # Hard ceiling: the bench's Green->Purple HTTP read timeout, hardcoded at
-        # read=3000.0 in src/util/a2a_comm.py with no env override. Past that Green
-        # gives up on the request, so the budget here must leave room to kill the
-        # CLI, save the transcript and answer. 2900s keeps ~100s of headroom.
-        # NOTE the full config-3 pipeline can exceed even this on the heavier
-        # problems; raising it further requires raising that bench-side read timeout.
-        self.timeout_sec = float(_env("PDESIM_TIMEOUT", "2900"))
+        # A day, which is off in practice: the limit existed to keep a run inside a
+        # bench ceiling that no longer applies, and it was ending studies that were
+        # still getting somewhere. run_pdesim.sh -t MIN boxes a run in when that is
+        # wanted, and matches this default. What still ends a run that has genuinely
+        # stopped is the CLI's stall watchdog, below.
+        #
+        # Green keeps its own budget for one Purple call, purple_budget_sec in
+        # config/green_agent_config.yaml, and whichever of the two is shorter
+        # decides. The driver raises Green's to match; running this binding
+        # directly leaves it at the bench's figure, which is the one that will
+        # apply. Green must outlast this limit either way, or it abandons the call
+        # while the pipeline is saving its transcript and the partial never lands.
+        self.timeout_sec = float(_env("PDESIM_TIMEOUT", "86400"))
         # Use os.environ.get, NOT _env: an explicit PDESIM_PERMISSION_FLAG="" must
         # DROP the flag (run under Claude's default, safer permissions), not fall
         # back to the default and silently reinstate bypassPermissions.

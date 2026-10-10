@@ -24,7 +24,9 @@
 #                        takes it, e.g. claudeopus48 or 'claudeopus48[1m]'
 #   -i, --progress SECS  seconds between progress lines, 0 to silence (default 30)
 #   -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
-#                        finished            (default: the binding's PDESIM_TIMEOUT)
+#                        finished. Also raises Green's own budget for the call to
+#                        MIN minutes + 5, so it outlasts the stop and still gets
+#                        the partial answer                 (default 1440, i.e. 24h)
 #   -o, --output DIR     one directory for everything this run produces: Green's
 #                        results, the Purple's usage sidecar and its study dirs
 #                        (default $BENCH/output/pdesim_<timestamp>, one per run)
@@ -49,7 +51,7 @@ PROBLEMS=advection
 CONFIGS=1
 MODEL=claudeopus48
 PROGRESS_EVERY=30
-TIMEOUT_MIN=
+TIMEOUT_MIN=1440          # 24h: effectively off unless asked for
 BENCH=${PETSCAGENT_BENCH:-$HOME/petscagent-bench}
 OUTPUT=
 RUN_ID=$(date +%Y%m%d-%H%M%S)
@@ -68,7 +70,8 @@ Usage: run_pdesim.sh [-p|--problems LIST] [-c|--configs LIST] [-m|--model NAME]
                                                        (default: claudeopus48)
   -i, --progress SECS  seconds between progress lines, 0 to silence (default: 30)
   -t, --timeout MIN    stop a problem after MIN minutes and submit whatever it
-                       finished        (default: the binding's PDESIM_TIMEOUT)
+                       finished; also raises Green's budget for the call to MIN+5
+                       minutes                            (default: 1440, i.e. 24h)
   -b, --bench DIR      petscagent-bench repo root
                              (default: $PETSCAGENT_BENCH, else ~/petscagent-bench)
   -o, --output DIR     one directory for everything this run produces: Green's
@@ -169,6 +172,39 @@ export PDESIM_CLAUDE_MODEL=$MODEL
 # Minutes here, seconds in the binding. A problem stopped at the limit still
 # delivers whatever it had finished, so this is a budget rather than a failure.
 [ -n "$TIMEOUT_MIN" ] && export PDESIM_TIMEOUT=$((TIMEOUT_MIN * 60))
+# Green keeps its own budget for one Purple call, and it has to outlast the
+# binding's or Green abandons the call while the Purple is still saving its
+# transcript and composing the partial answer. Give it the same limit plus
+# enough to do that. It lives in the bench's config file with no flag or
+# variable to override it, so the file is edited for the run and put back by
+# the EXIT trap, backup first so an interrupted run cannot leave it changed.
+GREEN_CFG=$BENCH/config/green_agent_config.yaml
+GREEN_CFG_BAK=
+PURPLE_BUDGET_SLACK=300
+
+set_purple_budget() {
+  [ -n "$TIMEOUT_MIN" ] || return 0
+  [ -f "$GREEN_CFG" ] || { say "WARNING: no $GREEN_CFG; leaving Green's budget alone"; return 0; }
+  GREEN_CFG_BAK=$(mktemp) && cp "$GREEN_CFG" "$GREEN_CFG_BAK" || {
+    GREEN_CFG_BAK=; say "WARNING: could not back up $GREEN_CFG; leaving Green's budget alone"; return 0; }
+  python3 - "$GREEN_CFG" "$((PDESIM_TIMEOUT + PURPLE_BUDGET_SLACK))" <<'PY' || return 0
+import re, sys
+path, budget = sys.argv[1], sys.argv[2]
+text = open(path).read()
+new, n = re.subn(r"(?m)^(\s*purple_budget_sec\s*:\s*)[0-9.]+", rf"\g<1>{budget}", text)
+if n != 1:
+    sys.exit(f"expected one purple_budget_sec, found {n}")
+open(path, "w").write(new)
+PY
+  say "Green's purple_budget_sec set to $((PDESIM_TIMEOUT + PURPLE_BUDGET_SLACK))s for this run"
+}
+
+restore_purple_budget() {
+  [ -n "$GREEN_CFG_BAK" ] || return 0
+  cp "$GREEN_CFG_BAK" "$GREEN_CFG" 2>/dev/null
+  rm -f "$GREEN_CFG_BAK"
+  GREEN_CFG_BAK=
+}
 
 ts() { date '+%F %T'; }
 say() { echo "[$(ts)] $*"; }
@@ -424,7 +460,7 @@ reap_orphan_purple() {
 
 # Ctrl-C and errors must not leave a Purple generating in the background.
 trap 'echo; say "interrupted - stopping Purple"; stop_progress; stop_purple; exit 130' INT TERM
-trap 'stop_progress; stop_purple; rm -rf "$DONE_DIR"' EXIT
+trap 'stop_progress; stop_purple; restore_purple_budget; rm -rf "$DONE_DIR"' EXIT
 
 cd "$BENCH" || exit 1
 mkdir -p "$ARCHIVE" "$OUTPUT"
@@ -432,6 +468,8 @@ mkdir -p "$ARCHIVE" "$OUTPUT"
 say "=== $PROBLEMS x configs $CONFIGS on model $MODEL ==="
 say "output  -> $(cd "$OUTPUT" && pwd)"   # resolve portably; readlink -f is GNU-only
 say "archive -> $ARCHIVE"
+
+set_purple_budget
 
 # Resolve the problem terms now: a typo should fail here, not after a server is up.
 uv run main.py problems "$PROBLEMS" || exit 1
