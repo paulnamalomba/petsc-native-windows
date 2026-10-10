@@ -860,6 +860,10 @@ async def _run_claude(prompt: str, study_dir: Path, cwd: Path) -> Tuple[int, str
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=child_env,
+        # The default 64 KiB StreamReader limit is too small: one stream-json event
+        # (a long thinking block plus a big Write/Task input) can exceed it, and
+        # readline then raises "Separator is not found, and chunk exceed the limit".
+        limit=256 * 1024 * 1024,
     )
 
     events: List[Any] = []
