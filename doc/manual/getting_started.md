@@ -648,6 +648,17 @@ PETSc utilizes this parallelism with three similar but slightly different models
 
 To utilize this one configures PETSc with either `--with-cuda` or `--with-hip` and, if they plan to use Kokkos, also `--download-kokkos --download-kokkos-kernels`.
 
+Because the CUDA and HIP programming interfaces are nearly identical in
+structure (for example, `cudaMalloc()` and `hipMalloc()`), PETSc implements
+its vector, matrix, and device-management support once, through a shared
+abstraction called the CUDA Unified Programming Model (CUPM). A single
+templated code path is specialized at compile time to either backend, so
+features generally reach CUDA and HIP together and behave consistently across
+them. CUPM is an internal implementation detail rather than a user-facing API. The name nonetheless
+appears in the source tree (the `cupm/` implementation directories and
+`petscdevice_cupm.h`) and in some diagnostics, such as the CUPM runtime
+architecture reported by `-log_view`, which is why it is defined here.
+
 In the GPU programming model that PETSc uses, the GPU memory is distinct from the CPU memory. This means that data that resides on the CPU
 memory must be copied to the GPU (often, this copy is done automatically by the libraries, and the user does not need to manage it)
 if one wishes to use the GPU computational power on it. This memory copy is slow compared to the GPU speed; hence, it is crucial to minimize these copies. This often
@@ -656,7 +667,7 @@ translates to trying to do almost all the computation on the GPU and not constan
 PETSc utilizes GPUs by providing vector and matrix classes (Vec and Mat) specifically written to run on the GPU. However, since it is difficult to
 write an entire PETSc code that runs only on the GPU, one can also access and work with (for example, put entries into) the vectors and matrices
 on the CPU. The vector classes
-are `VECCUDA`, `MATAIJCUSPARSE`, `VECKOKKOS`, `MATAIJKOKKOS`, and `VECHIP` (matrices are not yet supported by PETSc with HIP).
+are `VECCUDA`, `MATAIJCUSPARSE`, `VECKOKKOS`, `MATAIJKOKKOS`, and `VECHIP`.
 
 More details on using GPUs from PETSc will follow in this document.
 
