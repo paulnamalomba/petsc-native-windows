@@ -13,6 +13,7 @@ cdef extern from * nogil:
     PetscDMPlexTransformType DMPLEXREFINE1D
     PetscDMPlexTransformType DMPLEXEXTRUDETYPE
     PetscDMPlexTransformType DMPLEXTRANSFORMFILTER
+    PetscDMPlexTransformType DMPLEXTRANSFORMDD
 
     PetscErrorCode DMPlexCreate(MPI_Comm, PetscDM*)
     PetscErrorCode DMPlexCreateCohesiveSubmesh(PetscDM, PetscBool, const char[], PetscInt, PetscDM*)
@@ -117,6 +118,7 @@ cdef extern from * nogil:
     PetscErrorCode DMPlexLabelComplete(PetscDM, PetscDMLabel)
     PetscErrorCode DMPlexLabelCompleteStar(PetscDM, PetscDMLabel)
     PetscErrorCode DMPlexLabelCohesiveComplete(PetscDM, PetscDMLabel, PetscDMLabel, PetscInt, PetscBool, PetscDM)
+    PetscErrorCode DMPlexLabelAddOverlap(PetscDM, PetscDMLabel, PetscInt)
 
     PetscErrorCode DMPlexGetRefinementLimit(PetscDM, PetscReal*)
     PetscErrorCode DMPlexSetRefinementLimit(PetscDM, PetscReal)

@@ -783,6 +783,108 @@ PetscErrorCode DMPlexLabelAddFaceCells(DM dm, DMLabel label)
 }
 
 /*@
+  DMPlexLabelAddOverlap - Grow each stratum of a label marking cells by layers of adjacent cells
+
+  Not Collective
+
+  Input Parameters:
++ dm      - The `DM`
+. label   - A `DMLabel` whose strata mark sets of cells
+- overlap - The number of layers of cells to add to each stratum
+
+  Level: intermediate
+
+  Notes:
+  Each layer adds to a stratum the cells adjacent to the closure of its cells, according to `DMPlexGetAdjacency()`, as
+  `DMPlexDistributeOverlap()` does. With the default adjacency, these are the cells sharing a vertex with the stratum,
+  and after `DMSetBasicAdjacency(dm, PETSC_TRUE, PETSC_FALSE)`, the cells sharing a facet. A cell may end up in several
+  strata, and points of the label which are not cells are left as they are.
+
+  The strata grow only into the cells present on this process, including the halo, so growing them past a partition
+  boundary requires a mesh distributed with at least that much overlap.
+
+.seealso: [](ch_unstructured), `DM`, `DMPLEX`, `DMPLEXTRANSFORMDD`, `DMPlexGetAdjacency()`, `DMSetBasicAdjacency()`, `DMPlexDistributeOverlap()`
+@*/
+PetscErrorCode DMPlexLabelAddOverlap(DM dm, DMLabel label, PetscInt overlap)
+{
+  IS              valueIS;
+  const PetscInt *values;
+  PetscInt       *mark, *seen, *cells, *adj = NULL;
+  PetscInt        numValues, pStart, pEnd, cStart, cEnd;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(dm, DM_CLASSID, 1);
+  PetscValidHeaderSpecific(label, DMLABEL_CLASSID, 2);
+  PetscCheck(overlap >= 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Overlap %" PetscInt_FMT " must be nonnegative", overlap);
+  if (!overlap) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(DMPlexGetChart(dm, &pStart, &pEnd));
+  PetscCall(DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd));
+  PetscCall(PetscMalloc3(cEnd - cStart, &mark, pEnd - pStart, &seen, cEnd - cStart, &cells));
+  for (PetscInt c = 0; c < cEnd - cStart; ++c) mark[c] = -1;
+  for (PetscInt p = 0; p < pEnd - pStart; ++p) seen[p] = -1;
+  PetscCall(DMLabelGetNumValues(label, &numValues));
+  PetscCall(DMLabelGetValueIS(label, &valueIS));
+  PetscCall(ISGetIndices(valueIS, &values));
+  for (PetscInt v = 0; v < numValues; ++v) {
+    IS       pointIS;
+    PetscInt Nc = 0, Nseed, front = 0;
+
+    PetscCall(DMLabelGetStratumIS(label, values[v], &pointIS));
+    if (pointIS) {
+      const PetscInt *points;
+      PetscInt        numPoints;
+
+      PetscCall(ISGetLocalSize(pointIS, &numPoints));
+      PetscCall(ISGetIndices(pointIS, &points));
+      for (PetscInt p = 0; p < numPoints; ++p) {
+        const PetscInt c = points[p];
+
+        if (c < cStart || c >= cEnd) continue;
+        mark[c - cStart] = v;
+        cells[Nc++]      = c;
+      }
+      PetscCall(ISRestoreIndices(pointIS, &points));
+      PetscCall(ISDestroy(&pointIS));
+    }
+    Nseed = Nc;
+    // Each layer adds the cells adjacent to the closure of the previous layer, as DMPlexCreateOverlapLabel() does
+    for (PetscInt l = 0; l < overlap; ++l) {
+      const PetscInt back = Nc;
+
+      for (PetscInt i = front; i < back; ++i) {
+        PetscInt *closure = NULL;
+        PetscInt  Ncl;
+
+        PetscCall(DMPlexGetTransitiveClosure(dm, cells[i], PETSC_TRUE, &Ncl, &closure));
+        for (PetscInt cl = 0; cl < Ncl * 2; cl += 2) {
+          const PetscInt q       = closure[cl];
+          PetscInt       adjSize = PETSC_DETERMINE;
+
+          if (seen[q - pStart] == v) continue;
+          seen[q - pStart] = v;
+          PetscCall(DMPlexGetAdjacency(dm, q, &adjSize, &adj));
+          for (PetscInt a = 0; a < adjSize; ++a) {
+            const PetscInt c = adj[a];
+
+            if (c < cStart || c >= cEnd || mark[c - cStart] == v) continue;
+            mark[c - cStart] = v;
+            cells[Nc++]      = c;
+          }
+        }
+        PetscCall(DMPlexRestoreTransitiveClosure(dm, cells[i], PETSC_TRUE, &Ncl, &closure));
+      }
+      front = back;
+    }
+    for (PetscInt i = Nseed; i < Nc; ++i) PetscCall(DMLabelSetValue(label, cells[i], values[v]));
+  }
+  PetscCall(ISRestoreIndices(valueIS, &values));
+  PetscCall(ISDestroy(&valueIS));
+  PetscCall(PetscFree(adj));
+  PetscCall(PetscFree3(mark, seen, cells));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
   DMPlexLabelClearCells - Remove cells from a label
 
   Input Parameters:

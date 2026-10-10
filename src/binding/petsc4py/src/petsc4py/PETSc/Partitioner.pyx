@@ -195,6 +195,70 @@ cdef class Partitioner(Object):
         CHKERR(PetscPartitionerShellSetPartition(self.part, cnumProcs,
                                                  csizes, cpoints))
 
+    def partition(
+        self,
+        nparts: int,
+        start: Sequence[int],
+        adjacency: Sequence[int],
+        Section vertexSection=None,
+        Section edgeSection=None,
+        Section targetSection=None) -> tuple[Section, IS]:
+        """Partition a graph.
+
+        Collective.
+
+        Parameters
+        ----------
+        nparts
+            The number of partitions.
+        start
+            The offsets of the adjacency of each local vertex, of length the
+            number of local vertices plus one.
+        adjacency
+            The global numbers of the vertices adjacent to each local vertex.
+        vertexSection
+            The weight of each vertex, as its number of degrees of freedom.
+        edgeSection
+            The weight of each edge, as its number of degrees of freedom.
+        targetSection
+            The target weight of each partition.
+
+        Returns
+        -------
+        partSection : Section
+            The number of local vertices in each partition.
+        partition : IS
+            The local vertices, grouped by partition.
+
+        See Also
+        --------
+        petsc.PetscPartitionerPartition
+
+        """
+        cdef PetscInt cnparts = asInt(nparts)
+        cdef PetscInt nstart = 0, nadj = 0
+        cdef PetscInt *cstart = NULL
+        cdef PetscInt *cadj = NULL
+        cdef PetscSection vsec = NULL, esec = NULL, tsec = NULL
+        cdef MPI_Comm comm = MPI_COMM_NULL
+        cdef Section partSection = Section()
+        cdef IS partition = IS()
+        start = iarray_i(start, &nstart, &cstart)
+        adjacency = iarray_i(adjacency, &nadj, &cadj)
+        if nstart < 1:
+            raise ValueError("start array should have at least one entry")
+        if nadj < cstart[nstart - 1]:
+            raise ValueError("adjacency array should have at least %d entries (has %d)" %
+                             (toInt(cstart[nstart - 1]), toInt(nadj)))
+        if vertexSection is not None: vsec = vertexSection.sec
+        if edgeSection is not None: esec = edgeSection.sec
+        if targetSection is not None: tsec = targetSection.sec
+        CHKERR(PetscObjectGetComm(<PetscObject>self.part, &comm))
+        CHKERR(PetscSectionCreate(comm, &partSection.sec))
+        CHKERR(PetscPartitionerPartition(self.part, cnparts, nstart - 1, cstart, cadj,
+                                         vsec, esec, tsec, partSection.sec, &partition.iset))
+        return partSection, partition
+
 # --------------------------------------------------------------------
 
 del PartitionerType

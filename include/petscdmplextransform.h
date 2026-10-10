@@ -29,6 +29,7 @@ typedef const char *DMPlexTransformType;
 #define DMPLEXEXTRUDETYPE         "extrude"
 #define DMPLEXCOHESIVEEXTRUDE     "cohesive_extrude"
 #define DMPLEXTRANSFORMFILTER     "transform_filter"
+#define DMPLEXTRANSFORMDD         "transform_dd"
 
 PETSC_EXTERN PetscFunctionList DMPlexTransformList;
 PETSC_EXTERN PetscErrorCode    DMPlexTransformCreate(MPI_Comm, DMPlexTransform *);
@@ -110,5 +111,8 @@ PETSC_EXTERN PetscErrorCode DMPlexTransformCohesiveExtrudeSetTensor(DMPlexTransf
 PETSC_EXTERN PetscErrorCode DMPlexTransformCohesiveExtrudeGetWidth(DMPlexTransform, PetscReal *);
 PETSC_EXTERN PetscErrorCode DMPlexTransformCohesiveExtrudeSetWidth(DMPlexTransform, PetscReal);
 PETSC_EXTERN PetscErrorCode DMPlexTransformCohesiveExtrudeGetUnsplit(DMPlexTransform, DMLabel *);
+
+PETSC_EXTERN PetscErrorCode DMPlexTransformDDGetIgnoreHalo(DMPlexTransform, PetscBool *);
+PETSC_EXTERN PetscErrorCode DMPlexTransformDDSetIgnoreHalo(DMPlexTransform, PetscBool);
 
 PETSC_EXTERN PetscErrorCode DMPlexCreateEphemeral(DMPlexTransform, const char[], DM *);

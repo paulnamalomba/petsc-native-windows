@@ -1589,6 +1589,27 @@ cdef class DMPlex(DM):
         cdef PetscInt  val = asInt(bdvalue)
         CHKERR(DMPlexLabelCohesiveComplete(self.dm, label.dmlabel, bdlabel.dmlabel, val, flg, subdm.dm))
 
+    def labelAddOverlap(self, DMLabel label, overlap: int) -> None:
+        """Grow each stratum of a label marking cells by layers of adjacent cells.
+
+        Not collective.
+
+        Parameters
+        ----------
+        label
+            A `DMLabel` whose strata mark sets of cells.
+        overlap
+            The number of layers of cells to add to each stratum.
+
+        See Also
+        --------
+        DM, DMPlex, DMPlex.getAdjacency, DMPlex.distributeOverlap
+        petsc.DMPlexLabelAddOverlap
+
+        """
+        cdef PetscInt ival = asInt(overlap)
+        CHKERR(DMPlexLabelAddOverlap(self.dm, label.dmlabel, ival))
+
     def setAdjacencyUseAnchors(self, useAnchors: bool = True) -> None:
         """Define adjacency in the mesh using the point-to-point constraints.
 
@@ -3840,6 +3861,7 @@ class DMPlexTransformType(object):
     REFINE1D = S_(DMPLEXREFINE1D)
     EXTRUDE = S_(DMPLEXEXTRUDETYPE)
     TRANSFORMFILTER = S_(DMPLEXTRANSFORMFILTER)
+    TRANSFORMDD = S_(DMPLEXTRANSFORMDD)
 
 
 cdef class DMPlexTransform(Object):

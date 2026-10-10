@@ -106,6 +106,9 @@
 ```{rubric} DMPlex:
 ```
 
+- Add `DMPLEXTRANSFORMDD`, a `DMPlexTransform` that produces the disjoint union of the subdomains marked by the strata of the active label, with `DMPlexTransformDDSetIgnoreHalo()` to ignore labeled cells in the halo and `DMPlexTransformDDGetIgnoreHalo()` to query this flag
+- Add `DMPlexLabelAddOverlap()` to grow each stratum of a cell label by layers of adjacent cells
+
 ```{rubric} FE/FV:
 ```
 

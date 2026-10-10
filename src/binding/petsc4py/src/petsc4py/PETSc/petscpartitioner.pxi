@@ -19,4 +19,5 @@ cdef extern from * nogil:
     PetscErrorCode PetscPartitionerSetUp(PetscPartitioner)
     PetscErrorCode PetscPartitionerReset(PetscPartitioner)
 
+    PetscErrorCode PetscPartitionerPartition(PetscPartitioner, PetscInt, PetscInt, PetscInt[], PetscInt[], PetscSection, PetscSection, PetscSection, PetscSection, PetscIS*)
     PetscErrorCode PetscPartitionerShellSetPartition(PetscPartitioner, PetscInt, PetscInt*, PetscInt*)

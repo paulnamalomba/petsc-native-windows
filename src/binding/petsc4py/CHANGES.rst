@@ -6,6 +6,13 @@ CHANGES: PETSc for Python
 :Contact: dalcinl@gmail.com
 
 
+Development
+===========
+
+- Add ``DMPlex.labelAddOverlap()``.
+- Add ``Partitioner.partition()``.
+
+
 Release 3.26.0
 ==============
 

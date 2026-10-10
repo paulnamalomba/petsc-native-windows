@@ -41,6 +41,21 @@ class TestPartitioner(unittest.TestCase):
         ):
             self.partitioner.setShellPartition(2, [1, 2], [0, 1])
 
+    def testPartitionGraph(self):
+        # A path of 6 vertices
+        start = [0, 1, 3, 5, 7, 9, 10]
+        adjacency = [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]
+        self.partitioner.setShellPartition(2, [2, 4], [5, 0, 1, 2, 3, 4])
+        partSection, partition = self.partitioner.partition(2, start, adjacency)
+        self.assertEqual(partSection.getChart(), (0, 2))
+        self.assertEqual([partSection.getDof(p) for p in range(2)], [2, 4])
+        self.assertEqual(list(partition.getIndices()), [5, 0, 1, 2, 3, 4])
+
+        self.partitioner.setType(PETSc.Partitioner.Type.SIMPLE)
+        partSection, partition = self.partitioner.partition(3, start, adjacency)
+        self.assertEqual([partSection.getDof(p) for p in range(3)], [2, 2, 2])
+        self.assertEqual(list(partition.getIndices()), list(range(6)))
+
 
 class BaseTestPlex:
     COMM = PETSc.COMM_WORLD
@@ -182,6 +197,31 @@ class BaseTestPlex:
         self.assertNotEqual(numBoundary, pEnd - pStart)
         self.assertNotEqual(numInterior, pEnd - pStart)
         self.assertEqual(numBoundary + numInterior, pEnd - pStart)
+
+    def testLabelAddOverlap(self):
+        cStart, cEnd = self.plex.getHeightStratum(0)
+        if cEnd - cStart == 0:
+            return
+
+        def vertex_neighbors(c):
+            points, _orient = self.plex.getTransitiveClosure(c, useCone=True)
+            neighbors = set()
+            for p in points:
+                star, _orient = self.plex.getTransitiveClosure(p, useCone=False)
+                neighbors.update(q for q in star if cStart <= q < cEnd)
+            return neighbors
+
+        label = PETSc.DMLabel().create('subdomains', comm=PETSc.COMM_SELF)
+        label.setValue(cStart, 1)
+        label.setValue(cEnd - 1, 2)
+        self.plex.labelAddOverlap(label, 1)
+        self.assertEqual(
+            set(label.getStratumIS(1).getIndices()), vertex_neighbors(cStart)
+        )
+        self.assertEqual(
+            set(label.getStratumIS(2).getIndices()), vertex_neighbors(cEnd - 1)
+        )
+        label.destroy()
 
     def testLocalSubmesh(self):
         for ovl in [0, 1, 2]:

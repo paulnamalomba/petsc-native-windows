@@ -16,6 +16,10 @@
      - transform_filter
      - Yes
      - Preserve a subset of the mesh marked by a `DMLabel`
+   * - Domain decomposition
+     - transform_dd
+     - Yes
+     - Replicate the closure of each, possibly overlapping, subdomain marked by a `DMLabel`
    * - Regular Refinement
      - refine_regular
      - No

@@ -90,6 +90,7 @@ PetscErrorCode DMPlexTransformRegister(const char name[], PetscErrorCode (*creat
 }
 
 PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_Filter(DMPlexTransform);
+PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_DD(DMPlexTransform);
 PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_Regular(DMPlexTransform);
 PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_ToBox(DMPlexTransform);
 PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_ToSimplex(DMPlexTransform);
@@ -116,6 +117,7 @@ PetscErrorCode DMPlexTransformRegisterAll(void)
   DMPlexTransformRegisterAllCalled = PETSC_TRUE;
 
   PetscCall(DMPlexTransformRegister(DMPLEXTRANSFORMFILTER, DMPlexTransformCreate_Filter));
+  PetscCall(DMPlexTransformRegister(DMPLEXTRANSFORMDD, DMPlexTransformCreate_DD));
   PetscCall(DMPlexTransformRegister(DMPLEXREFINEREGULAR, DMPlexTransformCreate_Regular));
   PetscCall(DMPlexTransformRegister(DMPLEXREFINETOBOX, DMPlexTransformCreate_ToBox));
   PetscCall(DMPlexTransformRegister(DMPLEXREFINETOSIMPLEX, DMPlexTransformCreate_ToSimplex));
@@ -413,6 +415,19 @@ PetscErrorCode DMPlexTransformDestroy(DMPlexTransform *tr)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
+  if ((*tr)->trVerts) {
+    for (c = 0; c < DM_NUM_POLYTOPES; ++c) {
+      if ((*tr)->trSubSizes[c]) {
+        for (PetscInt n = 0; n < DM_NUM_POLYTOPES; ++n) {
+          for (PetscInt r = 0; r < (*tr)->trSubSizes[c][n]; ++r) PetscCall(PetscFree((*tr)->trSubVerts[c][n][r]));
+          PetscCall(PetscFree((*tr)->trSubVerts[c][n]));
+        }
+      }
+      PetscCall(PetscFree((*tr)->trSubSizes[c]));
+      PetscCall(PetscFree((*tr)->trSubVerts[c]));
+      PetscCall(PetscFree((*tr)->trVerts[c]));
+    }
+  }
   PetscTryTypeMethod(*tr, destroy);
   PetscCall(DMDestroy(&(*tr)->dm));
   PetscCall(DMLabelDestroy(&(*tr)->active));
@@ -426,24 +441,8 @@ PetscErrorCode DMPlexTransformDestroy(DMPlexTransform *tr)
     PetscCall(PetscFEDestroy(&(*tr)->coordFE[c]));
     PetscCall(PetscFEGeomDestroy(&(*tr)->refGeom[c]));
   }
-  if ((*tr)->trVerts) {
-    for (c = 0; c < DM_NUM_POLYTOPES; ++c) {
-      DMPolytopeType *rct;
-      PetscInt       *rsize, *rcone, *rornt, Nct, n, r;
-
-      if (DMPolytopeTypeGetDim((DMPolytopeType)c) > 0 && c != DM_POLYTOPE_UNKNOWN_CELL && c != DM_POLYTOPE_UNKNOWN_FACE) {
-        PetscCall(DMPlexTransformCellTransform(*tr, (DMPolytopeType)c, 0, NULL, &Nct, &rct, &rsize, &rcone, &rornt));
-        for (n = 0; n < Nct; ++n) {
-          if (rct[n] == DM_POLYTOPE_POINT) continue;
-          for (r = 0; r < rsize[n]; ++r) PetscCall(PetscFree((*tr)->trSubVerts[c][rct[n]][r]));
-          PetscCall(PetscFree((*tr)->trSubVerts[c][rct[n]]));
-        }
-      }
-      PetscCall(PetscFree((*tr)->trSubVerts[c]));
-      PetscCall(PetscFree((*tr)->trVerts[c]));
-    }
-  }
   PetscCall(PetscFree3((*tr)->trNv, (*tr)->trVerts, (*tr)->trSubVerts));
+  PetscCall(PetscFree((*tr)->trSubSizes));
   PetscCall(PetscFree2((*tr)->coordFE, (*tr)->refGeom));
   /* We do not destroy (*dm)->data here so that we can reference count backend objects */
   PetscCall(PetscHeaderDestroy(tr));
@@ -1960,6 +1959,7 @@ static PetscErrorCode DMPlexTransformCreateCellVertices_Internal(DMPlexTransform
 {
   PetscFunctionBegin;
   PetscCall(PetscCalloc3(DM_NUM_POLYTOPES, &tr->trNv, DM_NUM_POLYTOPES, &tr->trVerts, DM_NUM_POLYTOPES, &tr->trSubVerts));
+  PetscCall(PetscCalloc1(DM_NUM_POLYTOPES, &tr->trSubSizes));
   for (PetscInt ict = DM_POLYTOPE_POINT; ict < DM_NUM_POLYTOPES; ++ict) {
     const DMPolytopeType ct = (DMPolytopeType)ict;
     DMPlexTransform      reftr;
@@ -1980,6 +1980,7 @@ static PetscErrorCode DMPlexTransformCreateCellVertices_Internal(DMPlexTransform
     PetscCall(DMPlexTransformSetDM(reftr, refdm));
     PetscCall(DMPlexTransformGetType(tr, &typeName));
     PetscCall(DMPlexTransformSetType(reftr, typeName));
+    PetscTryTypeMethod(reftr, setuprefcell);
     PetscCall(DMPlexTransformSetUp(reftr));
     PetscCall(DMPlexTransformApply(reftr, refdm, &trdm));
 
@@ -1995,11 +1996,13 @@ static PetscErrorCode DMPlexTransformCreateCellVertices_Internal(DMPlexTransform
     PetscCall(VecRestoreArrayRead(coordinates, &coords));
 
     PetscCall(PetscCalloc1(DM_NUM_POLYTOPES, &tr->trSubVerts[ct]));
+    PetscCall(PetscCalloc1(DM_NUM_POLYTOPES, &tr->trSubSizes[ct]));
     PetscCall(DMPlexTransformCellTransform(reftr, ct, 0, NULL, &Nct, &rct, &rsize, &rcone, &rornt));
     for (n = 0; n < Nct; ++n) {
       /* Since points are 0-dimensional, coordinates make no sense */
       if (rct[n] == DM_POLYTOPE_POINT) continue;
       PetscCall(PetscCalloc1(rsize[n], &tr->trSubVerts[ct][rct[n]]));
+      tr->trSubSizes[ct][rct[n]] = rsize[n];
       for (r = 0; r < rsize[n]; ++r) {
         PetscInt *closure = NULL;
         PetscInt  clSize, cl, Nv = 0;
@@ -2262,6 +2265,7 @@ static PetscErrorCode DMPlexTransformCreateLabels(DMPlexTransform tr, DM rdm)
     PetscCall(DMGetLabel(rdm, lname, &labelNew));
     PetscCall(RefineLabel_Internal(tr, label, labelNew));
   }
+  PetscTryTypeMethod(tr, createlabels, rdm);
   PetscCall(PetscLogEventEnd(DMPLEXTRANSFORM_CreateLabels, tr, dm, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -2342,6 +2346,11 @@ static PetscErrorCode DMPlexTransformCreateSF(DMPlexTransform tr, DM rdm)
   PetscFunctionBegin;
   PetscCall(DMPlexTransformGetDM(tr, &dm));
   PetscCall(PetscLogEventBegin(DMPLEXTRANSFORM_CreateSF, tr, dm, 0, 0));
+  if (tr->ops->createsf) {
+    PetscUseTypeMethod(tr, createsf, rdm);
+    PetscCall(PetscLogEventEnd(DMPLEXTRANSFORM_CreateSF, tr, dm, 0, 0));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   PetscCall(DMPlexGetChart(rdm, &pStartNew, &pEndNew));
   PetscCall(DMGetPointSF(dm, &sf));
   PetscCall(DMGetPointSF(rdm, &sfNew));
@@ -2494,6 +2503,10 @@ static PetscErrorCode DMPlexTransformMapLocalizedCoordinates(DMPlexTransform tr,
   PetscInt cdim, v, *subcellV;
 
   PetscFunctionBegin;
+  if (tr->ops->maplocalizedcoordinates) {
+    PetscUseTypeMethod(tr, maplocalizedcoordinates, ct, rct, r, x, xr);
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   PetscCall(DMPlexTransformGetCoordinateFE(tr, ct, &fe));
   PetscCall(DMPlexTransformGetSubcellVertices(tr, ct, rct, r, &subcellV));
   PetscCall(PetscFEGetNumComponents(fe, &cdim));
