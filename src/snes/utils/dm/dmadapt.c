@@ -1358,6 +1358,8 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   MPI_Comm  comm;
 
   PetscFunctionBegin;
+  *adm = NULL;
+  *ax  = NULL;
   PetscCall(DMViewFromOptions(adaptor->idm, NULL, "-dm_adapt_pre_view"));
   PetscCall(VecViewFromOptions(inx, NULL, "-sol_adapt_pre_view"));
   PetscCall(PetscObjectGetComm((PetscObject)adaptor, &comm));
@@ -1594,13 +1596,14 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       /* Cleanup adaptivity info */
       if (adaptIter > 0) PetscCall(PetscViewerASCIIPopTab(PETSC_VIEWER_STDOUT_(comm)));
       PetscCall(DMForestSetAdaptivityForest(dm, NULL)); /* clear internal references to the previous dm */
-      PetscCall(DMDestroy(&dm));
-      PetscCall(VecDestroy(&x));
+      /* The caller owns the input DM and solution, and this function owns the ones it created */
+      if (adaptIter) {
+        PetscCall(DMDestroy(&dm));
+        PetscCall(VecDestroy(&x));
+      }
       *adm = odm;
       *ax  = ox;
     } else {
-      *adm      = dm;
-      *ax       = x;
       adaptIter = numAdapt;
     }
     if (adaptIter < numAdapt - 1) {
@@ -1608,8 +1611,10 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       PetscCall(VecViewFromOptions(ox, NULL, "-sol_adapt_iter_view"));
     }
   }
-  PetscCall(DMViewFromOptions(*adm, NULL, "-dm_adapt_view"));
-  PetscCall(VecViewFromOptions(*ax, NULL, "-sol_adapt_view"));
+  if (*adm) {
+    PetscCall(DMViewFromOptions(*adm, NULL, "-dm_adapt_view"));
+    PetscCall(VecViewFromOptions(*ax, NULL, "-sol_adapt_view"));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1624,8 +1629,8 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
 - strategy - The adaptation strategy, see `DMAdaptationStrategy`
 
   Output Parameters:
-+ adm - The adapted `DM`
-- ax  - The adapted solution
++ adm - The adapted `DM`, or `NULL` if no adaptation took place
+- ax  - The adapted solution, or `NULL` if no adaptation took place
 
   Options Database Keys:
 + -snes_adapt (initial|sequential|multigrid) - adaption strategy, see `DMAdaptationStrategy`
@@ -1636,10 +1641,9 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   Level: intermediate
 
   Note:
-  When the mesh is adapted, one reference to `x` and one reference to the `DM` of the solver are
-  consumed, matching the use in `SNESSolve()` grid sequencing where those objects are replaced by
-  the adapted ones. A caller that keeps using the input objects must take an additional reference
-  to each of them before calling this function.
+  The caller keeps its references to `x` and to the `DM` of the solver. If the mesh is adapted,
+  `adm` and `ax` contain references to the adapted objects, which the caller must destroy. If no
+  adaptation takes place, the input references are unchanged and `adm` and `ax` are set to `NULL`.
 
 .seealso: [](ch_dmbase), `DMAdaptor`, `DMAdaptationStrategy`, `DMAdaptorSetSolver()`, `DMAdaptorCreate()`
 @*/

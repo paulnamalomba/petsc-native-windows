@@ -4944,6 +4944,8 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_initial", &num, &flg));
       if (flg) {
         DMAdaptor adaptor;
+        DM        dmAdapted = NULL;
+        Vec       ax        = NULL;
 
         incall = PETSC_TRUE;
         PetscCall(DMAdaptorCreate(PetscObjectComm((PetscObject)snes), &adaptor));
@@ -4951,15 +4953,22 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &x));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dmAdapted, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        incall = PETSC_FALSE;
+        if (dmAdapted) {
+          PetscCall(DMDestroy(&dmAdapted));
+          PetscCall(VecDestroy(&xcreated));
+          x = xcreated = ax;
+        }
+        incall       = PETSC_FALSE;
       }
       /* Use grid sequencing to adapt */
       num = 0;
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_sequence", &num, NULL));
       if (num) {
         DMAdaptor   adaptor;
+        DM          dmAdapted = NULL;
+        Vec         ax        = NULL;
         const char *prefix;
 
         incall = PETSC_TRUE;
@@ -4971,9 +4980,14 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
         PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &x));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dmAdapted, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        incall = PETSC_FALSE;
+        if (dmAdapted) {
+          PetscCall(DMDestroy(&dmAdapted));
+          PetscCall(VecDestroy(&xcreated));
+          x = xcreated = ax;
+        }
+        incall       = PETSC_FALSE;
       }
     }
   }
@@ -4987,6 +5001,8 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
 
   for (PetscInt grid = 0; grid < snes->gridsequence; grid++) PetscCall(PetscViewerASCIIPushTab(PETSC_VIEWER_STDOUT_(PetscObjectComm((PetscObject)snes))));
   for (PetscInt grid = 0; grid < snes->gridsequence + 1; grid++) {
+    Vec xtemplate = NULL;
+
     /* set solution vector */
     if (!grid) PetscCall(PetscObjectReference((PetscObject)x));
     PetscCall(VecDestroy(&snes->vec_sol));
@@ -5002,7 +5018,9 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
     PetscCheck(snes->vec_func != snes->vec_sol, PETSC_COMM_SELF, PETSC_ERR_ARG_IDN, "Solution vector cannot be function vector");
     PetscCheck(snes->vec_rhs != snes->vec_sol, PETSC_COMM_SELF, PETSC_ERR_ARG_IDN, "Solution vector cannot be right-hand side vector");
     if (!snes->vec_sol_update /* && snes->vec_sol */) PetscCall(VecDuplicate(snes->vec_sol, &snes->vec_sol_update));
-    PetscCall(DMShellSetGlobalVector(dm, snes->vec_sol));
+    /* A template would keep the solution alive as long as the DM */
+    PetscCall(DMShellGetGlobalVector(dm, &xtemplate));
+    if (!xtemplate) PetscCall(DMShellSetGlobalVector(dm, snes->vec_sol));
     PetscCall(SNESSetUp(snes));
 
     if (!grid) {
