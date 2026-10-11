@@ -363,7 +363,10 @@ static PetscErrorCode PCBDDCSetDivergenceMat_BDDC(PC pc, Mat divudotp, PetscBool
   Local indices refer to the local matrices inside the `MATIS` objects. If `vl2l` is `NULL`, the local velocity numbering in
   `divudotp` must match that of the preconditioning matrix.
 
-.seealso: [](ch_ksp), `PCBDDC`, `PCBDDCSetDiscreteGradient()`
+  The computed flux constraints supplement the near-nullspace supplied with `MatSetNearNullSpace()`.
+  The near-nullspace attached to the preconditioning matrix is preserved.
+
+.seealso: [](ch_ksp), `PCBDDC`, `PCBDDCSetDiscreteGradient()`, `MatSetNearNullSpace()`
 @*/
 PetscErrorCode PCBDDCSetDivergenceMat(PC pc, Mat divudotp, PetscBool trans, IS vl2l)
 {
@@ -1812,16 +1815,10 @@ static PetscErrorCode PCSetUp_BDDC(PC pc)
     PetscCall(PCBDDCAnalyzeInterface(pc));
     computeconstraintsmatrix = PETSC_TRUE;
     PetscCheck(!(pcbddc->adaptive_selection && !pcbddc->use_deluxe_scaling && !pcbddc->mat_graph->twodim), PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Cannot compute the adaptive primal space for a problem with 3D edges without deluxe scaling");
+    PetscCall(MatNullSpaceDestroy(&pcbddc->nonetflux));
     if (pcbddc->compute_nonetflux) {
-      MatNullSpace nnfnnsp;
-
       PetscCheck(pcbddc->divudotp, PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Missing divudotp operator");
-      PetscCall(PCBDDCComputeNoNetFlux(pc->pmat, pcbddc->divudotp, pcbddc->divudotp_trans, pcbddc->divudotp_vl2l, pcbddc->mat_graph, &nnfnnsp));
-      /* TODO what if a nearnullspace is already attached? */
-      if (nnfnnsp) {
-        PetscCall(MatSetNearNullSpace(pc->pmat, nnfnnsp));
-        PetscCall(MatNullSpaceDestroy(&nnfnnsp));
-      }
+      PetscCall(PCBDDCComputeNoNetFlux(pc->pmat, pcbddc->divudotp, pcbddc->divudotp_trans, pcbddc->divudotp_vl2l, pcbddc->mat_graph, &pcbddc->nonetflux));
     }
   }
   PetscCall(PetscLogEventEnd(PC_BDDC_Topology[pcbddc->current_level], pc, 0, 0, 0));
@@ -2272,9 +2269,9 @@ static PetscErrorCode PCApplyTranspose_BDDC(PC pc, Vec r, Vec z)
 
 static PetscErrorCode PCReset_BDDC(PC pc)
 {
-  PC_BDDC *pcbddc = (PC_BDDC *)pc->data;
-  PC_IS   *pcis   = (PC_IS *)pc->data;
-  KSP      kspD, kspR, kspC;
+  PC_BDDC    *pcbddc         = (PC_BDDC *)pc->data;
+  PC_IS      *pcis           = (PC_IS *)pc->data;
+  PetscScalar scaling_factor = pcis->scaling_factor;
 
   PetscFunctionBegin;
   /* free BDDC custom data  */
@@ -2291,32 +2288,16 @@ static PetscErrorCode PCReset_BDDC(PC pc)
   /* free data created by PCIS */
   PetscCall(PCISReset(pc));
 
-  /* restore defaults */
-  kspD = pcbddc->ksp_D;
-  kspR = pcbddc->ksp_R;
-  kspC = pcbddc->coarse_ksp;
-  PetscCall(PetscMemzero(pc->data, sizeof(*pcbddc)));
-  pcis->n_neigh                     = -1;
-  pcis->scaling_factor              = 1.0;
-  pcis->reusesubmatrices            = PETSC_TRUE;
-  pcbddc->use_local_adj             = PETSC_TRUE;
-  pcbddc->use_vertices              = PETSC_TRUE;
-  pcbddc->use_edges                 = PETSC_TRUE;
-  pcbddc->symmetric_primal          = PETSC_TRUE;
-  pcbddc->vertex_size               = 1;
-  pcbddc->recompute_topography      = PETSC_TRUE;
-  pcbddc->coarse_size               = -1;
-  pcbddc->use_exact_dirichlet_trick = PETSC_TRUE;
-  pcbddc->coarsening_ratio          = 8;
-  pcbddc->coarse_eqs_per_proc       = 1;
-  pcbddc->benign_compute_correction = PETSC_TRUE;
-  pcbddc->nedfield                  = -1;
-  pcbddc->nedglobal                 = PETSC_TRUE;
-  pcbddc->graphmaxcount             = PETSC_INT_MAX;
-  pcbddc->sub_schurs_layers         = -1;
-  pcbddc->ksp_D                     = kspD;
-  pcbddc->ksp_R                     = kspR;
-  pcbddc->coarse_ksp                = kspC;
+  // Restore the PCIS callbacks and clear derived state while preserving configured options.
+  PetscCall(PCISInitialize(pc));
+  pcis->scaling_factor              = scaling_factor;
+  pcis->n                           = 0;
+  pcis->n_B                         = 0;
+  pcis->pure_neumann                = PETSC_FALSE;
+  pcbddc->exact_dirichlet_trick_app = PETSC_FALSE;
+  pcbddc->ksp_guess_nonzero         = PETSC_FALSE;
+  pcbddc->rhs_change                = PETSC_FALSE;
+  pcbddc->temp_solution_used        = PETSC_FALSE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -2326,6 +2307,8 @@ static PetscErrorCode PCDestroy_BDDC(PC pc)
 
   PetscFunctionBegin;
   PetscCall(PCReset_BDDC(pc));
+  PetscCall(PCBDDCGraphDestroy(&pcbddc->mat_graph));
+  PetscCall(PCISReset(pc));
   PetscCall(KSPDestroy(&pcbddc->ksp_D));
   PetscCall(KSPDestroy(&pcbddc->ksp_R));
   PetscCall(KSPDestroy(&pcbddc->coarse_ksp));
