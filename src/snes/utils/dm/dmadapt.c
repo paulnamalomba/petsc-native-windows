@@ -824,6 +824,7 @@ static PetscErrorCode DMAdaptorTransferSolution(DMAdaptor adaptor, DM dm, Vec x,
       break;
     case DM_ADAPTATION_REFINE:
     case DM_ADAPTATION_METRIC:
+      PetscCall(DMGetCoordinatesLocalSetUp(adm));
       PetscCall(DMCreateInterpolation(dm, adm, &interp, NULL));
       PetscCall(MatInterpolate(interp, x, ax));
       PetscCall(DMInterpolate(dm, interp, adm));
@@ -1348,7 +1349,7 @@ static void identityFunc(PetscInt dim, PetscInt Nf, PetscInt NfAux, const PetscI
   }
 }
 
-static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx, PetscBool doSolve, DM *adm, Vec *ax)
+static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx, PetscBool doSolve, PetscBool preserveHierarchy, DM *adm, Vec *ax)
 {
   PetscDS   ds;
   PetscReal errorNorm = 0.;
@@ -1364,6 +1365,7 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   PetscCall(DMGetApplicationContext(adaptor->idm, &ctx));
   PetscCall(DMGetDS(adaptor->idm, &ds));
   PetscCall(PetscDSGetNumFields(ds, &Nf));
+  if (adaptor->adaptCriterion == DM_ADAPTATION_NONE && !Nf) adaptor->adaptCriterion = DM_ADAPTATION_REFINE;
   if (adaptor->adaptCriterion != DM_ADAPTATION_REFINE) {
     PetscCall(DMGetDimension(adaptor->idm, &dim));
     PetscCall(DMGetCoordinateDim(adaptor->idm, &coordDim));
@@ -1578,6 +1580,7 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
 
       PetscCall(PetscObjectGetName((PetscObject)dm, &name));
       PetscCall(PetscObjectSetName((PetscObject)odm, name));
+      if (preserveHierarchy) PetscCall(DMSetCoarseDM(odm, dm));
       /* Reconfigure solver */
       PetscCall(SNESReset(adaptor->snes));
       PetscCall(SNESSetDM(adaptor->snes, odm));
@@ -1593,8 +1596,10 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       PetscCall(DMAdaptorTransferSolution(adaptor, dm, x, odm, ox));
       /* Cleanup adaptivity info */
       if (adaptIter > 0) PetscCall(PetscViewerASCIIPopTab(PETSC_VIEWER_STDOUT_(comm)));
-      PetscCall(DMForestSetAdaptivityForest(dm, NULL)); /* clear internal references to the previous dm */
-      PetscCall(DMDestroy(&dm));
+      if (!preserveHierarchy) {
+        PetscCall(DMForestSetAdaptivityForest(dm, NULL)); /* clear internal references to the previous dm */
+        PetscCall(DMDestroy(&dm));
+      } else if (adaptIter > 0) PetscCall(DMDestroy(&dm));
       PetscCall(VecDestroy(&x));
       *adm = odm;
       *ax  = ox;
@@ -1636,10 +1641,11 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   Level: intermediate
 
   Note:
-  When the mesh is adapted, one reference to `x` and one reference to the `DM` of the solver are
-  consumed, matching the use in `SNESSolve()` grid sequencing where those objects are replaced by
-  the adapted ones. A caller that keeps using the input objects must take an additional reference
-  to each of them before calling this function.
+  When the mesh is adapted, one reference to `x` is consumed. For `DM_ADAPTATION_INITIAL` and
+  `DM_ADAPTATION_SEQUENTIAL`, one reference to the `DM` of the solver is also consumed, matching
+  grid sequencing where those objects are replaced by the adapted ones. A caller that keeps using
+  these input objects must take an additional reference to each of them before calling this function.
+  `DM_ADAPTATION_MULTILEVEL` retains the coarse `DM` for use by the multilevel solver.
 
 .seealso: [](ch_dmbase), `DMAdaptor`, `DMAdaptationStrategy`, `DMAdaptorSetSolver()`, `DMAdaptorCreate()`
 @*/
@@ -1648,10 +1654,13 @@ PetscErrorCode DMAdaptorAdapt(DMAdaptor adaptor, Vec x, DMAdaptationStrategy str
   PetscFunctionBegin;
   switch (strategy) {
   case DM_ADAPTATION_INITIAL:
-    PetscCall(DMAdaptorAdapt_Sequence_Private(adaptor, x, PETSC_FALSE, adm, ax));
+    PetscCall(DMAdaptorAdapt_Sequence_Private(adaptor, x, PETSC_FALSE, PETSC_FALSE, adm, ax));
     break;
   case DM_ADAPTATION_SEQUENTIAL:
-    PetscCall(DMAdaptorAdapt_Sequence_Private(adaptor, x, PETSC_TRUE, adm, ax));
+    PetscCall(DMAdaptorAdapt_Sequence_Private(adaptor, x, PETSC_TRUE, PETSC_FALSE, adm, ax));
+    break;
+  case DM_ADAPTATION_MULTILEVEL:
+    PetscCall(DMAdaptorAdapt_Sequence_Private(adaptor, x, PETSC_TRUE, PETSC_TRUE, adm, ax));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)adaptor), PETSC_ERR_ARG_WRONG, "Unrecognized adaptation strategy %d", strategy);

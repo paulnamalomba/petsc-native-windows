@@ -4894,7 +4894,7 @@ PetscErrorCode SNESConvergedReasonViewFromOptions(SNES snes)
 @*/
 PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
 {
-  PetscBool flg;
+  PetscBool adapted = PETSC_FALSE, flg;
   Vec       xcreated = NULL;
   DM        dm;
 
@@ -4951,8 +4951,13 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
+        PetscCall(SNESGetDM(snes, &dm));
+        PetscCall(PetscObjectReference((PetscObject)dm));
+        PetscCall(PetscObjectReference((PetscObject)x));
         PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &x));
+        PetscCall(DMDestroy(&dm));
         PetscCall(DMAdaptorDestroy(&adaptor));
+        adapted = PETSC_TRUE;
         incall = PETSC_FALSE;
       }
       /* Use grid sequencing to adapt */
@@ -4971,12 +4976,41 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
         PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
+        PetscCall(SNESGetDM(snes, &dm));
+        PetscCall(PetscObjectReference((PetscObject)dm));
+        if (!adapted) PetscCall(PetscObjectReference((PetscObject)x));
         PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &x));
+        PetscCall(DMDestroy(&dm));
         PetscCall(DMAdaptorDestroy(&adaptor));
+        adapted = PETSC_TRUE;
+        incall = PETSC_FALSE;
+      }
+      /* Adapt while retaining the coarse grids for multigrid */
+      num = 0;
+      PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_multigrid", &num, NULL));
+      if (num) {
+        DMAdaptor   adaptor;
+        const char *prefix;
+
+        incall = PETSC_TRUE;
+        PetscCall(DMAdaptorCreate(PetscObjectComm((PetscObject)snes), &adaptor));
+        PetscCall(SNESGetOptionsPrefix(snes, &prefix));
+        PetscCall(DMAdaptorSetOptionsPrefix(adaptor, prefix));
+        PetscCall(DMAdaptorSetSolver(adaptor, snes));
+        PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
+        PetscCall(DMAdaptorSetFromOptions(adaptor));
+        PetscCall(DMAdaptorSetUp(adaptor));
+        PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
+        if (!adapted) PetscCall(PetscObjectReference((PetscObject)x));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_MULTILEVEL, &dm, &x));
+        PetscCall(DMDestroy(&dm));
+        PetscCall(DMAdaptorDestroy(&adaptor));
+        adapted = PETSC_TRUE;
         incall = PETSC_FALSE;
       }
     }
   }
+  if (adapted) xcreated = x;
   if (!x) x = snes->vec_sol;
   if (!x) {
     PetscCall(SNESGetDM(snes, &dm));
