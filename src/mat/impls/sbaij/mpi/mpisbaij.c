@@ -1279,7 +1279,7 @@ static PetscErrorCode MatCreateSubMatrix_MPISBAIJ(Mat mat, IS isrow, IS iscol, M
     PetscCall(PetscObjectQuery((PetscObject)*newmat, "ISAllGather", (PetscObject *)&iscol_local));
     PetscCheck(iscol_local, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Submatrix passed in was not used before, cannot reuse");
   } else {
-    PetscCall(ISGetSeqIS_Private(mat, iscol, &iscol_local));
+    PetscCall(ISAllGather(iscol, &iscol_local));
     PetscCall(ISSorted(iscol_local, &issorted));
     PetscCheck(issorted, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "For symmetric format, iscol must be sorted");
   }
