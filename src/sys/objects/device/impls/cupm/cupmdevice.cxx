@@ -18,6 +18,7 @@ namespace cupm
 {
 
 #if PetscDefined(HAVE_HWLOC)
+  #if PETSC_PKG_HWLOC_VERSION_GE(2, 0, 0)
 struct HwlocBitmapCleaner {
   void operator()(hwloc_bitmap_t bitmap) const noexcept { hwloc_bitmap_free(bitmap); }
 };
@@ -30,6 +31,7 @@ struct HwlocTopologyCleaner {
   }
 };
 using HwlocTopology = std::unique_ptr<hwloc_topology, HwlocTopologyCleaner>;
+  #endif
 #endif
 
 // internal "impls" class for CUPMDevice. Each instance represents a single cupm device
@@ -281,6 +283,7 @@ PetscErrorCode Device<T>::select_device_petsc_decide_(MPI_Comm comm, PetscInt nd
        PyTorch -- getenv("LOCAL_RANK")
 */
 #if PetscDefined(HAVE_HWLOC)
+  #if PETSC_PKG_HWLOC_VERSION_GE(2, 0, 0)
 template <DeviceType T>
 PetscErrorCode Device<T>::get_device_placement_in_cpuset_(PetscInt dev_count, hwloc_cpuset_t superset_cpuset, hwloc_obj_t process_cpu_obj, hwloc_topology_t topology, PetscInt *relative_device_index) noexcept
 {
@@ -435,13 +438,14 @@ PetscErrorCode Device<T>::select_device_topology_aware_(PetscInt ndev, int *init
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+  #endif
 #endif
 
 template <DeviceType T>
 PetscErrorCode Device<T>::select_device_(MPI_Comm comm, int *dev_id) noexcept
 {
-  int         ndev          = 0;
-  cupmError_t cerr          = cupmSuccess;
+  int         ndev = 0;
+  cupmError_t cerr = cupmSuccess;
 
   PetscFunctionBegin;
   if ((cerr = cupmGetDeviceCount(&ndev))) {
@@ -452,6 +456,7 @@ PetscErrorCode Device<T>::select_device_(MPI_Comm comm, int *dev_id) noexcept
   }
   PetscCall(PetscDeviceCheckDeviceCount_Internal(ndev));
 #if PetscDefined(HAVE_HWLOC)
+  #if PETSC_PKG_HWLOC_VERSION_GE(2, 0, 0)
   if (*dev_id == PETSC_DEVICE_TOPOLOGY_AWARE) {
     PetscBool hwloc_success = PETSC_TRUE;
     PetscCall(select_device_topology_aware_(ndev, dev_id, &hwloc_success));
@@ -459,6 +464,7 @@ PetscErrorCode Device<T>::select_device_(MPI_Comm comm, int *dev_id) noexcept
     // PETSC_DECIDE in order to fall through to the default algorithm
     if (!hwloc_success) PetscCall(PetscInfo(nullptr, "Topology aware GPU device allocation failed. Falling back to default algorithm\n"));
   }
+  #endif
 #endif
   if (*dev_id == PETSC_DECIDE) PetscCall(select_device_petsc_decide_(comm, ndev, dev_id));
   PetscCall(PetscInfo(nullptr, "GPU device id selected: %" PetscInt32_FMT "\n", *dev_id));

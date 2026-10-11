@@ -7,7 +7,9 @@
 #include "../impldevicebase.hpp" /* I "petscdevice.h" */
 
 #if PetscDefined(HAVE_HWLOC)
-  #include <hwloc.h>
+  #if PETSC_PKG_HWLOC_VERSION_GE(2, 0, 0)
+    #include <hwloc.h>
+  #endif
 #endif
 
 namespace Petsc
@@ -68,8 +70,10 @@ private:
   static PetscErrorCode select_device_petsc_decide_(MPI_Comm, PetscInt, int *) noexcept;
   static PetscErrorCode select_device_(MPI_Comm, int *) noexcept;
 #if PetscDefined(HAVE_HWLOC)
+  #if PETSC_PKG_HWLOC_VERSION_GE(2, 0, 0)
   static PetscErrorCode get_device_placement_in_cpuset_(PetscInt, hwloc_cpuset_t, hwloc_obj *, hwloc_topology_t, PetscInt *) noexcept;
   static PetscErrorCode select_device_topology_aware_(PetscInt, int *, PetscBool *) noexcept;
+  #endif
 #endif
 };
 

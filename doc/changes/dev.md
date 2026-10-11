@@ -23,6 +23,8 @@
 ```{rubric} Sys:
 ```
 
+- Add topology-aware GPU binding using `hwloc`; Requires `hwloc` version 2.0 or later
+
 ```{rubric} Event Logging:
 ```
 
