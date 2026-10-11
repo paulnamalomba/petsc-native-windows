@@ -4944,7 +4944,8 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_initial", &num, &flg));
       if (flg) {
         DMAdaptor adaptor;
-        Vec       ax;
+        DM        dmAdapted = NULL;
+        Vec       ax        = NULL;
 
         incall = PETSC_TRUE;
         PetscCall(DMAdaptorCreate(PetscObjectComm((PetscObject)snes), &adaptor));
@@ -4952,12 +4953,13 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetSequenceLength(adaptor, num));
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dm, &ax));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_INITIAL, &dmAdapted, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        /* The solver holds the adapted DM, and the adapted solution is released like a created one */
-        PetscCall(DMDestroy(&dm));
-        PetscCall(VecDestroy(&xcreated));
-        x = xcreated = ax;
+        if (dmAdapted) {
+          PetscCall(DMDestroy(&dmAdapted));
+          PetscCall(VecDestroy(&xcreated));
+          x = xcreated = ax;
+        }
         incall       = PETSC_FALSE;
       }
       /* Use grid sequencing to adapt */
@@ -4965,7 +4967,8 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
       PetscCall(PetscOptionsGetInt(NULL, ((PetscObject)snes)->prefix, "-snes_adapt_sequence", &num, NULL));
       if (num) {
         DMAdaptor   adaptor;
-        Vec         ax;
+        DM          dmAdapted = NULL;
+        Vec         ax        = NULL;
         const char *prefix;
 
         incall = PETSC_TRUE;
@@ -4977,12 +4980,13 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
         PetscCall(DMAdaptorSetFromOptions(adaptor));
         PetscCall(DMAdaptorSetUp(adaptor));
         PetscCall(PetscObjectViewFromOptions((PetscObject)adaptor, NULL, "-snes_adapt_view"));
-        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dm, &ax));
+        PetscCall(DMAdaptorAdapt(adaptor, x, DM_ADAPTATION_SEQUENTIAL, &dmAdapted, &ax));
         PetscCall(DMAdaptorDestroy(&adaptor));
-        /* The solver holds the adapted DM, and the adapted solution is released like a created one */
-        PetscCall(DMDestroy(&dm));
-        PetscCall(VecDestroy(&xcreated));
-        x = xcreated = ax;
+        if (dmAdapted) {
+          PetscCall(DMDestroy(&dmAdapted));
+          PetscCall(VecDestroy(&xcreated));
+          x = xcreated = ax;
+        }
         incall       = PETSC_FALSE;
       }
     }

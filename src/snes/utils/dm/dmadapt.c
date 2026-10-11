@@ -1358,6 +1358,8 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   MPI_Comm  comm;
 
   PetscFunctionBegin;
+  *adm = NULL;
+  *ax  = NULL;
   PetscCall(DMViewFromOptions(adaptor->idm, NULL, "-dm_adapt_pre_view"));
   PetscCall(VecViewFromOptions(inx, NULL, "-sol_adapt_pre_view"));
   PetscCall(PetscObjectGetComm((PetscObject)adaptor, &comm));
@@ -1602,12 +1604,6 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       *adm = odm;
       *ax  = ox;
     } else {
-      if (!adaptIter) {
-        PetscCall(PetscObjectReference((PetscObject)dm));
-        PetscCall(PetscObjectReference((PetscObject)x));
-      }
-      *adm      = dm;
-      *ax       = x;
       adaptIter = numAdapt;
     }
     if (adaptIter < numAdapt - 1) {
@@ -1615,8 +1611,10 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
       PetscCall(VecViewFromOptions(ox, NULL, "-sol_adapt_iter_view"));
     }
   }
-  PetscCall(DMViewFromOptions(*adm, NULL, "-dm_adapt_view"));
-  PetscCall(VecViewFromOptions(*ax, NULL, "-sol_adapt_view"));
+  if (*adm) {
+    PetscCall(DMViewFromOptions(*adm, NULL, "-dm_adapt_view"));
+    PetscCall(VecViewFromOptions(*ax, NULL, "-sol_adapt_view"));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1631,8 +1629,8 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
 - strategy - The adaptation strategy, see `DMAdaptationStrategy`
 
   Output Parameters:
-+ adm - The adapted `DM`
-- ax  - The adapted solution
++ adm - The adapted `DM`, or `NULL` if no adaptation took place
+- ax  - The adapted solution, or `NULL` if no adaptation took place
 
   Options Database Keys:
 + -snes_adapt (initial|sequential|multigrid) - adaption strategy, see `DMAdaptationStrategy`
@@ -1643,8 +1641,9 @@ static PetscErrorCode DMAdaptorAdapt_Sequence_Private(DMAdaptor adaptor, Vec inx
   Level: intermediate
 
   Note:
-  The caller keeps its references to `x` and to the `DM` of the solver, and must destroy `adm` and
-  `ax`. If the mesh is not adapted, `adm` and `ax` are new references to the input objects.
+  The caller keeps its references to `x` and to the `DM` of the solver. If the mesh is adapted,
+  `adm` and `ax` contain references to the adapted objects, which the caller must destroy. If no
+  adaptation takes place, the input references are unchanged and `adm` and `ax` are set to `NULL`.
 
 .seealso: [](ch_dmbase), `DMAdaptor`, `DMAdaptationStrategy`, `DMAdaptorSetSolver()`, `DMAdaptorCreate()`
 @*/
