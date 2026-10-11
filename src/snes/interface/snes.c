@@ -1,5 +1,7 @@
 #include <petsc/private/snesimpl.h>       /*I "petscsnes.h"  I*/
 #include <petsc/private/linesearchimpl.h> /*I "petscsnes.h"  I*/
+#include <petsc/private/kspimpl.h>
+#include <petsc/private/dmimpl.h>
 #include <petscdmshell.h>
 #include <petscdraw.h>
 #include <petscds.h>
@@ -3668,7 +3670,14 @@ PetscErrorCode SNESDestroy(SNES *snes)
 
   dm = (*snes)->dm;
   while (dm) {
+    DMKSP kdm = (DMKSP)dm->dmksp;
+
     PetscCall(DMCoarsenHookRemove(dm, DMCoarsenHook_SNESVecSol, DMRestrictHook_SNESVecSol, *snes));
+    /* Clear the operator callback that SNESSetUpMatrices() set, so that no KSP that shares this DMKSP calls into the destroyed SNES */
+    if (kdm && kdm->ops->computeoperators == KSPComputeOperators_SNES && kdm->operatorsctx == (void *)*snes) {
+      kdm->ops->computeoperators = NULL;
+      kdm->operatorsctx          = NULL;
+    }
     PetscCall(DMGetCoarseDM(dm, &dm));
   }
 
@@ -5792,7 +5801,6 @@ PetscErrorCode KSPPostSolve_SNESEW(KSP ksp, Vec b, Vec x, PetscCtx ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-#include <petsc/private/kspimpl.h>
 /*@
   SNESGetKSP - Returns the `KSP` context for a `SNES` solver.
 
@@ -5837,7 +5845,6 @@ PetscErrorCode SNESGetKSP(SNES snes, KSP *ksp)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-#include <petsc/private/dmimpl.h>
 /*@
   SNESSetDM - Sets the `DM` that may be used by some `SNES` nonlinear solvers or their underlying preconditioners
 
