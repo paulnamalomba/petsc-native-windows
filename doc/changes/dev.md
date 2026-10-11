@@ -73,6 +73,9 @@
 ```{rubric} KSP:
 ```
 
+- Add `KSPCGDirectionType`, `KSPCGSetDirectionType()`, and `KSPCGGetDirectionType()` to select the trust-region norm in `KSPCG`, `KSPSTCG`, `KSPNASH`, and `KSPGLTR`
+- Implement `KSPSTCG` as a specialization of `KSPCG`, sharing trust-region metrics, feasible Euclidean initial guesses, and objective targets
+
 ```{rubric} SNES:
 ```
 

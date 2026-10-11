@@ -52,6 +52,10 @@ cdef extern from * nogil:
     PetscKSPType KSPIDR
     PetscKSPType KSPEKSM
 
+    ctypedef enum PetscKSPCGDirectionType "KSPCGDirectionType":
+        KSP_CG_DIRECTION_PRECONDITIONED
+        KSP_CG_DIRECTION_UNPRECONDITIONED
+
     ctypedef enum PetscKSPNormType "KSPNormType":
         KSP_NORM_DEFAULT
         KSP_NORM_NONE
@@ -247,6 +251,11 @@ cdef extern from * nogil:
     PetscErrorCode KSPEKSMGetShift(PetscKSP, PetscScalar*)
 
     PetscErrorCode KSPCGGetObjFcn(PetscKSP, PetscReal*)
+    PetscErrorCode KSPCGSetRadius(PetscKSP, PetscReal)
+    PetscErrorCode KSPCGSetObjectiveTarget(PetscKSP, PetscReal)
+    PetscErrorCode KSPCGGetNormD(PetscKSP, PetscReal*)
+    PetscErrorCode KSPCGSetDirectionType(PetscKSP, PetscKSPCGDirectionType)
+    PetscErrorCode KSPCGGetDirectionType(PetscKSP, PetscKSPCGDirectionType*)
 
     PetscErrorCode KSPPythonSetType(PetscKSP, char[])
     PetscErrorCode KSPPythonGetType(PetscKSP, char*[])
@@ -262,6 +271,15 @@ cdef extern from * nogil: # custom.h
     PetscErrorCode KSPAddConvergenceTest(PetscKSP, PetscKSPConvergedFunction, PetscBool)
 
 # -----------------------------------------------------------------------------
+
+cdef inline PetscKSPCGDirectionType asCGDirectionType(object dtype) except <PetscKSPCGDirectionType>(-1):
+    if isinstance(dtype, str):
+        dtype = dtype.upper()
+        try:
+            return getattr(KSP.CGDirectionType, dtype)
+        except AttributeError:
+            raise ValueError("unknown CG direction type: %s" % dtype)
+    return dtype
 
 cdef inline KSP ref_KSP(PetscKSP ksp):
     cdef KSP ob = <KSP> KSP()
