@@ -99,7 +99,7 @@ static PetscErrorCode SBRGetEdgeLen_Private(DMPlexTransform tr, PetscInt edge, P
     Vec                coordsLocal;
     const PetscScalar *coords;
     const PetscInt    *cone;
-    PetscScalar       *cA, *cB;
+    PetscScalar       *cA, *cB, cBLocal[3];
     PetscInt           coneSize, cdim;
 
     PetscCall(DMGetCoordinateDM(dm, &cdm));
@@ -111,7 +111,9 @@ static PetscErrorCode SBRGetEdgeLen_Private(DMPlexTransform tr, PetscInt edge, P
     PetscCall(VecGetArrayRead(coordsLocal, &coords));
     PetscCall(DMPlexPointLocalRead(cdm, cone[0], coords, &cA));
     PetscCall(DMPlexPointLocalRead(cdm, cone[1], coords, &cB));
-    sbr->edgeLen[off] = DMPlex_DistD_Internal(cdim, cA, cB);
+    /* On a periodic mesh, an edge that crosses the periodic boundary must be measured between the nearest images of its vertices */
+    PetscCall(DMLocalizeCoordinate_Internal(dm, cdim, cA, cB, cBLocal));
+    sbr->edgeLen[off] = DMPlex_DistD_Internal(cdim, cA, cBLocal);
     PetscCall(VecRestoreArrayRead(coordsLocal, &coords));
   }
   *len = sbr->edgeLen[off];
@@ -124,7 +126,7 @@ static PetscErrorCode SBRGetEdgeMid_Private(DMPlexTransform tr, PetscInt edge, P
   Vec                coordsLocal;
   const PetscScalar *coords;
   const PetscInt    *cone;
-  PetscScalar       *cA, *cB;
+  PetscScalar       *cA, *cB, cBLocal[3];
   PetscInt           cdim;
 
   PetscFunctionBeginHot;
@@ -136,7 +138,8 @@ static PetscErrorCode SBRGetEdgeMid_Private(DMPlexTransform tr, PetscInt edge, P
   PetscCall(VecGetArrayRead(coordsLocal, &coords));
   PetscCall(DMPlexPointLocalRead(cdm, cone[0], coords, &cA));
   PetscCall(DMPlexPointLocalRead(cdm, cone[1], coords, &cB));
-  for (PetscInt d = 0; d < 3; ++d) mid[d] = d < cdim ? 0.5 * PetscRealPart(cA[d] + cB[d]) : 0.0;
+  PetscCall(DMLocalizeCoordinate_Internal(dm, cdim, cA, cB, cBLocal));
+  for (PetscInt d = 0; d < 3; ++d) mid[d] = d < cdim ? 0.5 * PetscRealPart(cA[d] + cBLocal[d]) : 0.0;
   PetscCall(VecRestoreArrayRead(coordsLocal, &coords));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -1673,6 +1676,8 @@ PETSC_EXTERN PetscErrorCode DMPlexTransformCreate_SBR(DMPlexTransform tr)
   PetscValidHeaderSpecific(tr, DMPLEXTRANSFORM_CLASSID, 1);
   PetscCall(PetscNew(&f));
   tr->data = f;
+  /* Unmarked cells retain their size, so the periodic localization bound must not shrink. */
+  tr->redFactor = 1.0;
 
   PetscCall(DMPlexTransformInitialize_SBR(tr));
   PetscCall(PetscCitationsRegister(SBRCitation, &SBRcite));

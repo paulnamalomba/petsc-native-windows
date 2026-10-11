@@ -31,6 +31,8 @@ struct _p_DMAdaptor {
   PetscInt              numSeq;           /* Number of sequential adaptations */
   PetscInt              Nadapt;           /* Target number of vertices */
   PetscReal             refinementFactor; /* N_adapt = r^dim N_orig */
+  /*   transfer the solution with the injection rather than the interpolation */
+  PetscBool transferInjection;
   /*   FVM support */
   PetscBool          computeGradient;
   DM                 cellDM, gradDM;

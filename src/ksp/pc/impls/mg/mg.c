@@ -899,7 +899,7 @@ PetscErrorCode PCSetUp_MG(PC pc)
 
     PetscCall(DMGetRefineLevel(pc->dm, &levels));
     levels++;
-    if (levels > n) { /* the problem is now being solved on a finer grid */
+    if (levels != n) { /* the problem is now being solved on a finer or coarser grid */
       PetscCall(PCMGSetLevels(pc, levels, NULL));
       n = levels;
       PetscCall(PCSetFromOptions(pc)); /* it is bad to call this here, but otherwise will never be called for the new hierarchy */

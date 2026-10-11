@@ -106,6 +106,8 @@
 ```{rubric} DMPlex:
 ```
 
+- `DMAdaptLabel()` with the "cellrefiner" adaptor coarsens cells marked `DM_ADAPT_COARSEN` by undoing one round of requested refinement, along a chain of meshes linked by `DMSetCoarseDM()` whose transforms were saved with `DMPlexSetSaveTransform()`
+
 ```{rubric} FE/FV:
 ```
 
