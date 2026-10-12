@@ -38,6 +38,7 @@ Reread this file or a convention reference only if it changed or is no longer in
 | Task | Reference |
 | --- | --- |
 | New features, API changes, or documentation edits/reviews | [Documentation](.agents/conventions/documentation.md) |
+| C or C++ source, and `doc/changes/dev.md` entries | [PETSc Style and Usage Guide](doc/developers/style.md) |
 | C API docstrings (`/*@ ... @*/`) | [C docstrings](.agents/conventions/c-docstrings.md) |
 | Kokkos code | [Kokkos](.agents/conventions/kokkos.md) |
 | petsc4py source or tests | [petsc4py](.agents/conventions/petsc4py.md) |
