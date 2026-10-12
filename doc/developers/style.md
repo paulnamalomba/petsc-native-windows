@@ -248,6 +248,17 @@ Even with the use of `clang-format` there are still many decisions about code fo
 
     `do { ... } while`, `switch`, and a plain single statement (including `else if`) are unaffected and stay on the same line.
 
+    Each branch is judged on its own, so an `else` holding a single statement loses its braces
+    even when the `if` it belongs to needs them.
+
+    ```
+    // Correct
+    if (type == TYPE_A) {
+      stmt1;
+      stmt2;
+    } else SETERRQ(comm, PETSC_ERR_SUP, "unsupported");
+    ```
+
 10. Do not leave sections of commented-out code or dead source code protected with `ifdef foo` in the source files.
 
 11. Use classic block comments (`/* There must be a space before the first word in the comment and a space at the end */`,
@@ -259,7 +270,9 @@ Even with the use of `clang-format` there are still many decisions about code fo
 
 14. Use appropriate grammar and spelling in the comments.
 
-15. All variables must be declared at the beginning of the code block (C90
+15. Append `()` to function names mentioned in comments, for example `MatAssemblyEnd_MPIAIJ()`.
+
+16. All variables must be declared at the beginning of the code block (C90
     style), never mixed in with code. However, when variables are only used in a limited
     scope, it is encouraged to declare them in that scope. For example:
 
@@ -304,7 +317,7 @@ Even with the use of `clang-format` there are still many decisions about code fo
     }
     ```
 
-16. Developers can use // to split very long lines when it improves code readability. For example
+17. Developers can use // to split very long lines when it improves code readability. For example
 
     ```
     f[j][i].omega = xdot[j][i].omega + uxx + uyy //
@@ -313,7 +326,7 @@ Even with the use of `clang-format` there are still many decisions about code fo
                   - .5 * grashof * (x[j][i + 1].temp - x[j][i - 1].temp) * hy;
     ```
 
-17. The use of `// clang-format off` is allowed in the source code but should only be used when necessary. It should not
+18. The use of `// clang-format off` is allowed in the source code but should only be used when necessary. It should not
     be used when trailing // to split lines works.
 
     ```
@@ -322,9 +335,9 @@ Even with the use of `clang-format` there are still many decisions about code fo
     // clang-format on
     ```
 
-18. `size` and `rank` should be used exclusively for the results of `MPI_Comm_size()` and `MPI_Comm_rank()` and other variable names for these values should be avoided unless necessary.
+19. `size` and `rank` should be used exclusively for the results of `MPI_Comm_size()` and `MPI_Comm_rank()` and other variable names for these values should be avoided unless necessary.
 
-19. Do not introduce `MPI_Comm` variables solely to hold `PETSC_COMM_WORLD` or `PETSC_COMM_SELF`. Use these constants directly at each call site. A variable is appropriate only when the communicator may differ from those constants (for example, it is extracted from an object or passed in as an argument).
+20. Do not introduce `MPI_Comm` variables solely to hold `PETSC_COMM_WORLD` or `PETSC_COMM_SELF`. Use these constants directly at each call site. A variable is appropriate only when the communicator may differ from those constants (for example, it is extracted from an object or passed in as an argument).
 
 ### C Usage
 
@@ -504,6 +517,13 @@ Even with the use of `clang-format` there are still many decisions about code fo
     You may use `PetscAssert()` where appropriate. See `PetscCall()` documentation
     for guidance of when to use `PetscCheck()` vs. `PetscAssert()`.
 
+    Express the full condition inside the check rather than wrapping the check in an outer `if`.
+
+    ```
+    PetscCheck(!flg || m == n, ...);  // Correct
+    if (flg) PetscCheck(m == n, ...); // Incorrect
+    ```
+
 09. Make error messages short but informative. The user should be able to reasonably
     diagnose the greater problem from your error message.
 
@@ -613,6 +633,24 @@ Even with the use of `clang-format` there are still many decisions about code fo
 20. For `XXXGetYYY()` functions that temporarily provide a resource or object to the user, ensure, when appropriate, that there is
     a corresponding `XXXRestoreYYY()` to return that resource. See, for example, `VecGetArray()` and `VecRestoreArray()`.
     Note that the Fortran API sometimes has a restore API function that is not needed in C.
+
+21. Call `PetscFinalize()` exactly once, on every normal exit path; never inside an `if` block.
+    Arrange the branches so that the single call is reached even when a mode bypasses the main
+    computation.
+
+    ```
+    // Correct
+    if (test_only) PetscCall(RunTest(comm));
+    else PetscCall(RunSolver(comm));
+    PetscCall(PetscFinalize());
+
+    // Incorrect
+    if (test_only) {
+      PetscCall(RunTest(comm));
+      PetscCall(PetscFinalize());
+      return 0;
+    }
+    ```
 
 ## Formatted Comments
 
@@ -761,6 +799,12 @@ where noted, add a newline after the section headings.
     ```
 
     indicates one may use either, `-objects_dump` or `-objects_dump all`.
+
+    Option names in this section are bare; they are not enclosed in backticks. In documentation
+    prose elsewhere, including `Note(s):` sections, `/*MC M*/` bodies, and the chapters of
+    `doc/manual/`, enclose the entire option in backticks, as in `-log_view`. In ordinary
+    `/* */` and `//` source comments, including the header comments of tutorials and tests, the
+    option name stays bare.
 
 09. `Level:` (no newline) followed by `beginner`,
     `intermediate`, `advanced`, `developer`, or `deprecated`. This
