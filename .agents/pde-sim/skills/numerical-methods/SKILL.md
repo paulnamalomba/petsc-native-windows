@@ -73,6 +73,10 @@ The primary verification tool. Procedure:
   spatial vs temporal error.
 - Report a table of `h`, error, and observed rate; expected slopes are part of
   the acceptance criteria, not an afterthought.
+- Size the study to the accuracy target: stop refining once the error is
+  comfortably under budget. The finest, most expensive level is often insurance,
+  not information — do not make it the *default* production run, and never re-run
+  it serially when a parallel run already exists.
 
 ## Conservation and constraints
 - For conservation laws, verify discrete conservation of the relevant invariants

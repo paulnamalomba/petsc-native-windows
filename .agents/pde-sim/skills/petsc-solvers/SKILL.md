@@ -54,6 +54,11 @@ Shared knowledge base. `numerical-analysis` uses it to CHOOSE a solver stack;
 ## Composition principles
 - Match PC to operator structure (elliptic→MG, saddle-point→fieldsplit,
   parallel→DD).
+- **CG requires a symmetric (SPD) preconditioner.** A single-sweep SOR smoother
+  is not symmetric, so CG with multigrid can stall or fail — use a symmetric
+  smoother (Chebyshev, or *symmetric* SSOR) on the MG levels, or switch the Krylov
+  method to GMRES/FGMRES. GAMG's default smoother is not guaranteed symmetric, so
+  pair GAMG with CG only after making the smoother symmetric.
 - Aim for mesh-independent and process-count-independent iteration counts; treat
   growth in either as a red flag.
 - Keep algorithmic choices here; expose everything as runtime `-options` so

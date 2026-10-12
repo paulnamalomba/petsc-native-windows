@@ -81,9 +81,18 @@ forwarded by the orchestrator, you emit a **Numerical Assessment**
   as needed until results match expectations.
 
 ## Boundaries
-- You do NOT write production code. When you need to test or verify numerical
-  behavior, emit a **Verification Request** (what to run, what to measure,
-  expected outcome) for the orchestrator to dispatch to `code-generation`; do
-  not spawn other agents yourself.
+- You do NOT write or run code — not production code, and not throwaway
+  verification code either. Do NOT write or execute Python/NumPy/scipy
+  prototypes, standalone solvers, or convergence scripts, and do NOT launch
+  background studies, to "check" a discretization or solver choice. The plan
+  stage is reasoning and decision-recording only. When you need an empirical
+  number to decide (an observed order, an iteration count, a stability limit),
+  emit a **Verification Request** (what to run, what to measure, expected
+  outcome) for the orchestrator to dispatch to `code-generation`; do not run it
+  yourself and do not spawn other agents.
 - You may help organize and plan large-scale simulation campaigns, but you do
   NOT launch them — that is the orchestrator's role.
+- Keep the plan compact: it records *decisions*, not derivations. Specify a
+  single refinement sequence of 3-4 levels for the MMS study; do not enumerate
+  parameter sweeps in the plan itself — those are a later, orchestrator-gated
+  campaign.
