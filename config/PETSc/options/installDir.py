@@ -1,5 +1,6 @@
 import config.base
 import os
+import sysconfig
 
 class Configure(config.base.Configure):
   def __init__(self, framework):
@@ -18,7 +19,8 @@ class Configure(config.base.Configure):
 
   def setupHelp(self, help):
     import nargs
-    help.addArgument('PETSc', '-with-clean=<bool>',         nargs.ArgBool(None, 0, 'Delete prior build files including externalpackages'))
+    help.addArgument('PETSc', '-prefix-install-libdir=<dir>', nargs.Arg(None, 'auto', 'Specifiy relative path to install library (one of ["lib", "lib32", "lib64", or "auto"])'))
+    help.addArgument('PETSc', '-with-clean=<bool>',           nargs.ArgBool(None, 0, 'Delete prior build files including externalpackages'))
     return
 
   def setupDependencies(self, framework):
@@ -47,9 +49,18 @@ class Configure(config.base.Configure):
       self.petscArch = self.arch.arch
     self.addMakeMacro('PREFIXDIR',self.dir)
     self.confDir = os.path.abspath(os.path.join(self.petscdir.dir, self.arch.arch))
+    if self.framework.argDB['prefix-install-libdir'] == 'auto':
+      LIB = sysconfig.get_config_var('platlibdir') or 'lib'
+    elif self.framework.argDB['prefix-install-libdir'] in ['lib', 'lib32', 'lib64']:
+      LIB = self.framework.argDB['prefix-install-libdir']
+    else:
+      raise RuntimeError('Incorrect option --prefix-install-libdir='
+                         + self.framework.argDB['prefix-install-libdir']
+                         +' specified. Must be one of "lib", "lib32", "lib64", or "auto"')
+    self.petscLibDir = LIB
 
   def configureInstallDir(self):
-    '''Makes  installDir subdirectories if it does not exist for both prefix install location and PETSc work install location'''
+    '''Makes installDir subdirectories if it does not exist for both prefix install location and PETSc work install location'''
     dir = os.path.abspath(os.path.join(self.petscdir.dir, self.arch.arch))
     if not os.path.exists(dir):
       os.makedirs(dir)

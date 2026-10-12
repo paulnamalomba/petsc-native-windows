@@ -173,7 +173,7 @@ class Configure(config.base.Configure):
         cflags_inc.append('-I' + os.path.join(self.petscdir.dir, 'include'))
       fd.write('exec_prefix=${prefix}\n')
       fd.write('includedir=${prefix}/include\n')
-      fd.write('libdir=${prefix}/lib\n')
+      fd.write('libdir={:s}/{:s}\n'.format('${prefix}', self.installdir.petscLibDir))
 
       with self.setCompilers.Language('C'):
         fd.write('ccompiler='+self.setCompilers.getCompiler()+'\n')
@@ -469,7 +469,7 @@ prepend-path PATH "%s"
       self.addMakeMacro('PETSC_FC_INCLUDES',self.headers.toStringNoDupes(allincludes,modinc(allincludes)))
       self.addMakeMacro('PETSC_FC_INCLUDES_INSTALL',self.headers.toStringNoDupes(allincludes_install,modinc(allincludes_install)))
 
-    LIB_DIR = os.path.join(self.installdir.dir,'lib')
+    LIB_DIR = os.path.join(self.installdir.dir,self.installdir.petscLibDir)
     self.addDefine('LIB_DIR','"'+LIB_DIR+'"')
     # Use build dir here for 'make check' to work before 'make install'
     PREINSTALL_LIB_DIR = os.path.join(self.petscdir.dir,self.arch.arch,'lib')

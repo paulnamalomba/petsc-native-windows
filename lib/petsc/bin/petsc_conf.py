@@ -22,23 +22,28 @@ def get_conf():
         warnings.warn('PETSC_DIR env not set - unable to locate PETSc installation, using defaults')
         return None, None, None
 
-    if os.path.isfile(os.path.join(petscdir,'lib','petsc','conf','petscrules')):
-        # found prefix install
-        petscvariables = os.path.join(petscdir,'lib','petsc','conf','petscvariables')
-        petscconfinclude = os.path.join(petscdir,'include','petscconf.h')
-    else:
+    petscvariables = None
+    for lib in ['lib', 'lib32', 'lib64']:
+        if os.path.isfile(os.path.join(petscdir,lib,'petsc','conf','petscrules')):
+            # found prefix install
+            petscvariables = os.path.join(petscdir,lib,'petsc','conf','petscvariables')
+            petscconfinclude = os.path.join(petscdir,'include','petscconf.h')
+            break
+        else:
+            if 'PETSC_ARCH' in os.environ:
+                petscarch = os.environ['PETSC_ARCH']
+                if os.path.isfile(os.path.join(petscdir,petscarch,lib,'petsc','conf','petscrules')):
+                    # found legacy install
+                    petscvariables = os.path.join(petscdir,petscarch,lib,'petsc','conf','petscvariables')
+                    petscconfinclude = os.path.join(petscdir,petscarch,'include','petscconf.h')
+                    break
+
+    if(not petscvariables):
         if 'PETSC_ARCH' in os.environ:
-            petscarch = os.environ['PETSC_ARCH']
-            if os.path.isfile(os.path.join(petscdir,petscarch,'lib','petsc','conf','petscrules')):
-                # found legacy install
-                petscvariables = os.path.join(petscdir,petscarch,'lib','petsc','conf','petscvariables')
-                petscconfinclude = os.path.join(petscdir,petscarch,'include','petscconf.h')
-            else:
-                warnings.warn('Unable to locate PETSc installation in specified PETSC_DIR/PETSC_ARCH, using defaults')
-                return None, None, None
+            warnings.warn('Unable to locate PETSc installation in specified PETSC_DIR/PETSC_ARCH, using defaults')
         else:
             warnings.warn('PETSC_ARCH env not set or incorrect PETSC_DIR is given - unable to locate PETSc installation, using defaults')
-            return None, None, None
+        return None, None, None
 
     try:
         fid = open(petscvariables, 'r')
