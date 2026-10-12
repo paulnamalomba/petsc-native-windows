@@ -808,6 +808,7 @@ Entries in `doc/changes/dev.md` follow these rules.
 2. Use the imperative, for example, Add, Improve, Change
 3. Do not use a period (.) at the end of entries
 4. If multiple sentences are needed, use a period or semicolon to divide sentences, but not at the end of the final sentence
+5. Do not put blank lines between entries within a section; keep the blank lines that surround the section rubrics
 
 ### Makefile formatting
 
