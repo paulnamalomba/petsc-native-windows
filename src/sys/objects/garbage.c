@@ -9,7 +9,7 @@ static PetscErrorCode GarbageGetHMap_Private(MPI_Comm comm, PetscGarbage *garbag
   PetscFunctionBegin;
   PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_HMap_keyval, garbage, &iflg));
   if (!iflg) {
-    /* No garbage,create one */
+    /* No garbage, create one */
     PetscCall(PetscHMapObjCreate(&garbage_map));
     garbage->map = garbage_map;
     PetscCallMPI(MPI_Comm_set_attr(comm, Petsc_Garbage_HMap_keyval, garbage->ptr));
@@ -206,7 +206,7 @@ PetscErrorCode PetscGarbageCleanup(MPI_Comm comm)
   PetscInt     ii, entries, offset;
   PetscInt64  *keys;
   PetscObject  obj;
-  PetscGarbage garbage;
+  PetscGarbage garbage, tmpGarbage;
 
   PetscFunctionBegin;
   /* Duplicate comm to prevent it being cleaned up by PetscObjectDestroy() */
@@ -235,6 +235,19 @@ PetscErrorCode PetscGarbageCleanup(MPI_Comm comm)
     PetscCall(PetscHMapObjDel(garbage.map, keys[ii]));
   }
   PetscCall(PetscFree(keys));
+
+  /* Add objects that were destroyed during PetscObjectDestroy() calls above */
+  PetscCall(GarbageGetHMap_Private(comm, &tmpGarbage));
+  PetscCall(PetscHMapObjGetSize(tmpGarbage.map, &entries));
+  PetscCall(PetscMalloc1(entries, &keys));
+  offset = 0;
+  PetscCall(PetscHMapObjGetKeys(tmpGarbage.map, &offset, keys));
+  for (ii = 0; ii < entries; ii++) {
+    PetscCall(PetscHMapObjGet(tmpGarbage.map, keys[ii], &obj));
+    PetscCall(PetscHMapObjSet(garbage.map, keys[ii], obj));
+  }
+  PetscCall(PetscFree(keys));
+  PetscCall(PetscHMapObjDestroy(&tmpGarbage.map));
 
   /* Put garbage back */
   PetscCallMPI(MPI_Comm_set_attr(comm, Petsc_Garbage_HMap_keyval, garbage.ptr));

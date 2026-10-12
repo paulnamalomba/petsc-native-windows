@@ -1502,7 +1502,7 @@ PetscErrorCode PetscFinalize(void)
   PetscGlobalArgc = 0;
   PetscGlobalArgs = NULL;
 
-  /* Clean up Garbage automatically on COMM_SELF and COMM_WORLD at finalize */
+  /* Clean up Garbage automatically on COMM_WORLD at finalize */
   {
     union
     {
@@ -1512,9 +1512,6 @@ PetscErrorCode PetscFinalize(void)
     PetscMPIInt flg;
     void       *tmp;
 
-    PetscCallMPI(MPI_Comm_get_attr(PETSC_COMM_SELF, Petsc_InnerComm_keyval, &ucomm, &flg));
-    if (flg) PetscCallMPI(MPI_Comm_get_attr(ucomm.comm, Petsc_Garbage_HMap_keyval, &tmp, &flg));
-    if (flg) PetscCall(PetscGarbageCleanup(PETSC_COMM_SELF));
     PetscCallMPI(MPI_Comm_get_attr(PETSC_COMM_WORLD, Petsc_InnerComm_keyval, &ucomm, &flg));
     if (flg) PetscCallMPI(MPI_Comm_get_attr(ucomm.comm, Petsc_Garbage_HMap_keyval, &tmp, &flg));
     if (flg) PetscCall(PetscGarbageCleanup(PETSC_COMM_WORLD));
