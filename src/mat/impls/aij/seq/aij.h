@@ -174,22 +174,25 @@ typedef struct {
 } Mat_SeqAIJ;
 
 typedef struct {
-  PetscInt    nz;   /* nz of the matrix after assembly */
-  PetscCount  n;    /* Number of entries in MatSetPreallocationCOO() */
-  PetscCount  Atot; /* Total number of valid (i.e., w/ non-negative indices) entries in the COO array */
-  PetscCount *jmap; /* perm[jmap[i]..jmap[i+1]) give indices of entries in v[] associated with i-th nonzero of the matrix */
-  PetscCount *perm; /* The permutation array in sorting (i,j) by row and then by col */
+  PetscInt         nz;           /* nz of the matrix after assembly */
+  PetscCount       n;            /* Number of entries in MatSetPreallocationCOO() */
+  PetscCount       Atot;         /* Total number of valid (i.e., w/ non-negative indices) entries in the COO array */
+  PetscCount      *jmap;         /* perm[jmap[i]..jmap[i+1]) give indices of entries in v[] associated with i-th nonzero of the matrix */
+  PetscCount      *perm;         /* The permutation array in sorting (i,j) by row and then by col */
+  PetscObjectState nonzerostate; /* nonzero state of the matrix that jmap[] indexes into */
 } MatCOOStruct_SeqAIJ;
 
 #define MatSeqXAIJGetOptions_Private(A) \
   { \
     const PetscBool oldvalues = (PetscBool)(A != PETSC_NULLPTR); \
     PetscInt        nonew = 0, nounused = 0; \
-    PetscBool       roworiented = PETSC_FALSE; \
+    PetscBool       roworiented = PETSC_FALSE, keepnonzeropattern = PETSC_FALSE, ignorezeroentries = PETSC_FALSE; \
     if (oldvalues) { \
-      nonew       = ((Mat_SeqAIJ *)(A)->data)->nonew; \
-      nounused    = ((Mat_SeqAIJ *)(A)->data)->nounused; \
-      roworiented = ((Mat_SeqAIJ *)(A)->data)->roworiented; \
+      nonew              = ((Mat_SeqAIJ *)(A)->data)->nonew; \
+      nounused           = ((Mat_SeqAIJ *)(A)->data)->nounused; \
+      roworiented        = ((Mat_SeqAIJ *)(A)->data)->roworiented; \
+      keepnonzeropattern = ((Mat_SeqAIJ *)(A)->data)->keepnonzeropattern; \
+      ignorezeroentries  = ((Mat_SeqAIJ *)(A)->data)->ignorezeroentries; \
     } \
     (void)0
 
@@ -205,9 +208,11 @@ typedef struct {
 
 #define MatSeqXAIJRestoreOptions_Private(A) \
   if (oldvalues) { \
-    ((Mat_SeqAIJ *)(A)->data)->nonew       = nonew; \
-    ((Mat_SeqAIJ *)(A)->data)->nounused    = nounused; \
-    ((Mat_SeqAIJ *)(A)->data)->roworiented = roworiented; \
+    ((Mat_SeqAIJ *)(A)->data)->nonew              = nonew; \
+    ((Mat_SeqAIJ *)(A)->data)->nounused           = nounused; \
+    ((Mat_SeqAIJ *)(A)->data)->roworiented        = roworiented; \
+    ((Mat_SeqAIJ *)(A)->data)->keepnonzeropattern = keepnonzeropattern; \
+    ((Mat_SeqAIJ *)(A)->data)->ignorezeroentries  = ignorezeroentries; \
   } \
   } \
   (void)0
@@ -334,6 +339,7 @@ static inline PetscErrorCode MatSeqXAIJFreeAIJ(Mat AA, MatScalar **a, PetscInt *
 
 PETSC_INTERN PetscErrorCode MatSeqAIJSetPreallocation_SeqAIJ(Mat, PetscInt, const PetscInt *);
 PETSC_INTERN PetscErrorCode MatSetPreallocationCOO_SeqAIJ(Mat, PetscCount, PetscInt[], PetscInt[]);
+PETSC_INTERN PetscErrorCode MatSeqAIJCheckCOONonzeroState(Mat);
 
 PETSC_INTERN PetscErrorCode MatILUFactorSymbolic_SeqAIJ(Mat, Mat, IS, IS, const MatFactorInfo *);
 PETSC_INTERN PetscErrorCode MatILUFactorSymbolic_SeqAIJ_ilu0(Mat, Mat, IS, IS, const MatFactorInfo *);
