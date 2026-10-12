@@ -1262,6 +1262,8 @@ class Framework(config.base.Configure, script.LanguageProcessor):
             continue
           elif 'with-'+dep.package+'-dir' in self.framework.clArgDB and self.argDB['with-'+dep.package+'-dir']:
             continue
+          elif 'with-'+dep.package+'-exec' in self.framework.clArgDB and self.argDB['with-'+dep.package+'-exec']:
+            continue
           elif dep.download:
             emsg = '--download-'+dep.package+' or '
           else:
