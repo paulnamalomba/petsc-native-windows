@@ -209,6 +209,23 @@ static PetscErrorCode TaoTermComputeHessian_L1(TaoTerm term, Vec x, Vec params, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode TaoTermComputeHessianMult_L1(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
+{
+  TaoTerm_L1 *l1 = (TaoTerm_L1 *)term->data;
+
+  PetscFunctionBegin;
+  if (l1->epsilon == 0.0) {
+    PetscCall(TaoTermL1DerivativeCheck(term));
+    PetscCall(VecZeroEntries(Hv));
+  } else {
+    Vec diag = NULL; /* Appease -Wmaybe-uninitialized with GCC 13.3.0 */
+
+    PetscCall(TaoTermL1ComputeDiag(term, x, params, &diag));
+    PetscCall(VecPointwiseMult(Hv, v, diag));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode TaoTermCreateHessianMatrices_L1(TaoTerm term, Mat *H, Mat *Hpre)
 {
   PetscBool is_hdiag, is_hprediag;
@@ -246,10 +263,7 @@ static PetscErrorCode TaoTermCreateHessianMatrices_L1(TaoTerm term, Mat *H, Mat 
   If $\epsilon = 0$ (the default), then `term` computes $\|x - p\|_1$, but if $\epsilon > 0$, then it computes
   $\sum_{i=0}^{n-1} \left(\sqrt{(x_i-p_i)^2 + \epsilon^2} - \epsilon\right)$.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERML1`,
-          `TaoTermL1GetEpsilon()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERML1`, `TaoTermL1GetEpsilon()`
 @*/
 PetscErrorCode TaoTermL1SetEpsilon(TaoTerm term, PetscReal epsilon)
 {
@@ -283,10 +297,7 @@ static PetscErrorCode TaoTermL1SetEpsilon_L1(TaoTerm term, PetscReal epsilon)
 
   Level: advanced
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERML1`,
-          `TaoTermL1SetEpsilon()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERML1`, `TaoTermL1SetEpsilon()`
 @*/
 PetscErrorCode TaoTermL1GetEpsilon(TaoTerm term, PetscReal *epsilon)
 {
@@ -364,14 +375,8 @@ static PetscErrorCode TaoTermIsComputeHessianFDPossible_L1(TaoTerm term, PetscBo
   The default Hessian creation mode (see `TaoTermGetCreateHessianMode()`) is `H == Hpre` and `TaoTermCreateHessianMatrices()`
   will create a `MATDIAGONAL` for the Hessian.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermType`,
-          `TaoTermCreateL1()`,
-          `TaoTermL1GetEpsilon()`,
-          `TaoTermL1SetEpsilon()`,
-          `TAOTERMHALFL2SQUARED`,
-          `TAOTERMQUADRATIC`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermType`, `TaoTermCreateL1()`, `TaoTermL1GetEpsilon()`,
+          `TaoTermL1SetEpsilon()`, `TAOTERMHALFL2SQUARED`, `TAOTERMQUADRATIC`
 M*/
 PETSC_INTERN PetscErrorCode TaoTermCreate_L1(TaoTerm term)
 {
@@ -395,6 +400,7 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_L1(TaoTerm term)
   term->ops->gradient                   = TaoTermComputeGradient_L1;
   term->ops->objectiveandgradient       = TaoTermComputeObjectiveAndGradient_L1;
   term->ops->hessian                    = TaoTermComputeHessian_L1;
+  term->ops->hessianmult                = TaoTermComputeHessianMult_L1;
   term->ops->createhessianmatrices      = TaoTermCreateHessianMatrices_L1;
   term->ops->iscomputehessianfdpossible = TaoTermIsComputeHessianFDPossible_L1;
 
@@ -437,13 +443,8 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_L1(TaoTerm term)
   TaoTermDestroy(&term);
 .ve
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERML1`,
-          `TaoTermL1GetEpsilon()`,
-          `TaoTermL1SetEpsilon()`,
-          `TaoTermCreateHalfL2Squared()`,
-          `TaoTermCreateQuadratic()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERML1`, `TaoTermL1GetEpsilon()`, `TaoTermL1SetEpsilon()`,
+          `TaoTermCreateHalfL2Squared()`, `TaoTermCreateQuadratic()`
 @*/
 PetscErrorCode TaoTermCreateL1(MPI_Comm comm, PetscInt n, PetscInt N, PetscReal epsilon, TaoTerm *term)
 {

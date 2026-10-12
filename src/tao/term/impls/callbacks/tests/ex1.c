@@ -59,18 +59,27 @@ static PetscErrorCode hessian(Tao tao, Vec x, Mat H, Mat Hpre, void *ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode hessianmult(Tao tao, Vec x, Vec v, Vec Hv, void *ctx)
+{
+  PetscFunctionBeginUser;
+  PetscCall(VecZeroEntries(Hv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode testCallbacks(PetscBool separate)
 {
-  Tao         tao;
-  TaoTerm     term;
-  TaoTermType type;
-  PetscBool   same;
-  PetscErrorCode (*_hessian)(Tao, Vec, Mat, Mat, void *);
-  AppCtx    app;
-  Vec       sol, grad;
-  Mat       H, Hpre;
-  PetscInt  N = 10;
-  PetscReal value;
+  Tao               tao;
+  TaoTerm           term;
+  TaoTermType       type;
+  PetscBool         same;
+  TaoHessianFn     *_hessian;
+  TaoHessianMultFn *_hessianmult;
+  PetscCtx          hessianmult_ctx;
+  AppCtx            app;
+  Vec               sol, grad;
+  Mat               H, Hpre;
+  PetscInt          N = 10;
+  PetscReal         value;
 
   PetscFunctionBeginUser;
   app.obj_count          = 0;
@@ -102,21 +111,27 @@ static PetscErrorCode testCallbacks(PetscBool separate)
   }
 
   if (separate) {
-    PetscErrorCode (*_objective)(Tao, Vec, PetscReal *, void *);
-    PetscErrorCode (*_gradient)(Tao, Vec, Vec, void *);
+    TaoObjectiveFn *_objective;
+    TaoGradientFn  *_gradient;
 
     PetscCall(TaoGetObjective(tao, &_objective, NULL));
     PetscCall(TaoGetGradient(tao, NULL, &_gradient, NULL));
     PetscCheck(_objective == objective, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong objective callback");
     PetscCheck(_gradient == gradient, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong gradient callback");
   } else {
-    PetscErrorCode (*_objective_and_gradient)(Tao, Vec, PetscReal *, Vec, void *);
+    TaoObjectiveAndGradientFn *_objective_and_gradient;
 
     PetscCall(TaoGetObjectiveAndGradient(tao, NULL, &_objective_and_gradient, NULL));
     PetscCheck(_objective_and_gradient == objective_and_gradient, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong objective and gradient callback");
   }
   PetscCall(TaoGetHessian(tao, NULL, NULL, &_hessian, NULL));
   PetscCheck(_hessian == hessian, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong hessian callback");
+  if (separate) {
+    PetscCall(TaoSetHessianMult(tao, hessianmult, &app));
+    PetscCall(TaoGetHessianMult(tao, &_hessianmult, &hessianmult_ctx));
+    PetscCheck(_hessianmult == hessianmult, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong Hessian-vector product callback");
+    PetscCheck(hessianmult_ctx == &app, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "wrong Hessian-vector product context");
+  }
 
   PetscCall(TaoComputeObjective(tao, sol, &value));
   (void)value;

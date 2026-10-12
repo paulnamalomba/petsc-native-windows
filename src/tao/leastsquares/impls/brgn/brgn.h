@@ -18,7 +18,7 @@ When D is an identity matrix, we have the classic lasso, aka basis pursuit denoi
 #define BRGN_REGULARIZATION_TYPES  5
 
 typedef struct {
-  PetscErrorCode (*regularizerobjandgrad)(Tao, Vec, PetscReal *, Vec, void *);
+  TaoObjectiveAndGradientFn *regularizerobjandgrad;
   PetscErrorCode (*regularizerhessian)(Tao, Vec, Mat, void *);
   void                     *reg_obj_ctx;
   void                     *reg_hess_ctx;

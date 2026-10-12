@@ -4,11 +4,11 @@
 typedef struct _TaoADMMOps *TaoADMMOps;
 
 struct _TaoADMMOps {
-  PetscErrorCode (*misfitobjgrad)(Tao, Vec, PetscReal *, Vec, void *);
-  PetscErrorCode (*misfithess)(Tao, Vec, Mat, Mat, void *);
+  TaoObjectiveAndGradientFn *misfitobjgrad;
+  TaoHessianFn              *misfithess;
   PetscErrorCode (*misfitjac)(Tao, Vec, Mat, Mat, void *);
-  PetscErrorCode (*regobjgrad)(Tao, Vec, PetscReal *, Vec, void *);
-  PetscErrorCode (*reghess)(Tao, Vec, Mat, Mat, void *);
+  TaoObjectiveAndGradientFn *regobjgrad;
+  TaoHessianFn              *reghess;
   PetscErrorCode (*regjac)(Tao, Vec, Mat, Mat, void *);
 };
 

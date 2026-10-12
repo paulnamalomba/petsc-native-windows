@@ -1,6 +1,6 @@
 const char help[] = "Coverage tests for TAOTERMSHELL";
 
-#include <petsctaoterm.h>
+#include <petsctao.h>
 
 static PetscErrorCode TaoTermCreateSolutionVec_Test(TaoTerm term, Vec *solution)
 {
@@ -64,6 +64,24 @@ static PetscErrorCode TaoTermComputeObjectiveAndGradient_Test(TaoTerm term, Vec 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode TaoTermComputeObjectiveAndGradient_Lifetime(TaoTerm term, Vec x, Vec params, PetscReal *value, Vec g)
+{
+  PetscScalar dot;
+
+  PetscFunctionBeginUser;
+  PetscCall(VecCopy(x, g));
+  PetscCall(VecDot(x, x, &dot));
+  *value = 0.5 * PetscRealPart(dot);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode TaoTermComputeHessianMult_Lifetime(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
+{
+  PetscFunctionBeginUser;
+  PetscCall(VecCopy(v, Hv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode testShell(MPI_Comm comm, PetscBool separate)
 {
   PetscRandom rand;
@@ -96,13 +114,6 @@ static PetscErrorCode testShell(MPI_Comm comm, PetscBool separate)
     PetscCall(TaoTermShellSetCreateParametersVec(term, TaoTermCreateParametersVec_Test));
   }
 
-  PetscCall(TaoTermSetUp(term));
-
-  PetscCall(TaoTermGetSolutionSizes(term, NULL, &test_m, NULL));
-  PetscCall(TaoTermGetParametersSizes(term, NULL, &test_n, NULL));
-  PetscCheck(test_m == m, comm, PETSC_ERR_PLIB, "Inconsistent solution size");
-  PetscCheck(test_n == n, comm, PETSC_ERR_PLIB, "Inconsistent parameters size");
-
   if (separate) {
     PetscCall(TaoTermShellSetObjective(term, TaoTermComputeObjective_Test));
     PetscCall(TaoTermShellSetGradient(term, TaoTermComputeGradient_Test));
@@ -110,6 +121,13 @@ static PetscErrorCode testShell(MPI_Comm comm, PetscBool separate)
     PetscCall(TaoTermShellSetObjectiveAndGradient(term, TaoTermComputeObjectiveAndGradient_Test));
     PetscCall(TaoTermShellSetView(term, TaoTermView_Test));
   }
+
+  PetscCall(TaoTermSetUp(term));
+
+  PetscCall(TaoTermGetSolutionSizes(term, NULL, &test_m, NULL));
+  PetscCall(TaoTermGetParametersSizes(term, NULL, &test_n, NULL));
+  PetscCheck(test_m == m, comm, PETSC_ERR_PLIB, "Inconsistent solution size");
+  PetscCheck(test_n == n, comm, PETSC_ERR_PLIB, "Inconsistent parameters size");
 
   PetscCall(TaoTermView(term, PETSC_VIEWER_STDOUT_(comm)));
 
@@ -132,19 +150,71 @@ static PetscErrorCode testShell(MPI_Comm comm, PetscBool separate)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode testHessianShellLifetime(MPI_Comm comm)
+{
+  TaoTerm   term;
+  Tao       tao;
+  Mat       map, H, Hpre;
+  Vec       x, v, y;
+  PetscReal error;
+  PetscInt  n = 8;
+
+  PetscFunctionBeginUser;
+  PetscCall(MatCreateAIJ(comm, PETSC_DECIDE, PETSC_DECIDE, n, n, 1, NULL, 1, NULL, &map));
+  PetscCall(MatAssemblyBegin(map, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(map, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatShift(map, 2.0));
+  PetscCall(TaoTermCreateShell(comm, NULL, NULL, &term));
+  PetscCall(TaoTermSetParametersMode(term, TAOTERM_PARAMETERS_NONE));
+  PetscCall(TaoTermSetSolutionSizes(term, PETSC_DECIDE, n, 1));
+  PetscCall(TaoTermShellSetObjectiveAndGradient(term, TaoTermComputeObjectiveAndGradient_Lifetime));
+  PetscCall(TaoTermShellSetHessianMult(term, TaoTermComputeHessianMult_Lifetime));
+  PetscCall(TaoTermShellSetCreateHessianMatrices(term, TaoTermCreateHessianMatricesDefault));
+  PetscCall(TaoTermSetCreateHessianMode(term, PETSC_TRUE, MATSHELL, NULL));
+  PetscCall(MatCreateVecs(map, &x, NULL));
+  PetscCall(VecSet(x, 1.0));
+  PetscCall(TaoCreate(comm, &tao));
+  PetscCall(TaoSetType(tao, TAONLS));
+  PetscCall(TaoSetSolution(tao, x));
+  PetscCall(TaoAddTerm(tao, NULL, 1.0, term, NULL, map));
+  PetscCall(TaoSetUp(tao));
+  PetscCall(TaoGetHessianMatrices(tao, &H, &Hpre));
+  PetscCall(PetscObjectReference((PetscObject)H));
+  PetscCall(TaoComputeHessian(tao, x, H, Hpre));
+  PetscCall(VecDuplicate(x, &v));
+  PetscCall(VecDuplicate(x, &y));
+  PetscCall(VecSet(v, 1.0));
+  PetscCall(TaoDestroy(&tao));
+  PetscCall(MatMult(H, v, y));
+  PetscCall(VecAXPY(y, -4.0, v));
+  PetscCall(VecNorm(y, NORM_2, &error));
+  PetscCheck(error <= 1.e-10, comm, PETSC_ERR_PLIB, "Retained mapped Hessian shell changed after TaoDestroy(), error %g", (double)error);
+  PetscCall(VecDestroy(&y));
+  PetscCall(VecDestroy(&v));
+  PetscCall(VecDestroy(&x));
+  PetscCall(MatDestroy(&H));
+  PetscCall(MatDestroy(&map));
+  PetscCall(TaoTermDestroy(&term));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, NULL, help));
   PetscCall(testShell(PETSC_COMM_WORLD, PETSC_TRUE));
   PetscCall(testShell(PETSC_COMM_WORLD, PETSC_FALSE));
+  PetscCall(testHessianShellLifetime(PETSC_COMM_WORLD));
   PetscCall(PetscFinalize());
   return 0;
 }
 
 /*TEST
 
-  test:
-    suffix: 0
+   build:
+     requires: !complex !single !quad !defined(PETSC_USE_64BIT_INDICES) !__float128
+
+   test:
+     suffix: 0
 
 TEST*/

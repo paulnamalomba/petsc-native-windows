@@ -32,6 +32,13 @@ int main(int argc, char **argv)
     output_file: output/rosenbrock1_1.out
 
   test:
+    suffix: hessian_mult
+    nsize: {{1 2 3}}
+    args: -mat_type aijcusparse -tao_type nls -tao_gatol 1.e-4 -test_hessian_mult -tao_nls_pc_type pbjacobi
+    requires: !single
+    output_file: output/rosenbrock4_hessian_mult.out
+
+  test:
     suffix: 2
     args: -mat_type aijcusparse -tao_monitor -tao_type lmvm -tao_gatol 1.e-3
     output_file: output/rosenbrock1_2.out

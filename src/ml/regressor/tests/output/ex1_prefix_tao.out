@@ -26,6 +26,7 @@ PetscRegressor Object: 1 MPI process
                   parameter vector space: (none)
                   Hessian MatType (tao_term_hessian_mat_type): (undefined)
                   attached to Tao [name omitted] (tao_brgn_subsolver_tao_bnk_cg_)
+                  The following methods have been set: (none)
               Map: unmapped
             TaoLineSearch Object: (tao_brgn_subsolver_tao_bnk_cg_) 1 MPI process
               type: more-thuente
@@ -63,6 +64,7 @@ PetscRegressor Object: 1 MPI process
               parameter vector space: (none)
               Hessian MatType (tao_term_hessian_mat_type): (undefined)
               attached to Tao [name omitted] (tao_brgn_subsolver_)
+              The following methods have been set: objectiveandgradient, hessian
               total number of function/gradient evaluations=3
               total number of Hessian evaluations=1
           Map: unmapped
@@ -123,6 +125,7 @@ PetscRegressor Object: 1 MPI process
           parameter vector space: (none)
           Hessian MatType (tao_term_hessian_mat_type): (undefined)
           attached to Tao [name omitted] (regressor_linear_)
+          The following methods have been set: (none)
           total number of function/gradient evaluations=3
           total number of Hessian evaluations=1
       Map: unmapped

@@ -3,7 +3,9 @@
 typedef struct _n_TaoTerm_HalfL2Squared TaoTerm_HalfL2Squared;
 
 struct _n_TaoTerm_HalfL2Squared {
-  Vec pdiff_work;
+  Vec      pdiff_work;
+  MatState H_state;
+  MatState Hpre_state;
 };
 
 static PetscErrorCode TaoTermDestroy_Halfl2squared(TaoTerm term)
@@ -55,21 +57,35 @@ static PetscErrorCode TaoTermComputeGradient_Halfl2squared(TaoTerm term, Vec x, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode TaoTermHalfL2SquaredSetIdentity(Mat H, MatState *cached)
+{
+  PetscBool same;
+
+  PetscFunctionBegin;
+  PetscCall(MatStateCompareUpdate(H, cached, &same));
+  if (same) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(MatZeroEntries(H));
+  PetscCall(MatAssemblyBegin(H, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(H, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatShift(H, 1.0));
+  PetscCall(MatGetState(H, cached));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode TaoTermComputeHessian_Halfl2squared(TaoTerm term, Vec x, Vec params, Mat H, Mat Hpre)
 {
+  TaoTerm_HalfL2Squared *l2 = (TaoTerm_HalfL2Squared *)term->data;
+
   PetscFunctionBegin;
-  if (H) {
-    PetscCall(MatZeroEntries(H));
-    PetscCall(MatAssemblyBegin(H, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(H, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatShift(H, 1.0));
-  }
-  if (Hpre && Hpre != H) {
-    PetscCall(MatZeroEntries(Hpre));
-    PetscCall(MatAssemblyBegin(Hpre, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(Hpre, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatShift(Hpre, 1.0));
-  }
+  if (H) PetscCall(TaoTermHalfL2SquaredSetIdentity(H, &l2->H_state));
+  if (Hpre && Hpre != H) PetscCall(TaoTermHalfL2SquaredSetIdentity(Hpre, &l2->Hpre_state));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode TaoTermComputeHessianMult_Halfl2squared(TaoTerm term, Vec x, Vec params, Vec v, Vec Hv)
+{
+  PetscFunctionBegin;
+  PetscCall(VecCopy(v, Hv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -114,12 +130,7 @@ static PetscErrorCode TaoTermIsComputeHessianFDPossible_Halfl2squared(TaoTerm te
   The default Hessian creation mode (see `TaoTermGetCreateHessianMode()`) is `H == Hpre` and `TaoTermCreateHessianMatrices()`
   will create a `MATDIAGONAL` for the Hessian.
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TaoTermType`,
-          `TaoTermCreateHalfL2Squared()`,
-          `TAOTERML1`,
-          `TAOTERMQUADRATIC`
+.seealso: [](sec_tao_term), `TaoTerm`, `TaoTermType`, `TaoTermCreateHalfL2Squared()`, `TAOTERML1`, `TAOTERMQUADRATIC`
 M*/
 PETSC_INTERN PetscErrorCode TaoTermCreate_Halfl2squared(TaoTerm term)
 {
@@ -129,6 +140,8 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Halfl2squared(TaoTerm term)
   PetscCall(TaoTermCreate_ElementwiseDivergence_Internal(term));
   PetscCall(PetscNew(&l2));
   term->data = (void *)l2;
+  PetscCall(MatStateInvalidate(l2->H_state));
+  PetscCall(MatStateInvalidate(l2->Hpre_state));
 
   PetscCall(PetscFree(term->H_mattype));
   PetscCall(PetscFree(term->Hpre_mattype));
@@ -141,6 +154,7 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Halfl2squared(TaoTerm term)
   term->ops->gradient                   = TaoTermComputeGradient_Halfl2squared;
   term->ops->objectiveandgradient       = TaoTermComputeObjectiveAndGradient_Halfl2squared;
   term->ops->hessian                    = TaoTermComputeHessian_Halfl2squared;
+  term->ops->hessianmult                = TaoTermComputeHessianMult_Halfl2squared;
   term->ops->createhessianmatrices      = TaoTermCreateHessianMatrices_Halfl2squared;
   term->ops->iscomputehessianfdpossible = TaoTermIsComputeHessianFDPossible_Halfl2squared;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -174,11 +188,7 @@ PETSC_INTERN PetscErrorCode TaoTermCreate_Halfl2squared(TaoTerm term)
   TaoAddTerm(tao, "reg_", alpha, term, p, NULL);
 .ve
 
-.seealso: [](sec_tao_term),
-          `TaoTerm`,
-          `TAOTERMHALFL2SQUARED`,
-          `TaoTermCreateL1()`,
-          `TaoTermCreateQuadratic()`
+.seealso: [](sec_tao_term), `TaoTerm`, `TAOTERMHALFL2SQUARED`, `TaoTermCreateL1()`, `TaoTermCreateQuadratic()`
 @*/
 PetscErrorCode TaoTermCreateHalfL2Squared(MPI_Comm comm, PetscInt n, PetscInt N, TaoTerm *term)
 {

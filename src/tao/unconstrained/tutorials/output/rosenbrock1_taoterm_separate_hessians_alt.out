@@ -29,7 +29,7 @@ Tao Object: 1 MPI process
       type: shell
       solution vector space: N = 2
       Context has been set
-      The following methods have been set: objectiveandgradient, hessian,
+      The following methods have been set: objectiveandgradient, hessian
       total number of function/gradient evaluations=20
       total number of Hessian evaluations=13
   TaoLineSearch Object: 1 MPI process
