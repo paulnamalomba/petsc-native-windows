@@ -49,7 +49,7 @@ cdef getprefix(prefix, deft=None):
         prefix = prefix.getOptionsPrefix()
     elif not isinstance(prefix, str):
         raise TypeError('option prefix must be string')
-    if not prefix:
+    if prefix is None:
         return None
     if prefix.count(' '):
         raise ValueError('option prefix should not have spaces')
