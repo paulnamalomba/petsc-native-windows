@@ -798,6 +798,17 @@ where noted, add a newline after the section headings.
 
 [^footnote-1]: Type also refers to the string name of the subclass.
 
+(changes_file_format)=
+
+### Changes file format
+
+Entries in `doc/changes/dev.md` follow these rules.
+
+1. Capitalize sentences
+2. Use the imperative, for example, Add, Improve, Change
+3. Do not use a period (.) at the end of entries
+4. If multiple sentences are needed, use a period or semicolon to divide sentences, but not at the end of the final sentence
+
 ### Makefile formatting
 
 1. The line continuation character `"\"` should not have any spaces to its left or right
