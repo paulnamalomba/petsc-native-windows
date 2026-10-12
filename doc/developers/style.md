@@ -248,7 +248,7 @@ Even with the use of `clang-format` there are still many decisions about code fo
 
     `do { ... } while`, `switch`, and a plain single statement (including `else if`) are unaffected and stay on the same line.
 
-    Each branch is judged on its own, so an `else` holding a single statement loses its braces
+    An `else` holding a single statement loses its braces
     even when the `if` it belongs to needs them.
 
     ```
