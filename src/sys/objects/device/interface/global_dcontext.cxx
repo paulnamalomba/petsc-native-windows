@@ -1,9 +1,9 @@
 #include "petscdevice_interface_internal.hpp" /*I <petscdevice.h> I*/
-#include <petscdevice_cupm.h>
 
 static auto               rootDeviceType = PETSC_DEVICE_CONTEXT_DEFAULT_DEVICE_TYPE;
 static auto               rootStreamType = PETSC_DEVICE_CONTEXT_DEFAULT_STREAM_TYPE;
 static PetscDeviceContext globalContext  = nullptr;
+static PetscDeviceContext rootContext    = nullptr;
 
 /* when PetscDevice initializes PetscDeviceContext eagerly the type of device created should
  * match whatever device is eagerly initialized */
@@ -23,31 +23,6 @@ PetscErrorCode PetscDeviceContextSetRootStreamType_Internal(PetscStreamType type
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static inline PetscErrorCode PetscSetDefaultCUPMStreamFromDeviceContext(PetscDeviceContext dctx, PetscDeviceType dtype)
-{
-  PetscFunctionBegin;
-#if PetscDefined(HAVE_CUDA)
-  if (dtype == PETSC_DEVICE_CUDA) {
-    void *handle;
-
-    PetscCall(PetscDeviceContextGetStreamHandle_Internal(dctx, &handle));
-    PetscDefaultCudaStream = *static_cast<cudaStream_t *>(handle);
-  }
-#endif
-#if PetscDefined(HAVE_HIP)
-  if (dtype == PETSC_DEVICE_HIP) {
-    void *handle;
-
-    PetscCall(PetscDeviceContextGetStreamHandle_Internal(dctx, &handle));
-    PetscDefaultHipStream = *static_cast<hipStream_t *>(handle);
-  }
-#endif
-#if !PetscDefined(HAVE_CUDA) && !PetscDefined(HAVE_HIP)
-  (void)dctx, (void)dtype;
-#endif
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
 {
   PetscFunctionBegin;
@@ -58,9 +33,10 @@ static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
       PetscDeviceType dtype;
 
       PetscFunctionBegin;
-      PetscCall(PetscDeviceContextGetDeviceType(globalContext, &dtype));
-      PetscCall(PetscInfo(globalContext, "Destroying global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
-      PetscCall(PetscDeviceContextDestroy(&globalContext));
+      PetscCall(PetscDeviceContextGetDeviceType(rootContext, &dtype));
+      PetscCall(PetscInfo(rootContext, "Destroying global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
+      PetscCall(PetscDeviceContextDestroy(&rootContext));
+      globalContext  = nullptr;
       rootDeviceType = PETSC_DEVICE_CONTEXT_DEFAULT_DEVICE_TYPE;
       rootStreamType = PETSC_DEVICE_CONTEXT_DEFAULT_STREAM_TYPE;
       PetscFunctionReturn(PETSC_SUCCESS);
@@ -70,6 +46,7 @@ static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
     PetscCall(PetscDeviceInitializePackage());
     PetscCall(PetscRegisterFinalize(std::move(finalizer)));
     PetscCall(PetscDeviceContextCreate(&globalContext));
+    rootContext = globalContext;
     PetscCall(PetscInfo(globalContext, "Initializing global PetscDeviceContext with device type %s\n", PetscDeviceTypes[dtype]));
     pobj = PetscObjectCast(globalContext);
     PetscCall(PetscObjectSetName(pobj, "global root"));
@@ -77,7 +54,6 @@ static PetscErrorCode PetscDeviceContextSetupGlobalContext_Private() noexcept
     PetscCall(PetscDeviceContextSetStreamType(globalContext, rootStreamType));
     PetscCall(PetscDeviceContextSetDefaultDeviceForType_Internal(globalContext, dtype));
     PetscCall(PetscDeviceContextSetUp(globalContext));
-    PetscCall(PetscSetDefaultCUPMStreamFromDeviceContext(globalContext, dtype));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -130,9 +106,13 @@ PetscErrorCode PetscDeviceContextGetCurrentContext(PetscDeviceContext *dctx)
   `PetscDevice` is not greedily initialized. In this case the user is responsible for destroying
   their `PetscDeviceContext` before `PetscFinalize()` returns.
 
-  The old context is not stored in any way by this routine; if one is overriding a context that
-  they themselves do not control, one should take care to temporarily store it by calling
-  `PetscDeviceContextGetCurrentContext()` before calling this routine.
+  The supplied context must be set up, or be `PetscDeviceContextDefault`, which is resolved before
+  being installed as current. To restore a previous context, pass the handle
+  saved from `PetscDeviceContextGetCurrentContext()`.
+
+  This routine does not take ownership of a user-created context; keep it alive while it is current.
+  Save the previous context with `PetscDeviceContextGetCurrentContext()` before replacing it if it
+  will need to be restored. PETSc retains ownership of its root and cached default contexts.
 
   Level: beginner
 
@@ -144,12 +124,12 @@ PetscErrorCode PetscDeviceContextSetCurrentContext(PetscDeviceContext dctx)
   PetscDeviceType dtype;
 
   PetscFunctionBegin;
-  PetscCall(PetscDeviceContextGetOptionalNullContext_Internal(&dctx));
+  PetscCall(PetscDeviceContextResolveDefault_Private(&dctx));
+  PetscValidDeviceContext(dctx, 1);
   PetscAssert(dctx->setup, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "PetscDeviceContext %" PetscInt64_FMT " must be set up before being set as global context", PetscObjectCast(dctx)->id);
   PetscCall(PetscDeviceContextGetDeviceType(dctx, &dtype));
   PetscCall(PetscDeviceSetDefaultDeviceType(dtype));
   globalContext = dctx;
   PetscCall(PetscInfo(dctx, "Set global PetscDeviceContext id %" PetscInt64_FMT "\n", PetscObjectCast(dctx)->id));
-  PetscCall(PetscSetDefaultCUPMStreamFromDeviceContext(globalContext, dtype));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

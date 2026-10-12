@@ -264,9 +264,9 @@ struct InterfaceImpl<DeviceType::CUDA> : InterfaceBase<DeviceType::CUDA> {
   PETSC_CUPM_ALIAS_FUNCTION_GOBBLE(cupmMemsetAsync, cudaMemset, 1)
   #endif
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemcpy2D, cudaMemcpy2D)
-  PETSC_CUPM_ALIAS_FUNCTION_GOBBLE(cupmMemcpy2DAsync, cudaMemcpy2DAsync, 1)
+  PETSC_CUPM_ALIAS_FUNCTION(cupmMemcpy2DAsync, cudaMemcpy2DAsync)
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemset2D, cudaMemset2D)
-  PETSC_CUPM_ALIAS_FUNCTION_GOBBLE(cupmMemset2DAsync, cudaMemset2DAsync, 1)
+  PETSC_CUPM_ALIAS_FUNCTION(cupmMemset2DAsync, cudaMemset2DAsync)
 
   // launch control
   PETSC_CUPM_ALIAS_FUNCTION(cupmLaunchHostFunc, cudaLaunchHostFunc)
@@ -406,14 +406,16 @@ struct InterfaceImpl<DeviceType::HIP> : InterfaceBase<DeviceType::HIP> {
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemset, hipMemset)
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemsetAsync, hipMemsetAsync)
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemcpy2D, hipMemcpy2D)
-  PETSC_CUPM_ALIAS_FUNCTION_GOBBLE(cupmMemcpy2DAsync, hipMemcpy2DAsync, 1)
+  PETSC_CUPM_ALIAS_FUNCTION(cupmMemcpy2DAsync, hipMemcpy2DAsync)
   PETSC_CUPM_ALIAS_FUNCTION(cupmMemset2D, hipMemset2D)
-  PETSC_CUPM_ALIAS_FUNCTION_GOBBLE(cupmMemset2DAsync, hipMemset2DAsync, 1)
+  PETSC_CUPM_ALIAS_FUNCTION(cupmMemset2DAsync, hipMemset2DAsync)
 
   // launch control
   // HIP appears to only have hipLaunchHostFunc from 5.2.0 onwards
   // https://github.com/ROCm-Developer-Tools/HIPIFY/blob/master/doc/markdown/CUDA_Runtime_API_functions_supported_by_HIP.md#7-execution-control=
-  #if PETSC_PKG_HIP_VERSION_GE(5, 2, 0)
+  #if PetscDefined(HAVE_HIPCUDA)
+  PETSC_NODISCARD static hipError_t cupmLaunchHostFunc(cupmStream_t stream, void (*fn)(void *), void *ctx) noexcept { return hipCUDAErrorTohipError(cudaLaunchHostFunc(stream, fn, ctx)); }
+  #elif PETSC_PKG_HIP_VERSION_GE(5, 2, 0)
   PETSC_CUPM_ALIAS_FUNCTION(cupmLaunchHostFunc, hipLaunchHostFunc)
   #else
   PETSC_NODISCARD static hipError_t cupmLaunchHostFunc(hipStream_t stream, cupmHostFn_t fn, void *ctx) noexcept
@@ -587,15 +589,15 @@ public:
     // a host pointer returns cudaErrorInvalidValue
     cerr = cupmPointerGetAttributes(&attr, data);
     cerr = cupmGetLastError();
-    // HIP seems to always have used memoryType though
-#if (defined(CUDART_VERSION) && (CUDART_VERSION < 10000)) || (defined(__HIP_PLATFORM_HCC__) && PETSC_PKG_HIP_VERSION_LT(5, 5, 0))
+    // HIP used memoryType on both backends before 5.5.
+#if (defined(CUDART_VERSION) && (CUDART_VERSION < 10000)) || (PetscDefined(HAVE_HIP) && PETSC_PKG_HIP_VERSION_LT(5, 5, 0))
     const auto mtype = attr.memoryType;
     if (managed) *managed = static_cast<PetscBool>((cerr == cupmSuccess) && attr.isManaged);
 #else
     if (PETSC_PKG_CUDA_VERSION_GE(11, 0, 0) && (T == DeviceType::CUDA)) PetscCallCUPM(cerr);
     const auto mtype = attr.type;
     if (managed) *managed = static_cast<PetscBool>(mtype == cupmMemoryTypeManaged);
-#endif // CUDART_VERSION && CUDART_VERSION < 10000 || (defined(__HIP_PLATFORM_HCC__) && PETSC_PKG_HIP_VERSION_LT(5, 5, 0))
+#endif
     // managed memory is device accessible, so we treat it as device memory?
     if (type) *type = (cerr == cupmSuccess && (mtype == cupmMemoryTypeDevice || mtype == cupmMemoryTypeManaged)) ? PETSC_MEMTYPE_CUPM() : PETSC_MEMTYPE_HOST;
     if (registered && (cerr == cupmSuccess) && (mtype == cupmMemoryTypeHost)) *registered = PETSC_TRUE;

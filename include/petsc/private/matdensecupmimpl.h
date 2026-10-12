@@ -88,6 +88,13 @@ public:
   PETSC_NODISCARD static constexpr MatType       MATMPIDENSECUPM() noexcept;
   PETSC_NODISCARD static constexpr MatType       MATDENSECUPM() noexcept;
   PETSC_NODISCARD static constexpr MatSolverType MATSOLVERCUPM() noexcept;
+
+  static PetscErrorCode GetCurrentMemType(Mat A, PetscMemType *mtype) noexcept
+  {
+    PetscFunctionBegin;
+    *mtype = A->boundtocpu ? PETSC_MEMTYPE_HOST : PETSC_MEMTYPE_CUPM();
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
 };
 
 // ==========================================================================================
@@ -126,6 +133,7 @@ inline constexpr MatSolverType MatDense_CUPM_Base<T>::MATSOLVERCUPM() noexcept
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MATMPIDENSECUPM; \
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MATDENSECUPM; \
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MATSOLVERCUPM; \
+    using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::GetCurrentMemType; \
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MatDenseCUPMGetArray_C; \
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MatDenseCUPMGetArrayRead_C; \
     using ::Petsc::mat::cupm::impl::MatDense_CUPM_Base<T>::MatDenseCUPMGetArrayWrite_C; \
@@ -276,10 +284,7 @@ inline PetscErrorCode MatDense_CUPM<T, D>::CreateIMPLDenseCUPM(MPI_Comm comm, Pe
   PetscCall(MatCreate(comm, &mat));
   PetscCall(MatSetSizes(mat, m, n, M, N));
   PetscCall(MatSetType(mat, D::MATIMPLCUPM()));
-  if (preallocate) {
-    PetscCall(PetscDeviceContextGetOptionalNullContext_Internal(&dctx));
-    PetscCall(D::SetPreallocation(mat, dctx, data));
-  }
+  if (preallocate) PetscCall(D::SetPreallocation(mat, dctx, data));
   *A = mat;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -295,7 +300,8 @@ inline PetscErrorCode MatDense_CUPM<T, D>::SetPreallocation(Mat A, PetscDeviceCo
   PetscCheckTypeNames(A, D::MATSEQDENSECUPM(), D::MATMPIDENSECUPM());
   PetscCall(PetscLayoutSetUp(A->rmap));
   PetscCall(PetscLayoutSetUp(A->cmap));
-  PetscCall(PetscDeviceContextGetOptionalNullContext_Internal(&dctx));
+  if (!dctx) PetscCall(GetHandles_(&dctx));
+  PetscValidDeviceContext(dctx, 2);
   PetscCall(D::SetPreallocation_(A, dctx, device_array));
   A->preallocated = PETSC_TRUE;
   A->assembled    = PETSC_TRUE;

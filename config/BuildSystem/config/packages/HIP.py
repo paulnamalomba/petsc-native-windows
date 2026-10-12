@@ -8,6 +8,7 @@ class Configure(config.package.Package):
   def __init__(self, framework):
     config.package.Package.__init__(self, framework)
 
+    self.version          = '10.1.0'
     self.minversion       = '5.0.0'
     # Check version from rocm-core here, as HIP_VERSION_PATCH (e.g., 31061 from hip_version.h) is not necessarily the AMD advertised patch version, e.g., in 5.6.0
     self.versionname      = 'ROCM_VERSION_MAJOR.ROCM_VERSION_MINOR.ROCM_VERSION_PATCH'
@@ -131,8 +132,6 @@ class Configure(config.package.Package):
 
   def configureLibrary(self):
     self.setFullPathHIPC()
-    self.setHasROCTX()
-    config.package.Package.configureLibrary(self)
     self.getExecutable('hipconfig',getFullPath=1,resultName='hip_config')
     if hasattr(self,'hip_config'):
       try:
@@ -148,6 +147,11 @@ class Configure(config.package.Package):
         self.platform = 'nvidia'
       else:
         self.platform = 'amd'
+
+    self.setHasROCTX()
+    # NVIDIA HIP implements hipInit() inline as a call to cuInit().
+    self.functions = ['cuInit'] if self.platform in ['nvcc','nvidia'] else ['hipInit']
+    config.package.Package.configureLibrary(self)
 
     self.libraries.pushLanguage('HIP')
     self.addDefine('HAVE_CUPM','1') # Have either CUDA or HIP
