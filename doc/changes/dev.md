@@ -65,6 +65,8 @@
 - Change `MatSetOption()` to error when a symmetry-related option contradicts an already known property
 - Add support for `MatZeroRows()` and `MatZeroRowsColumns()` with a nonzero diagonal value on a `MATIS` whose local matrix does not implement `MatSetValues()`, such as `MATSHELL`
 
+- Add `Mat.filter()` and `Mat.eliminateZeros()` to petsc4py, exposing the `compress` and `keep` arguments of `MatFilter()` and `MatEliminateZeros()`; `Mat.chop()` is unchanged and still leaves the zeroed entries in the sparsity pattern
+
 ```{rubric} MatCoarsen:
 ```
 

@@ -1475,6 +1475,46 @@ class TestMatStencilStarts(unittest.TestCase):
         A.destroy()
 
 
+class TestMatFilter(unittest.TestCase):
+    def _matrix(self):
+        A = PETSc.Mat().createAIJ([3, 3], nnz=3, comm=PETSc.COMM_SELF)
+        for i in range(3):
+            for j in range(3):
+                A.setValue(i, j, 1.0 if i == j else 1e-12)
+        A.assemble()
+        return A
+
+    def testChopKeepsThePattern(self):
+        A = self._matrix()
+        nnz = len(A.getValuesCSR()[2])
+        A.chop(1e-10)
+        self.assertEqual(len(A.getValuesCSR()[2]), nnz)
+        self.assertEqual(A[0, 1], 0.0)
+        A.destroy()
+
+    def testFilterCompressesThePattern(self):
+        A = self._matrix()
+        A.filter(1e-10, compress=True)
+        self.assertEqual(len(A.getValuesCSR()[2]), 3)
+        self.assertEqual(A[0, 0], 1.0)
+        A.destroy()
+
+    def testFilterWithoutCompressMatchesChop(self):
+        A = self._matrix()
+        nnz = len(A.getValuesCSR()[2])
+        A.filter(1e-10)
+        self.assertEqual(len(A.getValuesCSR()[2]), nnz)
+        A.destroy()
+
+    def testEliminateZeros(self):
+        A = self._matrix()
+        A.chop(1e-10)
+        A.eliminateZeros()
+        self.assertEqual(len(A.getValuesCSR()[2]), 3)
+        self.assertEqual(A[0, 0], 1.0)
+        A.destroy()
+
+
 # -----
 
 
