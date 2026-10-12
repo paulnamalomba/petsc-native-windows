@@ -11,6 +11,7 @@ class Configure(config.package.CMakePackage):
     self.download         = ['git://https://github.com/xiaoyeli/superlu_dist','https://github.com/xiaoyeli/superlu_dist/archive/'+self.gitcommit+'.tar.gz']
     self.functions        = ['set_default_options_dist']
     self.includes         = ['superlu_ddefs.h']
+    self.includedir       = [os.path.join('include', 'superlu-dist'), os.path.join('include', 'superlu_dist'), 'include']
     self.liblist          = [['libsuperlu_dist.a']]
     # SuperLU_DIST CMake requires working MPI_C_COMPILER (i.e. mpicc) but that is not provided with Microsoft and Intel Windows compilers and Microsoft Windows MPI
     # self.downloadonWindows= 1
