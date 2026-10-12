@@ -9,11 +9,8 @@
 ```
 
 - Add `--download-cutest` and `--download-sifdecode` for the CUTEst optimization testing environment and SIF problem decoder
-
 - Add Meson package builds, `--download-meson`, and `--download-package-meson-arguments` for additional Meson setup arguments
-
 - Add `--download-ninja` and `--with-ninja-exec` for the Ninja backend used by Meson package builds
-
 - Add `--with-meson-exec` to select an existing Meson executable
 
 ```{rubric} Sys:
