@@ -348,6 +348,27 @@ def _scan_events(events: List[Any]) -> Dict[str, Any]:
     }
 
 
+def _input_tokens_untrusted(prompt_tokens: int, cost: Optional[float],
+                            scan: Dict[str, Any]) -> bool:
+    """Whether a zero input-token count means "not reported" rather than "none used".
+
+    The Claude CLI does not surface input/cache token counts for every model: a
+    ``claudeopus48`` run comes back with ``modelUsage.inputTokens`` (and the
+    per-message ``usage``) at 0 even though a real ``total_cost_usd`` is reported,
+    whereas ``claude-fable-5-1`` reports them correctly. When input is 0 next to
+    evidence of real work — a nonzero cost, any output tokens, or any tool calls —
+    the input count (and therefore prompt/cached/peak-context/total tokens) is
+    hollow. Since subagent input dominates a config-3 run, this is exactly the
+    subagent token usage going missing, so flag it rather than let a 0 pass for a
+    measured value.
+    """
+    if prompt_tokens > 0:
+        return False
+    worked = (isinstance(cost, (int, float)) and cost > 0) \
+        or scan.get("sum_output_tokens", 0) > 0 or scan.get("tool_calls", 0) > 0
+    return bool(worked)
+
+
 def _partial_usage(events: List[Any]) -> Optional[Dict[str, Any]]:
     """Usage for a run that was killed before emitting its final ``result`` event.
 
@@ -370,6 +391,12 @@ def _partial_usage(events: List[Any]) -> Optional[Dict[str, Any]]:
         "completion_tokens": scan["sum_output_tokens"],
         "total_tokens": prompt_tokens + scan["sum_output_tokens"],
         "cached_tokens": scan["sum_cache_read_tokens"],
+        # See _input_tokens_untrusted(): zero input next to real activity means the
+        # CLI did not report input tokens (claudeopus48), not that none were used.
+        # The per-turn usage this killed run relies on is empty for such a model,
+        # so output is suspect too; the "partial" flag above already says cost is
+        # unknown, and this additionally marks the token counts as not reported.
+        "input_tokens_untrusted": _input_tokens_untrusted(prompt_tokens, None, scan),
         "total_cost_usd": None,  # the CLI reports cost only in the result event
         "num_turns": None,
         "model_responses": scan["model_responses"],
@@ -492,6 +519,7 @@ def _extract_result(events: List[Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
         out = int(u.get("output_tokens", 0) or 0)
     prompt_tokens = inp + cc + cr  # all input, including cached, for Green's "prompt"
     stats = result.get("subagent_stats") or {}
+    cost = result.get("total_cost_usd")
 
     scan = _scan_events(events)
 
@@ -502,7 +530,12 @@ def _extract_result(events: List[Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
         "completion_tokens": out,
         "total_tokens": prompt_tokens + out,
         "cached_tokens": cr,
-        "total_cost_usd": result.get("total_cost_usd"),
+        # A 0 input count beside a real cost means the CLI did not report input
+        # tokens for this model (see _input_tokens_untrusted()), not that none were
+        # used; prompt/cached/peak-context/total are then hollow — read the flag
+        # before trusting them, and note cost_usd stays correct regardless.
+        "input_tokens_untrusted": _input_tokens_untrusted(prompt_tokens, cost, scan),
+        "total_cost_usd": cost,
         # num_turns is the CLI's own count for the orchestrator alone, and counts
         # turns rather than responses, so it is kept for reference while
         # model_responses is what the whole-run model_calls telemetry reports.
