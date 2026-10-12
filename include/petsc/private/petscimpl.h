@@ -1423,6 +1423,7 @@ PETSC_INTERN PetscMPIInt Petsc_Seq_keyval;
 PETSC_INTERN PetscMPIInt Petsc_ShmComm_keyval;
 PETSC_EXTERN PetscMPIInt Petsc_CreationIdx_keyval;
 PETSC_INTERN PetscMPIInt Petsc_Garbage_HMap_keyval;
+PETSC_INTERN PetscMPIInt Petsc_Garbage_created_keyval;
 
 PETSC_INTERN PetscMPIInt Petsc_SharedWD_keyval;
 PETSC_INTERN PetscMPIInt Petsc_SharedTmp_keyval;

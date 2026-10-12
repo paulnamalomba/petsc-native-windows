@@ -49,12 +49,13 @@ PetscMPIInt PETSC_MPI_THREAD_REQUIRED = PETSC_DECIDE;
 PetscMPIInt PETSC_MPI_THREAD_REQUIRED = MPI_THREAD_SINGLE;
 #endif
 
-PetscMPIInt Petsc_Counter_keyval      = MPI_KEYVAL_INVALID;
-PetscMPIInt Petsc_InnerComm_keyval    = MPI_KEYVAL_INVALID;
-PetscMPIInt Petsc_OuterComm_keyval    = MPI_KEYVAL_INVALID;
-PetscMPIInt Petsc_ShmComm_keyval      = MPI_KEYVAL_INVALID;
-PetscMPIInt Petsc_CreationIdx_keyval  = MPI_KEYVAL_INVALID;
-PetscMPIInt Petsc_Garbage_HMap_keyval = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_Counter_keyval         = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_InnerComm_keyval       = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_OuterComm_keyval       = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_ShmComm_keyval         = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_CreationIdx_keyval     = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_Garbage_HMap_keyval    = MPI_KEYVAL_INVALID;
+PetscMPIInt Petsc_Garbage_created_keyval = MPI_KEYVAL_INVALID;
 
 PetscMPIInt Petsc_SharedWD_keyval  = MPI_KEYVAL_INVALID;
 PetscMPIInt Petsc_SharedTmp_keyval = MPI_KEYVAL_INVALID;
@@ -1025,6 +1026,7 @@ PETSC_INTERN PetscErrorCode PetscInitialize_Common(const char *prog, const char 
   PetscCallMPI(MPI_Comm_create_keyval(MPI_COMM_NULL_COPY_FN, Petsc_ShmComm_Attr_DeleteFn, &Petsc_ShmComm_keyval, NULL));
   PetscCallMPI(MPI_Comm_create_keyval(MPI_COMM_NULL_COPY_FN, MPI_COMM_NULL_DELETE_FN, &Petsc_CreationIdx_keyval, NULL));
   PetscCallMPI(MPI_Comm_create_keyval(MPI_COMM_NULL_COPY_FN, MPI_COMM_NULL_DELETE_FN, &Petsc_Garbage_HMap_keyval, NULL));
+  PetscCallMPI(MPI_Comm_create_keyval(MPI_COMM_NULL_COPY_FN, MPI_COMM_NULL_DELETE_FN, &Petsc_Garbage_created_keyval, NULL));
 
 #if PetscDefined(USE_FORTRAN_BINDINGS)
   if (ftn) PetscCall(PetscInitFortran_Private(file, len));
@@ -1502,7 +1504,7 @@ PetscErrorCode PetscFinalize(void)
   PetscGlobalArgc = 0;
   PetscGlobalArgs = NULL;
 
-  /* Clean up Garbage automatically on COMM_SELF and COMM_WORLD at finalize */
+  /* Clean up Garbage automatically on COMM_WORLD at finalize */
   {
     union
     {
@@ -1512,9 +1514,6 @@ PetscErrorCode PetscFinalize(void)
     PetscMPIInt flg;
     void       *tmp;
 
-    PetscCallMPI(MPI_Comm_get_attr(PETSC_COMM_SELF, Petsc_InnerComm_keyval, &ucomm, &flg));
-    if (flg) PetscCallMPI(MPI_Comm_get_attr(ucomm.comm, Petsc_Garbage_HMap_keyval, &tmp, &flg));
-    if (flg) PetscCall(PetscGarbageCleanup(PETSC_COMM_SELF));
     PetscCallMPI(MPI_Comm_get_attr(PETSC_COMM_WORLD, Petsc_InnerComm_keyval, &ucomm, &flg));
     if (flg) PetscCallMPI(MPI_Comm_get_attr(ucomm.comm, Petsc_Garbage_HMap_keyval, &tmp, &flg));
     if (flg) PetscCall(PetscGarbageCleanup(PETSC_COMM_WORLD));
@@ -1802,6 +1801,7 @@ PetscErrorCode PetscFinalize(void)
   PetscCallMPI(MPI_Comm_free_keyval(&Petsc_ShmComm_keyval));
   PetscCallMPI(MPI_Comm_free_keyval(&Petsc_CreationIdx_keyval));
   PetscCallMPI(MPI_Comm_free_keyval(&Petsc_Garbage_HMap_keyval));
+  PetscCallMPI(MPI_Comm_free_keyval(&Petsc_Garbage_created_keyval));
 
   // Free keyvals which may be silently created by some routines
   if (Petsc_SharedWD_keyval != MPI_KEYVAL_INVALID) PetscCallMPI(MPI_Comm_free_keyval(&Petsc_SharedWD_keyval));

@@ -5,14 +5,21 @@ static PetscErrorCode GarbageGetHMap_Private(MPI_Comm comm, PetscGarbage *garbag
 {
   PetscMPIInt  iflg;
   PetscHMapObj garbage_map;
+  void *obj;
 
   PetscFunctionBegin;
-  PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_HMap_keyval, garbage, &iflg));
+  PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_created_keyval, &obj, &iflg));
   if (!iflg) {
-    /* No garbage,create one */
+    /* No garbage, create one */
+    PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_HMap_keyval, garbage, &iflg));
     PetscCall(PetscHMapObjCreate(&garbage_map));
     garbage->map = garbage_map;
     PetscCallMPI(MPI_Comm_set_attr(comm, Petsc_Garbage_HMap_keyval, garbage->ptr));
+
+    /* Garbage created on this comm, record this */
+    PetscCallMPI(MPI_Comm_set_attr(comm, Petsc_Garbage_created_keyval, NULL));
+  } else {
+    PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_HMap_keyval, garbage, &iflg));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -54,7 +61,9 @@ PetscErrorCode PetscObjectDelayedDestroy(PetscObject *obj)
   MPI_Comm     comm;
   PetscMPIInt  size;
   PetscInt     count;
+  PetscMPIInt  garbageActive;
   PetscGarbage garbage;
+  void *tmp;
 
   PetscFunctionBegin;
   PetscAssertPointer(obj, 1);
@@ -71,10 +80,11 @@ PetscErrorCode PetscObjectDelayedDestroy(PetscObject *obj)
     /* Only stash if the (non-cyclic) reference count hits 0 */
     if (count == 0) {
       (*obj)->refct = 1;
+      /* Eagerly destroy objects if they are serial or if garbage collection is underway */
       PetscCall(PetscObjectGetComm(*obj, &comm));
       PetscCallMPI(MPI_Comm_size(comm, &size));
-      /* Eagerly destroy serial objects */
-      if (size == 1) {
+      PetscCallMPI(MPI_Comm_get_attr(comm, Petsc_Garbage_HMap_keyval, &tmp, &garbageActive));
+      if (size == 1 || !garbageActive) {
         PetscCall(PetscObjectDestroy(obj));
       } else {
         PetscCall(GarbageGetHMap_Private(comm, &garbage));
