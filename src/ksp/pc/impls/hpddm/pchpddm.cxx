@@ -342,8 +342,8 @@ static PetscErrorCode PCSetFromOptions_HPDDM(PC pc, PetscOptionItems PetscOption
   PC_HPDDM                   *data = (PC_HPDDM *)pc->data;
   char                        prefix[256], deprecated[256];
   int                         i = 1;
-  PetscMPIInt                 size, previous;
   PetscInt                    n, overlap = 1;
+  PetscMPIInt                 size, previous;
   PCHPDDMCoarseCorrectionType type;
   PetscBool                   flg = PETSC_TRUE, set;
 
@@ -726,16 +726,20 @@ static PetscErrorCode PCPreSolve_HPDDM(PC pc, KSP ksp, Vec, Vec)
                    PCHPDDMCoarseCorrectionTypes[data->correction], ((PetscObject)ksp)->type_name, ((PetscObject)pc)->prefix ? ((PetscObject)pc)->prefix : "", PCHPDDMCoarseCorrectionTypes[data->correction], PCHPDDMCoarseCorrectionTypes[PC_HPDDM_COARSE_CORRECTION_BALANCED]);
       }
       for (PetscInt n = 0; n < data->N; ++n) {
-        if (data->levels[n]->pc) {
-          PetscCall(PetscObjectTypeCompare((PetscObject)data->levels[n]->pc, PCASM, &flg));
+        PC inner = data->levels[n]->pc;
+
+        /* with a single level, no inner PCSHELL is used; inspect directly the PC attached to the KSP */
+        if (!inner && data->N == 1) PetscCall(KSPGetPC(data->levels[n]->ksp, &inner));
+        if (inner) {
+          PetscCall(PetscObjectTypeCompare((PetscObject)inner, PCASM, &flg));
           if (flg) {
             PCASMType type;
 
-            PetscCall(PCASMGetType(data->levels[n]->pc, &type));
-            if (type == PC_ASM_RESTRICT || type == PC_ASM_INTERPOLATE) {
-              PetscCall(PetscOptionsHasName(((PetscObject)data->levels[n]->pc)->options, ((PetscObject)data->levels[n]->pc)->prefix, "-pc_asm_type", &flg));
-              PetscCheck(flg, PetscObjectComm((PetscObject)data->levels[n]->pc), PETSC_ERR_ARG_INCOMP, "PCASMType %s is known to be not symmetric, but KSPType %s requires a symmetric PC, if you insist on using this configuration, use the additional option -%spc_asm_type %s, or alternatively, switch to a symmetric PCASMType such as %s", PCASMTypes[type],
-                         ((PetscObject)ksp)->type_name, ((PetscObject)data->levels[n]->pc)->prefix, PCASMTypes[type], PCASMTypes[PC_ASM_BASIC]);
+            PetscCall(PCASMGetType(inner, &type));
+            if (type == PC_ASM_RESTRICT || type == PC_ASM_INTERPOLATE || type == PC_ASM_WEIGHTED) {
+              PetscCall(PetscOptionsHasName(((PetscObject)inner)->options, ((PetscObject)inner)->prefix, "-pc_asm_type", &flg));
+              PetscCheck(flg, PetscObjectComm((PetscObject)inner), PETSC_ERR_ARG_INCOMP, "PCASMType %s is known to be not symmetric, but KSPType %s requires a symmetric PC, if you insist on using this configuration, use the additional option -%spc_asm_type %s, or alternatively, switch to a symmetric PCASMType such as %s", PCASMTypes[type],
+                         ((PetscObject)ksp)->type_name, ((PetscObject)inner)->prefix, PCASMTypes[type], PCASMTypes[PC_ASM_BASIC]);
             }
           }
         }
@@ -766,7 +770,7 @@ static PetscErrorCode PCSetUp_HPDDMShell(PC pc)
     PetscCall(VecDuplicateVecs(x, 2, &ctx->v[1]));
     PetscCall(VecDestroy(&x));
   }
-  std::fill_n(ctx->V, 3, nullptr);
+  for (PetscInt i = 0; i < 3; ++i) PetscCall(MatDestroy(ctx->V + i));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -907,7 +911,15 @@ static PetscErrorCode PCHPDDMMatApply_Private(PC_HPDDM_Level *ctx, Mat Y, PetscE
     PetscCallCXX(ctx->P->start(N));
   }
   if (N == prev || container) { /* when MatProduct container is attached, always need to MatProductReplaceMats() since KSPHPDDM may have replaced the Mat as well */
+    MatProductType ptype;
+
     PetscCall(MatProductReplaceMats(nullptr, !transpose ? Y : ctx->V[2], nullptr, ctx->V[1]));
+    PetscCall(MatProductGetType(ctx->V[1], &ptype));
+    if (ptype != (!transpose ? MATPRODUCT_AB : MATPRODUCT_AtB)) { /* MatProduct previously setup for the other type, e.g., by PCMatApply() before PCMatApplyTranspose() */
+      PetscCall(MatProductSetType(ctx->V[1], !transpose ? MATPRODUCT_AB : MATPRODUCT_AtB));
+      PetscCall(MatProductSetFromOptions(ctx->V[1]));
+      PetscCall(MatProductSymbolic(ctx->V[1]));
+    }
     if (container && ctx->parent->correction != PC_HPDDM_COARSE_CORRECTION_BALANCED) {
       PetscCall(MatDenseGetArrayWriteAndMemType(ctx->V[0], &array, &type));
       if (PetscMemTypeHost(type)) {
@@ -1786,21 +1798,18 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
   PC_HPDDM                                  *data = (PC_HPDDM *)pc->data;
   PC                                         inner;
   KSP                                       *ksp = nullptr;
-  Mat                                       *sub, A, P, N, C = nullptr, uaux = nullptr, weighted, subA[2], S;
+  Mat                                       *sub, A, P, N, C = nullptr, uaux = nullptr, weighted, subA[2], S, ev, daux = nullptr;
   Vec                                        xin, v;
   std::vector<Vec>                           initial;
-  IS                                         is[1], loc, uis = data->is, unsorted = nullptr;
+  IS                                         is[1], loc, uis = data->is, unsorted = nullptr, dis = nullptr;
   ISLocalToGlobalMapping                     l2g;
   char                                       prefix[256];
   const char                                *pcpre;
-  Mat                                        ev;
   PetscInt                                   n, requested, reused = 0, overlap = -1;
   MatStructure                               structure  = UNKNOWN_NONZERO_PATTERN;
   PetscBool                                  subdomains = PETSC_FALSE, flg = PETSC_FALSE, ismatis, swap = PETSC_FALSE, algebraic = PETSC_FALSE, block = PETSC_FALSE;
   DM                                         dm;
-  std::tuple<PC[2], Mat[2], PCSide, Vec[3]> *ctx  = nullptr;
-  IS                                         dis  = nullptr;
-  Mat                                        daux = nullptr;
+  std::tuple<PC[2], Mat[2], PCSide, Vec[3]> *ctx = nullptr;
 
   PetscFunctionBegin;
   if (!data->levels) PetscCall(PetscInfo(pc, "No level allocated, defaulting to a single level, PCSetFromOptions() should be called before PCSetUp() to avoid this\n"));
@@ -1838,7 +1847,7 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
     PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &reused, 1, MPIU_INT, MPI_MAX, PetscObjectComm((PetscObject)pc)));
     const int *addr = data->levels[0]->P ? data->levels[0]->P->getAddrLocal() : &i_0;
 
-    if (*addr != 0 && reused != data->N - 1) {
+    if (!data->deflation && *addr != 0 && reused != data->N - 1) {
       /* reuse previously computed eigenvectors */
       ev = data->levels[0]->P->getMat();
       if (ev) {
@@ -2466,6 +2475,7 @@ static PetscErrorCode PCSetUp_HPDDM(PC pc)
               if (!flg) ++overlap;
               if (data->share) {
                 PetscInt n = -1;
+
                 PetscTryMethod(data->levels[0]->pc, "PCASMGetSubKSP_C", (PC, PetscInt *, PetscInt *, KSP **), (data->levels[0]->pc, &n, nullptr, &ksp));
                 PetscCheck(n == 1, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Number of subdomain solver %" PetscInt_FMT " != 1", n);
                 if (flg) {
