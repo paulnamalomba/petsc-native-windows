@@ -296,6 +296,56 @@ class BaseTestMatAnyAIJ:
             self.assertTrue(np.allclose(aj[ai[i] : ai[i + 1]], cols))
             self.assertTrue(np.allclose(av[ai[i] : ai[i + 1]], vals))
 
+    def _assemble_with_small_entries(self, tol):
+        # MATIS does not support MatGetRow()-based CSR extraction or MatFilter();
+        # MATSEQSBAIJ does not support MatFilter() or MatEliminateZeros()
+        if 'is' in self.A.getType() or 'seqsbaij' in self.A.getType():
+            return None
+        self.vals[::2] = 0.1 * tol
+        self._preallocate()
+        self._set_values_ijv()
+        self.A.assemble()
+        return self.A.getValuesCSR()
+
+    def testChop(self):
+        tol = 1e-10
+        csr = self._assemble_with_small_entries(tol)
+        if csr is None:
+            return
+        _, aj, av = csr
+        self.A.chop(tol)
+        _, aj2, av2 = self.A.getValuesCSR()
+        self.assertTrue(np.array_equal(aj, aj2))
+        self.assertTrue(np.allclose(av2, np.where(abs(av) > tol, av, 0)))
+
+    def testFilter(self):
+        tol = 1e-10
+        csr = self._assemble_with_small_entries(tol)
+        if csr is None:
+            return
+        _, aj, av = csr
+        self.A.filter(tol)
+        _, aj2, av2 = self.A.getValuesCSR()
+        self.assertTrue(np.array_equal(aj, aj2))
+        self.assertTrue(np.allclose(av2, np.where(abs(av) > tol, av, 0)))
+        # compressing the pattern is not supported by the AIJCRL types
+        if 'crl' in self.A.getType():
+            return
+        self.A.filter(tol, compress=True)
+        _, aj2, av2 = self.A.getValuesCSR()
+        self.assertTrue(np.allclose(av2, av[abs(av) > tol]))
+
+    def testEliminateZeros(self):
+        tol = 1e-10
+        csr = self._assemble_with_small_entries(tol)
+        if csr is None:
+            return
+        _, _, av = csr
+        self.A.chop(tol)
+        self.A.eliminateZeros()
+        _, _, av2 = self.A.getValuesCSR()
+        self.assertTrue(np.allclose(av2, av[abs(av) > tol]))
+
     def testConvertToSAME(self):
         self._preallocate()
         self._set_values_ijv()
@@ -1472,46 +1522,6 @@ class TestMatStencilStarts(unittest.TestCase):
         A.setValueStencil(row, row, 7.0)
         A.assemble()
         self.assertEqual(A[0, 0], 7.0)
-        A.destroy()
-
-
-class TestMatFilter(unittest.TestCase):
-    def _matrix(self):
-        A = PETSc.Mat().createAIJ([3, 3], nnz=3, comm=PETSc.COMM_SELF)
-        for i in range(3):
-            for j in range(3):
-                A.setValue(i, j, 1.0 if i == j else 1e-12)
-        A.assemble()
-        return A
-
-    def testChopKeepsThePattern(self):
-        A = self._matrix()
-        nnz = len(A.getValuesCSR()[2])
-        A.chop(1e-10)
-        self.assertEqual(len(A.getValuesCSR()[2]), nnz)
-        self.assertEqual(A[0, 1], 0.0)
-        A.destroy()
-
-    def testFilterCompressesThePattern(self):
-        A = self._matrix()
-        A.filter(1e-10, compress=True)
-        self.assertEqual(len(A.getValuesCSR()[2]), 3)
-        self.assertEqual(A[0, 0], 1.0)
-        A.destroy()
-
-    def testFilterWithoutCompressMatchesChop(self):
-        A = self._matrix()
-        nnz = len(A.getValuesCSR()[2])
-        A.filter(1e-10)
-        self.assertEqual(len(A.getValuesCSR()[2]), nnz)
-        A.destroy()
-
-    def testEliminateZeros(self):
-        A = self._matrix()
-        A.chop(1e-10)
-        A.eliminateZeros()
-        self.assertEqual(len(A.getValuesCSR()[2]), 3)
-        self.assertEqual(A[0, 0], 1.0)
         A.destroy()
 
 
