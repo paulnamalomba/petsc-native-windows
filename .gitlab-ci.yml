@@ -62,6 +62,17 @@ check-ci-settings:
   script:
     - lib/petsc/bin/maint/check-ci-settings.sh
 
+check-message-lengths:
+  extends: .test-basic
+  stage: .pre
+  tags:
+    - gce-stage1
+  only:
+    refs:
+      - merge_requests
+  script:
+    - python3 lib/petsc/bin/maint/check_text_length.py --commit-message-limit=2000 --mr-description-limit=4000
+
 #
 #  This provides the basic order of operations and options template for cloud based stage 1 tests.
 #  Not all test-short need to follow this template but most will.

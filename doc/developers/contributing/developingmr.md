@@ -150,6 +150,8 @@ $ git checkout -b yourname/fix-component-name origin/main
   Project: My project name
   ```
 
+  The complete commit message must not exceed 2,000 characters.
+
 - Push the feature branch to the remote repository as desired:
 
   ```console

@@ -5,6 +5,8 @@
 `git push` prints a URL to the terminal that you can use to start a merge request.
 Alternatively, use [GitLab's web interface](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html).
 
+The merge request description must not exceed 4,000 characters.
+
 - The default **target** branch is `main`; if your branch started from `release`, select that as the target branch.
 - If the merge request resolves an outstanding [issue](https://gitlab.com/petsc/petsc/issues),
   include a [closing pattern](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#default-closing-pattern)
