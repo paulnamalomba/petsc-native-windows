@@ -4565,7 +4565,9 @@ cdef class Mat(Object):
         compress
             Whether the storage should be compressed once the entries of
             at most ``tol`` are set to zero, removing them from the
-            sparsity pattern rather than storing them as zeros.
+            sparsity pattern rather than storing them as zeros. Ignored
+            by matrix types that do not support `eliminateZeros`, such as
+            dense matrices, which keep the zeroed entries.
         keep_diagonal
             If ``compress`` is `True` and the diagonal coefficient of a
             row is at most ``tol``, whether to leave it in the structure
@@ -4582,7 +4584,7 @@ cdef class Mat(Object):
         CHKERR(MatFilter(self.mat, rval, ccompress, ckeep))
 
     def eliminateZeros(self, keep_diagonal: bool = False) -> None:
-        """Eliminate the non-diagonal zero entries from the sparsity pattern.
+        """Eliminate the zero entries from the sparsity pattern.
 
         Collective.
 

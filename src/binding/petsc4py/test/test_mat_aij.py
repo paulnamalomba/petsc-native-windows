@@ -296,54 +296,51 @@ class BaseTestMatAnyAIJ:
             self.assertTrue(np.allclose(aj[ai[i] : ai[i + 1]], cols))
             self.assertTrue(np.allclose(av[ai[i] : ai[i + 1]], vals))
 
-    def _assemble_with_small_entries(self, tol):
-        # MATIS does not support MatGetRow()-based CSR extraction or MatFilter();
-        # MATSEQSBAIJ does not support MatFilter() or MatEliminateZeros()
-        if 'is' in self.A.getType() or 'seqsbaij' in self.A.getType():
-            return None
+    def _get_values_csr(self):
+        if 'sbaij' in self.A.getType():
+            opt = PETSc.Mat.Option.GETROW_UPPERTRIANGULAR
+            self.A.setOption(opt, True)
+        return self.A.getValuesCSR()
+
+    def _assemble_with_small_entries(self):
+        if self.A.getType() == PETSc.Mat.Type.IS:
+            self.skipTest('MATIS does not support MatGetRow()')
+        tol = 50 * np.finfo(PETSc.RealType).eps
         self.vals[::2] = 0.1 * tol
         self._preallocate()
         self._set_values_ijv()
         self.A.assemble()
-        return self.A.getValuesCSR()
+        return tol, self._get_values_csr()
 
     def testChop(self):
-        tol = 1e-10
-        csr = self._assemble_with_small_entries(tol)
-        if csr is None:
-            return
-        _, aj, av = csr
+        tol, (_, aj, av) = self._assemble_with_small_entries()
         self.A.chop(tol)
-        _, aj2, av2 = self.A.getValuesCSR()
+        _, aj2, av2 = self._get_values_csr()
         self.assertTrue(np.array_equal(aj, aj2))
         self.assertTrue(np.allclose(av2, np.where(abs(av) > tol, av, 0)))
 
     def testFilter(self):
-        tol = 1e-10
-        csr = self._assemble_with_small_entries(tol)
-        if csr is None:
-            return
-        _, aj, av = csr
+        tol, (_, aj, av) = self._assemble_with_small_entries()
         self.A.filter(tol)
-        _, aj2, av2 = self.A.getValuesCSR()
+        _, aj2, av2 = self._get_values_csr()
         self.assertTrue(np.array_equal(aj, aj2))
         self.assertTrue(np.allclose(av2, np.where(abs(av) > tol, av, 0)))
-        # compressing the pattern is not supported by the AIJCRL types
+
+    def testFilterCompress(self):
         if 'crl' in self.A.getType():
-            return
+            self.skipTest('AIJCRL does not support compressing the pattern')
+        tol, (_, aj, av) = self._assemble_with_small_entries()
         self.A.filter(tol, compress=True)
-        _, aj2, av2 = self.A.getValuesCSR()
+        _, aj2, av2 = self._get_values_csr()
+        self.assertTrue(np.array_equal(aj2, aj[abs(av) > tol]))
         self.assertTrue(np.allclose(av2, av[abs(av) > tol]))
 
     def testEliminateZeros(self):
-        tol = 1e-10
-        csr = self._assemble_with_small_entries(tol)
-        if csr is None:
-            return
-        _, _, av = csr
+        tol, (_, aj, av) = self._assemble_with_small_entries()
         self.A.chop(tol)
         self.A.eliminateZeros()
-        _, _, av2 = self.A.getValuesCSR()
+        _, aj2, av2 = self._get_values_csr()
+        self.assertTrue(np.array_equal(aj2, aj[abs(av) > tol]))
         self.assertTrue(np.allclose(av2, av[abs(av) > tol]))
 
     def testConvertToSAME(self):
