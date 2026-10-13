@@ -58,7 +58,7 @@
 
       x_{k+1} = VecMedian(x_k + d_k)
       s = x_{k+1} - x_k
-      prered = dot(s, 0.5*gr_k - Hr_k*s)
+      prered = -dot(s, gr_k + 0.5*Hr_k*s)
       f_{k+1} = TaoComputeObjective(x_{k+1})
       actred = f_k - f_{k+1}
 
