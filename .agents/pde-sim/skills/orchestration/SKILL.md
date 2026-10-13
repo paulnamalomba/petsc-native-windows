@@ -203,5 +203,20 @@ After a full study, reflect and plan additional studies at greater detail:
   produce the requested output.
 - Run ownership: code-generation runs the simulation binary; visualization runs
   its own standalone post-processors; you decide which runs happen.
+- Do not duplicate subagent work. You decide *which* runs happen, but you do NOT
+  re-execute a build or study that `code-generation` already ran — trust its
+  `results-manifest.json`. To learn how many tries a case took or why, read the
+  manifest's `attempts[]` journal; never re-parse a subagent's transcript to
+  reconstruct that history.
+- One shared reference, then reuse. If a single small prototype or experiment
+  settles the discretization/solver, have it run once and hand the result to both
+  numerical-analysis and code-generation, rather than letting each stage
+  re-derive it.
+- Probe the environment once. Determine the toolchain facts every stage needs
+  (clang-format version, `mpiexec` location, `PETSC_ARCH`) up front and pass them
+  down; do not make each subagent re-discover them.
+- Keep verification cheap. For a rank-independence or sanity check use a small
+  grid; never re-run the full/finest refinement level serially (1 rank) when a
+  parallel run of it already exists.
 - Prefer parallel dispatch when stages are independent (e.g. draft a vis spec
   while numerics is being finalized).

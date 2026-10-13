@@ -16,6 +16,11 @@ from `petsc-solvers`; this skill is about correct, parallel, buildable code.
 ## Program structure
 - `PetscInitialize`/`PetscFinalize` bracket `main()`; read all tunables from the
   options database so runs are reconfigurable without recompiling.
+- Make baked-in defaults **overridable** through the options database: set them
+  with `PetscOptionsGetX`/`PetscOptionsInsertString` *before* the solver reads
+  options, so a later `-ksp_type …`/`-pc_type …` on the command line still wins.
+  Do not hard-lock a solver/PC choice in code — a hard-locked default forces an
+  edit and recompile just to test a variant, which is pure waste in the fix loop.
 - One repo-level main per executable (simulation; separate viz post-processors).
 
 ## Error handling (non-negotiable)
@@ -45,6 +50,11 @@ AGENTS.md): contiguous top-of-function declaration block, `PetscFunctionBeginUse
 after declarations, `//` for short and `/* ... */` for multiline comments, `()`
 on function names in comments.
 
+**Never let `*/` appear inside the text of a comment.** An option string or
+product such as `-snes_*/-ksp_*` or `c = p*/alpha` closes the block comment early
+and cascades into "undeclared identifier" build errors. Reword it to put a space
+in — `-snes_* / -ksp_*`, `c = p* / alpha`.
+
 ## Discretization scaffolding
 - **DMDA**: `DMDACreate1d`/`DMDACreate2d`/`DMDACreate3d`, `DMDAVecGetArray` for
   stencil loops; use local/global scatters and ghost points correctly.
@@ -60,6 +70,13 @@ on function names in comments.
   `KSPGetConvergedReason`.
 - SNES: `SNESSetFunction`/`SNESSetJacobian` (or matrix-free/coloring); check the
   converged reason.
+- When the Jacobian is built by DMDA coloring (`-snes_fd_color`/`MatFDColoring`),
+  the DMDA stencil type must cover **every** nonzero in the residual coupling. If
+  the residual couples diagonal neighbors — cross-derivative terms, or a
+  Crank–Nicolson space-time stencil that touches `(n±1, i±1)` — use
+  `DMDA_STENCIL_BOX`, not `STENCIL_STAR`: STAR omits the diagonals, so the colored
+  Jacobian is wrong and Newton fails with `DIVERGED_LINE_SEARCH`. Verify a new
+  colored Jacobian with `-snes_test_jacobian` before any long run.
 - TS: `TSSetRHSFunction`/`TSSetIFunction`/`IJacobian`, enable adaptivity.
 
 ## Parallelism & GPU
@@ -97,6 +114,10 @@ on function names in comments.
   (CMake via pkg-config is an alternative, but a makefile is the default.)
 - Build and run THROUGH the makefile; capture logs; iterate on compile/runtime
   errors until clean.
+- **Never pass a deprecated option**, in your own diagnostic runs as well as the
+  recorded run command: PETSc prints the notice with `PetscPrintf()`, so it lands
+  on **stdout** and corrupts the output a consumer parses. Use the replacement the
+  warning names (e.g. `-ts_time_step`, never `-ts_dt`); do not just silence it.
 
 ## Final cleanup (once, after the code is correct)
 Formatting is orthogonal to correctness, so do NOT run it inside the
