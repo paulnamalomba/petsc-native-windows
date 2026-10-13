@@ -4566,7 +4566,7 @@ cdef class Mat(Object):
             Whether the storage should be compressed once the entries of
             at most ``tol`` are set to zero, removing them from the
             sparsity pattern rather than storing them as zeros.
-        keep
+        keep_diagonal
             If ``compress`` is `True` and the diagonal coefficient of a
             row is at most ``tol``, whether to leave it in the structure
             rather than eliminate it as well.
@@ -4578,10 +4578,10 @@ cdef class Mat(Object):
         """
         cdef PetscReal rval = asReal(tol)
         cdef PetscBool ccompress = asBool(compress)
-        cdef PetscBool ckeep = asBool(keep)
+        cdef PetscBool ckeep = asBool(keep_diagonal)
         CHKERR(MatFilter(self.mat, rval, ccompress, ckeep))
 
-    def eliminateZeros(self, keep: bool = False) -> None:
+    def eliminateZeros(self, keep_diagonal: bool = False) -> None:
         """Eliminate the non-diagonal zero entries from the sparsity pattern.
 
         Collective.
@@ -4590,7 +4590,7 @@ cdef class Mat(Object):
 
         Parameters
         ----------
-        keep
+        keep_diagonal
             If the diagonal coefficient of a row is zero, whether to
             leave it in the structure rather than eliminate it as well.
 
@@ -4599,7 +4599,7 @@ cdef class Mat(Object):
         filter, petsc.MatEliminateZeros
 
         """
-        cdef PetscBool ckeep = asBool(keep)
+        cdef PetscBool ckeep = asBool(keep_diagonal)
         CHKERR(MatEliminateZeros(self.mat, ckeep))
 
     def setRandom(self, Random random=None) -> None:
