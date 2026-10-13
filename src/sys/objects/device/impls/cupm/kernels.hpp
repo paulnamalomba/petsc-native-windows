@@ -24,6 +24,25 @@ PETSC_DEVICE_INLINE_DECL static void grid_stride_1D(const SizeType size, T &&fun
   return;
 }
 
+/*
+  a * b rounded on its own, never fused with a neighboring addition into a multiply-add, for kernels whose results must
+  match host arithmetic bitwise. nvcc contracts by default and has no pragma to stop it, only the _rn intrinsics, which
+  it never fuses; clang (hipcc) honors the fp contract pragma instead.
+*/
+PETSC_DEVICE_INLINE_DECL static PetscReal mul_rn(PetscReal a, PetscReal b) noexcept
+{
+#if PetscDefined(USING_NVCC)
+  #if PetscDefined(USE_REAL_SINGLE)
+  return __fmul_rn(a, b);
+  #else
+  return __dmul_rn(a, b);
+  #endif
+#else
+  #pragma clang fp contract(off)
+  return a * b;
+#endif
+}
+
 } // namespace util
 
 } // namespace kernels

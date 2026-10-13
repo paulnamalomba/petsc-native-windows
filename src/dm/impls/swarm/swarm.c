@@ -360,7 +360,7 @@ static PetscErrorCode DMSwarmCreateVectorFromField_Private(DM dm, const char fie
     else if (iship) PetscCall(VecSetType(*vec, VECHIP));
     else PetscCall(VecSetType(*vec, VECSTANDARD));
     PetscCall(VecPlaceArray(*vec, array));
-  } else if (PetscMemTypeHIP(swarm->db->memtype)) {
+  } else if (swarm->backend == DMSWARM_BACKEND_CUDA || swarm->backend == DMSWARM_BACKEND_HIP) {
     DMSwarmDataField gfield;
 
     /*
@@ -381,12 +381,17 @@ static PetscErrorCode DMSwarmCreateVectorFromField_Private(DM dm, const char fie
     PetscCall((*swarm->db->ops.fieldallocdevice)(gfield));
     /*
       The *WithArrays() constructors take ownership of neither array (see the teardown notes
-      in DMSwarmDestroyVectorFromField_Private()). In a non-HIP build they are static-inline
-      error stubs from petscvec.h, so this compiles and links everywhere; the branch itself
-      is unreachable there because DMSwarmSetBackend() refuses the hip backend without HIP.
+      in DMSwarmDestroyVectorFromField_Private()). In a build without their backend they are
+      static-inline error stubs from petscvec.h, so this compiles and links everywhere; each
+      branch is unreachable there because DMSwarmSetBackend() refuses an unconfigured backend.
     */
-    if (size == 1) PetscCall(VecCreateSeqHIPWithArrays(comm, bs, n * bs, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
-    else PetscCall(VecCreateMPIHIPWithArrays(comm, bs, n * bs, PETSC_DETERMINE, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+    if (swarm->backend == DMSWARM_BACKEND_CUDA) {
+      if (size == 1) PetscCall(VecCreateSeqCUDAWithArrays(comm, bs, n * bs, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+      else PetscCall(VecCreateMPICUDAWithArrays(comm, bs, n * bs, PETSC_DETERMINE, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+    } else {
+      if (size == 1) PetscCall(VecCreateSeqHIPWithArrays(comm, bs, n * bs, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+      else PetscCall(VecCreateMPIHIPWithArrays(comm, bs, n * bs, PETSC_DETERMINE, (const PetscScalar *)gfield->data, (const PetscScalar *)gfield->data_d, vec));
+    }
     /*
       Hand the field's offloadmask to the Vec. A field mask of PETSC_OFFLOAD_UNALLOCATED maps
       to PETSC_OFFLOAD_CPU: the mirror exists by now (sized above) but has never received the
@@ -758,30 +763,41 @@ PetscErrorCode DMSwarmFillMassMatrix(DM dmc, DM dmf, Mat mass, PetscInt rStart, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Whether the swarm has a device backend and mass is the AIJ matrix type of that backend, which can take its COO values from device memory */
+static PetscErrorCode DMSwarmMassMatrixOnBackend_Private(DM dmc, Mat mass, PetscBool *match)
+{
+  DM_Swarm *swarm = (DM_Swarm *)dmc->data;
+
+  PetscFunctionBegin;
+  *match = PETSC_FALSE;
+  if (swarm->backend == DMSWARM_BACKEND_CUDA) PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, match, MATSEQAIJCUSPARSE, MATMPIAIJCUSPARSE, ""));
+  else if (swarm->backend == DMSWARM_BACKEND_HIP) PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, match, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Whether DMSwarmComputeMassMatrixCOO_Private() or DMSwarmComputeMassMatrixSquareCOO_Private() computes the values on the device; numF
    is the common closure size of the cells with particles (-1 if there are none) when uniform is true. The decision is collective. */
 static PetscErrorCode DMSwarmMassCOOUseDevice_Private(DM dmc, DM dmf, Mat mass, PetscObject disc, PetscInt Nc, PetscInt numF, PetscBool uniform, PetscBool *onDevice)
 {
   PetscFunctionBegin;
   *onDevice = PETSC_FALSE;
-#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+#if PetscDefined(HAVE_CUPM) && !PetscDefined(USE_COMPLEX)
   {
-    DM_Swarm      *swarm = (DM_Swarm *)dmc->data;
     DMSwarmCellDM  celldm;
     DMSwarmSort    sort;
     DMSwarmFEBasis basis;
     const char   **coordFields;
     PetscInt       dim, cdim, cStart, cEnd, Nfc, ok;
-    PetscBool      isHIP;
+    PetscBool      onBackend;
 
-    PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, &isHIP, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
+    PetscCall(DMSwarmMassMatrixOnBackend_Private(dmc, mass, &onBackend));
     PetscCall(DMSwarmGetCellDMActive(dmc, &celldm));
     PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
     PetscCall(DMSwarmCellDMGetSort(celldm, &sort));
     PetscCall(DMGetDimension(dmf, &dim));
     PetscCall(DMGetCoordinateDim(dmf, &cdim));
     PetscCall(DMPlexGetHeightStratum(dmf, 0, &cStart, &cEnd));
-    ok = swarm->backend == DMSWARM_BACKEND_HIP && isHIP && Nc == 1 && Nfc == 1 && dim == cdim && cStart == 0 && sort->ncells == cEnd && PetscMemTypeDevice(sort->memtype) && uniform;
+    ok = onBackend && Nc == 1 && Nfc == 1 && dim == cdim && cStart == 0 && sort->ncells == cEnd && PetscMemTypeDevice(sort->memtype) && uniform;
     if (ok) {
       PetscCall(DMSwarmFEBasisGet_Internal(disc, &basis));
       ok = basis->supported && basis->dim == dim && (numF < 0 || basis->pdim == numF);
@@ -805,10 +821,11 @@ static PetscErrorCode DMSwarmMassCOOUseDevice_Private(DM dmc, DM dmf, Mat mass, 
    and the assembled matrix is bitwise identical to the MatSetValues() path. Negative closure indices (constrained dofs) are ignored by
    MatSetPreallocationCOO(), as they are by MatSetValues().
 
-   With the HIP backend and a HIP matrix, the values are computed on the device from the device particle coordinates, sort CSR, and cell
-   geometry, and passed to MatSetValuesCOO() from device memory. Every cell then has the same closure size numF, so the values of the
-   particle in sort CSR slot q start at q * numF in both paths. The (i,j) pattern is built on the host in either case, since
-   MatSetPreallocationCOO() runs on the host for HIP matrices as well. */
+   With a device backend and the matching device matrix type, the values are computed on the device from the device particle
+   coordinates, sort CSR, and cell geometry, agree with the host values to rounding, and are passed to MatSetValuesCOO() from device
+   memory. Every cell then has the same closure size numF, so the values of the particle in sort CSR slot q start at q * numF in both
+   paths. The (i,j) pattern is built on the host in either case, since MatSetPreallocationCOO() runs on the host for device matrices
+   as well. */
 static PetscErrorCode DMSwarmComputeMassMatrixCOO_Private(DM dmc, DM dmf, Mat mass, PetscBool useDeltaFunction)
 {
   DMSwarmCellDM   celldm;
@@ -913,7 +930,7 @@ static PetscErrorCode DMSwarmComputeMassMatrixCOO_Private(DM dmc, DM dmf, Mat ma
   PetscCall(MatSetPreallocationCOO(mass, ncoo, coo_i, coo_j));
   PetscCall(PetscFree2(coo_i, coo_j));
   if (onDevice) {
-#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+#if PetscDefined(HAVE_CUPM) && !PetscDefined(USE_COMPLEX)
     DMSwarmSort         sort;
     DMSwarmFEBasis      basis;
     DMSwarmCellGeometry geom;
@@ -926,7 +943,11 @@ static PetscErrorCode DMSwarmComputeMassMatrixCOO_Private(DM dmc, DM dmf, Mat ma
     PetscCall(DMSwarmCellGeometryGetDevice_Internal(dmf, &geom));
     PetscCall(DMSwarmGetFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
     PetscCheck(PetscMemTypeDevice(mtype), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Particle coordinates are not in device memory");
+  #if PetscDefined(HAVE_CUDA)
+    PetscCall(DMSwarmMassMatrixSetValuesCOO_Internal_CUDA(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction));
+  #elif PetscDefined(HAVE_HIP)
     PetscCall(DMSwarmMassMatrixSetValuesCOO_Internal_HIP(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction));
+  #endif
     PetscCall(DMSwarmRestoreFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
 #endif
   } else {
@@ -1039,8 +1060,8 @@ static PetscErrorCode DMCreateMassMatrix_Swarm(DM dmCoarse, DM dmFine, Mat *mass
 /* Single-field COO assembly of DMSwarmComputeMassMatrixSquare_Private() with the values computed on the device. Each cell with n_c
    particles contributes the n_c x n_c block elemMat^T elemMat that DMSwarmComputeMassMatrixSquare_Private() passes to MatSetValues(),
    with the COO entries ordered by cell and row-major within the block. Every particle lies in exactly one cell, so no (i,j) pair
-   repeats, and the device computes each entry in the order of the reference BLAS gemm of that path, so the assembled matrix is bitwise
-   identical to it. The (i,j) pattern is built on the host, as in DMSwarmComputeMassMatrixCOO_Private(), with the cell offsets
+   repeats, and the device computes each entry in the order of the reference BLAS gemm of that path, so the assembled matrix agrees
+   with it to rounding. The (i,j) pattern is built on the host, as in DMSwarmComputeMassMatrixCOO_Private(), with the cell offsets
    sq_offsets and tile_offsets of the blocks that the device kernel uses.
 
    When the values cannot be computed on the device (see DMSwarmMassCOOUseDevice_Private()), the matrix is left untouched and assembled
@@ -1118,7 +1139,7 @@ static PetscErrorCode DMSwarmComputeMassMatrixSquareCOO_Private(DM dmc, DM dmf, 
   }
   PetscCall(MatSetPreallocationCOO(mass, ncoo, coo_i, coo_j));
   PetscCall(PetscFree2(coo_i, coo_j));
-#if PetscDefined(HAVE_HIP) && !PetscDefined(USE_COMPLEX)
+#if PetscDefined(HAVE_CUPM) && !PetscDefined(USE_COMPLEX)
   {
     DMSwarmSort         sort;
     DMSwarmFEBasis      basis;
@@ -1131,7 +1152,11 @@ static PetscErrorCode DMSwarmComputeMassMatrixSquareCOO_Private(DM dmc, DM dmf, 
     PetscCall(DMSwarmCellGeometryGetDevice_Internal(dmf, &geom));
     PetscCall(DMSwarmGetFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
     PetscCheck(PetscMemTypeDevice(mtype), PETSC_COMM_SELF, PETSC_ERR_PLIB, "Particle coordinates are not in device memory");
+  #if PetscDefined(HAVE_CUDA)
+    PetscCall(DMSwarmMassMatrixSquareSetValuesCOO_Internal_CUDA(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction, sort->ncells, sort->pcell_offsets_d, sq_offsets, tile_offsets));
+  #elif PetscDefined(HAVE_HIP)
     PetscCall(DMSwarmMassMatrixSquareSetValuesCOO_Internal_HIP(mass, basis, geom, sort->npoints, sort->list_d, sort->cell_index_d, coords, numF, useDeltaFunction, sort->ncells, sort->pcell_offsets_d, sq_offsets, tile_offsets));
+  #endif
     PetscCall(DMSwarmRestoreFieldReadAndMemType(dmc, coordFields[0], NULL, NULL, &mtype, (void **)&coords));
   }
 #endif
@@ -1150,7 +1175,7 @@ static PetscErrorCode DMSwarmComputeMassMatrixSquare_Private(DM dmc, DM dmf, Mat
   PetscDS       prob;
   PetscObject   disc;
   PetscClassId  id;
-  PetscBool     isHIP, assembled;
+  PetscBool     onBackend, assembled;
   PetscSection  fsection, globalFSection;
   PetscHSetIJ   ht;
   PetscLayout   rLayout, colLayout;
@@ -1171,8 +1196,8 @@ static PetscErrorCode DMSwarmComputeMassMatrixSquare_Private(DM dmc, DM dmf, Mat
   if (swarm->mass_coo && Nf == 1) {
     PetscCall(PetscDSGetDiscretization(prob, 0, &disc));
     PetscCall(PetscObjectGetClassId(disc, &id));
-    PetscCall(PetscObjectTypeCompareAny((PetscObject)mass, &isHIP, MATSEQAIJHIPSPARSE, MATMPIAIJHIPSPARSE, ""));
-    if (id == PETSCFE_CLASSID && swarm->backend == DMSWARM_BACKEND_HIP && isHIP) {
+    PetscCall(DMSwarmMassMatrixOnBackend_Private(dmc, mass, &onBackend));
+    if (id == PETSCFE_CLASSID && onBackend) {
       PetscCall(DMSwarmComputeMassMatrixSquareCOO_Private(dmc, dmf, mass, useDeltaFunction, &assembled));
       if (assembled) PetscFunctionReturn(PETSC_SUCCESS);
     }
@@ -3482,6 +3507,7 @@ PetscErrorCode DMSwarmSetBackend(DM dm, DMSwarmBackendType backend)
     PetscCheck(PetscDefined(HAVE_CUDA), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with CUDA support");
     PetscCall(DMSetVecType(dm, VECCUDA));
     swarm->db->memtype = PETSC_MEMTYPE_CUDA;
+    if (PetscDefined(HAVE_CUDA)) PetscCall(DMSwarmDataBucketSetUpDevice_CUDA(swarm->db));
     break;
   case DMSWARM_BACKEND_KOKKOS:
     PetscCheck(PetscDefined(HAVE_KOKKOS), PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "PETSc was not configured with Kokkos support");

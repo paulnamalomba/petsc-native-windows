@@ -6,6 +6,12 @@
 #include <petsc/private/deviceimpl.h>
 
 #include "../src/sys/objects/device/impls/cupm/kernels.hpp"
+#include "../src/sys/objects/device/impls/cupm/cupmthrustutility.hpp"
+
+#include <thrust/device_ptr.h>
+#include <thrust/scan.h>
+#include <thrust/copy.h>
+#include <thrust/iterator/counting_iterator.h>
 
 #include <cstdint>
 
@@ -132,6 +138,13 @@ PETSC_KERNEL_DECL static void fill_int_range(const PetscInt n, const PetscInt v,
   ::Petsc::device::cupm::kernels::util::grid_stride_1D(n, [&](PetscInt i) { a[i] = v; });
 }
 
+/* Selection predicate of SentListCreate() */
+struct EqualsTarget {
+  PetscInt target;
+
+  PETSC_HOSTDEVICE_INLINE_DECL bool operator()(PetscInt v) const noexcept { return v == target; }
+};
+
 } // namespace kernels
 
 /*
@@ -149,9 +162,13 @@ PETSC_KERNEL_DECL static void fill_int_range(const PetscInt n, const PetscInt v,
     so repeated single-particle growth does not cost one device reallocation per particle.
     There is no device realloc(): grow = allocate + stream-ordered copy of surviving entries +
     zero the tail + free the old buffer.
-  - Shrinks reallocate to the exact new size, but FieldAlloc() is only invoked with a smaller
-    size when the host sizing logic of DMSwarmDataBucketSetSizes_Host() decides to shrink, so
-    the host hysteresis (new_unused > 2 * new_buffer) applies to the mirror as well.
+  - Shrinks keep the capacity until less than half of it is in use, and only then reallocate to
+    the exact new size. FieldAlloc() sees a smaller size whenever the host sizing logic of
+    DMSwarmDataBucketSetSizes_Host() shrinks the host array (new_unused > 2 * new_buffer), which
+    with the default buffer happens in almost every migration; following each of those shrinks
+    made a migration reallocate and copy every mirror twice, once for the removed points and once
+    for the received ones. Entries kept beyond the host allocation are zeroed again before they
+    are exposed, by the grow-within-capacity path of EnsureDeviceCapacity_().
   - All mirrors are owned by the field (data_d == data_allocated_d); FieldFreeDevice() releases
     them and is dispatched from DMSwarmDataBucketDestroy() before DMSwarmDataFieldDestroy().
 */
@@ -168,14 +185,17 @@ struct DMSwarmDataBucket_CUPM : CUPMObject<T> {
   static PetscErrorCode SetSizes(DMSwarmDataBucket, PetscInt, PetscInt) noexcept;
   static PetscErrorCode PackRecords(DMSwarmDataBucket, PetscInt, const PetscInt *, void *) noexcept;
   static PetscErrorCode UnpackRecords(DMSwarmDataBucket, PetscInt, PetscInt, const void *) noexcept;
-  static PetscErrorCode CompactMask(DMSwarmDataBucket, PetscInt, const PetscInt *, PetscInt *) noexcept;
-  static PetscErrorCode CompactScatter(DMSwarmDataBucket, PetscInt, PetscInt, const PetscInt *, const PetscInt *, PetscInt *, PetscInt *) noexcept;
+  static PetscErrorCode Compact(DMSwarmDataBucket, PetscInt, const PetscInt *) noexcept;
   static PetscErrorCode FieldFillIntRange(DMSwarmDataField, PetscInt, PetscInt, PetscInt) noexcept;
+  static PetscErrorCode SentListCreate(DMSwarmDataBucket, PetscInt, PetscInt, PetscInt, const PetscInt *, PetscInt *, PetscInt **) noexcept;
+  static PetscErrorCode SentListDestroy(DMSwarmDataBucket, PetscInt **) noexcept;
   static PetscErrorCode SetUp(DMSwarmDataBucket) noexcept;
 
 private:
   static PetscErrorCode EnsureDeviceCapacity_(DMSwarmDataField, PetscInt, PetscInt) noexcept;
   static PetscErrorCode LaunchRecordKernels_(DMSwarmDataBucket, PetscBool, PetscInt, PetscInt, const PetscInt *, void *) noexcept;
+  static PetscErrorCode CompactMask_(DMSwarmDataBucket, PetscInt, const PetscInt *, PetscInt *) noexcept;
+  static PetscErrorCode CompactScatter_(DMSwarmDataBucket, PetscInt, PetscInt, const PetscInt *, const PetscInt *, PetscInt *, PetscInt *) noexcept;
 };
 
 /*
@@ -207,8 +227,8 @@ inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::EnsureDeviceCapacity_(DMSwarmDa
     PetscCallCUPM(cupmFreeAsync(df->data_allocated_d, stream));
     df->data_d = df->data_allocated_d = tmp;
     df->capacity_d                    = new_capacity;
-  } else if (new_L < old_L) {
-    /* shrink: reallocate to the exact new size, mirroring the host realloc in DMSwarmDataFieldSetSize() */
+  } else if (new_L < old_L && 2 * new_L < df->capacity_d) {
+    /* shrink to the exact new size, but only once less than half the capacity is in use, see the design notes */
     char *tmp = nullptr;
 
     PetscCall(PetscCUPMMallocAsync(&tmp, static_cast<std::size_t>(new_L) * as, stream));
@@ -434,12 +454,12 @@ inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::UnpackRecords(DMSwarmDataBucket
 
 /*
   First phase of the device compaction (see the compact ops slot in data_bucket.h): zero the
-  sent mask over all db->L points and raise the flags of the sentlist entries. The caller runs
-  the deterministic exclusive prefix sum over the mask between the two phases (thrust lives in
-  the instantiating TU only), then finishes with CompactScatter().
+  sent mask over all db->L points and raise the flags of the sentlist entries. Compact() runs
+  the deterministic exclusive prefix sum over the mask between the two phases, then finishes
+  with CompactScatter_().
 */
 template <DeviceType T>
-inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactMask(DMSwarmDataBucket db, PetscInt nsent, const PetscInt *sentlist, PetscInt *mask) noexcept
+inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactMask_(DMSwarmDataBucket db, PetscInt nsent, const PetscInt *sentlist, PetscInt *mask) noexcept
 {
   cupmStream_t stream;
 
@@ -462,7 +482,7 @@ inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactMask(DMSwarmDataBucket d
   so deliberately not accounted in the CpuToGpu/GpuToCpu totals.
 */
 template <DeviceType T>
-inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactScatter(DMSwarmDataBucket db, PetscInt nsent, PetscInt nholes, const PetscInt *mask, const PetscInt *scan, PetscInt *holes, PetscInt *srcs) noexcept
+inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactScatter_(DMSwarmDataBucket db, PetscInt nsent, PetscInt nholes, const PetscInt *mask, const PetscInt *scan, PetscInt *holes, PetscInt *srcs) noexcept
 {
   PetscDeviceContext dctx;
   cupmStream_t       stream;
@@ -498,6 +518,56 @@ inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::CompactScatter(DMSwarmDataBucke
 }
 
 /*
+  Device compaction per the compact ops slot contract in data_bucket.h: reproduce the host
+  swap-with-last removal order through its closed form. The sent mask and its deterministic
+  exclusive prefix sum enumerate the ascending sent slots < m and the descending surviving tail
+  points >= m; a sparse scatter then moves only the filled holes' records, and the size
+  bookkeeping of the host loop's per-point DMSwarmDataBucketRemovePoint() shrinks is applied at
+  once by DMSwarmDataBucketRemovePoints_Internal(), so L, buffer, allocated and the zeroed tail
+  end bit-identical to the host backend with at most one reallocation of each device mirror. The
+  scratch arrays are allocated and freed in stream order on the stream all compaction work runs
+  on, which avoids the device-wide synchronization of a plain free.
+*/
+template <DeviceType T>
+inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::Compact(DMSwarmDataBucket db, PetscInt nsent, const PetscInt *sentlist) noexcept
+{
+  const PetscInt n = db->L, m = n - nsent;
+  PetscInt       nholes = 0;
+  PetscInt      *mask, *scan, *holes, *srcs;
+  cupmStream_t   stream;
+
+  PetscFunctionBegin;
+  if (!nsent) PetscFunctionReturn(PETSC_SUCCESS);
+  /* untouched survivors must be device valid before the device copy becomes authoritative */
+  for (PetscInt f = 0; f < db->nfields; ++f) PetscCall(FieldToDevice(db->field[f]));
+  if (m > 0 && db->nfields > 0) {
+    PetscCall(GetHandles_(&stream));
+    PetscCallCUPM(cupmMallocAsync(reinterpret_cast<void **>(&mask), static_cast<std::size_t>(n) * sizeof(*mask), stream));
+    PetscCallCUPM(cupmMallocAsync(reinterpret_cast<void **>(&scan), static_cast<std::size_t>(n) * sizeof(*scan), stream));
+    PetscCallCUPM(cupmMallocAsync(reinterpret_cast<void **>(&holes), static_cast<std::size_t>(nsent) * sizeof(*holes), stream));
+    PetscCallCUPM(cupmMallocAsync(reinterpret_cast<void **>(&srcs), static_cast<std::size_t>(nsent) * sizeof(*srcs), stream));
+    PetscCall(CompactMask_(db, nsent, sentlist, mask));
+    {
+      const auto mask_p = thrust::device_pointer_cast(mask);
+      const auto scan_p = thrust::device_pointer_cast(scan);
+
+      PetscCallThrust(THRUST_CALL(thrust::exclusive_scan, stream, mask_p, mask_p + n, scan_p));
+    }
+    /* nholes = scan[m] = number of sent slots < m = number of surviving tail points >= m */
+    PetscCallCUPM(cupmMemcpyAsync(&nholes, scan + m, sizeof(nholes), cupmMemcpyDeviceToHost, stream));
+    PetscCallCUPM(cupmStreamSynchronize(stream));
+    PetscCall(CompactScatter_(db, nsent, nholes, mask, scan, holes, srcs));
+    PetscCallCUPM(cupmFreeAsync(mask, stream));
+    PetscCallCUPM(cupmFreeAsync(scan, stream));
+    PetscCallCUPM(cupmFreeAsync(holes, stream));
+    PetscCallCUPM(cupmFreeAsync(srcs, stream));
+  }
+  /* the size bookkeeping of the host loop's per-point shrinks, applied at once */
+  PetscCall(DMSwarmDataBucketRemovePoints_Internal(db, nsent));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
   Fill the entries [start, end) of a PetscInt-typed field with a constant on the device. Used by
   the device migration fork in swarm_migrate.c for the per-point rank stores and for resetting
   the cell ids of freshly received points, which as host loops would force a device-host round
@@ -525,19 +595,76 @@ inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::FieldFillIntRange(DMSwarmDataFi
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*
+  Build the device-resident send list of the migration fork in swarm_migrate.c: the indices
+  i in [start, end) with vals[i] == match, in strictly ascending order (every pointer device
+  resident). thrust::copy_if() over an ascending counting iterator is stable and scan based, so
+  the order and content are deterministic by construction. The list is allocated here, sized for
+  the worst case, and released with SentListDestroy(); an empty range returns a NULL list with
+  *nsent = 0.
+*/
+template <DeviceType T>
+inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::SentListCreate(DMSwarmDataBucket, PetscInt start, PetscInt end, PetscInt match, const PetscInt *vals, PetscInt *nsent, PetscInt **sentlist) noexcept
+{
+  const PetscInt n = end - start;
+  PetscInt      *list;
+  cupmStream_t   stream;
+
+  PetscFunctionBegin;
+  *nsent    = 0;
+  *sentlist = nullptr;
+  if (n <= 0) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(GetHandles_(&stream));
+  PetscCallCUPM(cupmMallocAsync(reinterpret_cast<void **>(&list), static_cast<std::size_t>(n) * sizeof(*list), stream));
+  {
+    const auto first  = thrust::counting_iterator<PetscInt>(start);
+    const auto last   = thrust::counting_iterator<PetscInt>(end);
+    const auto vals_p = thrust::device_pointer_cast(vals);
+    const auto out    = thrust::device_pointer_cast(list);
+    auto       tail   = out;
+
+    PetscCallThrust(tail = THRUST_CALL(thrust::copy_if, stream, first, last, vals_p + start, out, kernels::EqualsTarget{match}));
+    *nsent = static_cast<PetscInt>(tail - out);
+  }
+  *sentlist = list;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Release a device send list built by SentListCreate(), in stream order on the stream it was
+  built on; every consumer synchronizes before returning, so the list is no longer in use
+*/
+template <DeviceType T>
+inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::SentListDestroy(DMSwarmDataBucket, PetscInt **sentlist) noexcept
+{
+  cupmStream_t stream;
+
+  PetscFunctionBegin;
+  if (*sentlist) {
+    PetscCall(GetHandles_(&stream));
+    PetscCallCUPM(cupmFreeAsync(*sentlist, stream));
+  }
+  *sentlist = nullptr;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 template <DeviceType T>
 inline PetscErrorCode DMSwarmDataBucket_CUPM<T>::SetUp(DMSwarmDataBucket db) noexcept
 {
   PetscFunctionBegin;
-  db->ops.fieldalloc       = FieldAlloc;
-  db->ops.fieldallocdevice = FieldAllocDevice;
-  db->ops.fieldtodevice    = FieldToDevice;
-  db->ops.fieldtohost      = FieldToHost;
-  db->ops.fieldzerorange   = FieldZeroRange;
-  db->ops.fieldfreedevice  = FieldFreeDevice;
-  db->ops.setsizes         = SetSizes;
-  db->ops.packrecords      = PackRecords;
-  db->ops.unpackrecords    = UnpackRecords;
+  db->ops.fieldalloc        = FieldAlloc;
+  db->ops.fieldallocdevice  = FieldAllocDevice;
+  db->ops.fieldtodevice     = FieldToDevice;
+  db->ops.fieldtohost       = FieldToHost;
+  db->ops.fieldzerorange    = FieldZeroRange;
+  db->ops.fieldfreedevice   = FieldFreeDevice;
+  db->ops.fieldfillintrange = FieldFillIntRange;
+  db->ops.setsizes          = SetSizes;
+  db->ops.packrecords       = PackRecords;
+  db->ops.unpackrecords     = UnpackRecords;
+  db->ops.compact           = Compact;
+  db->ops.sentlistcreate    = SentListCreate;
+  db->ops.sentlistdestroy   = SentListDestroy;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

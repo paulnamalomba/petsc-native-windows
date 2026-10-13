@@ -56,6 +56,16 @@ typedef struct _DMSwarmDataBucketOps {
     the device. Call through DMSwarmDataBucketCompact(), which performs the argument checking.
   */
   PetscErrorCode (*compact)(DMSwarmDataBucket, PetscInt, const PetscInt *);
+  /*
+    Device backends only (NULL on the host), helpers of the device migration fork in
+    swarm_migrate.c. fieldfillintrange fills [start, end) of a PetscInt field's device mirror with
+    a constant and leaves the field device authoritative. sentlistcreate enumerates, in strictly
+    ascending order, the indices in [start, end) whose entry of a device-resident PetscInt array
+    equals a match value, into a freshly allocated device list released with sentlistdestroy.
+  */
+  PetscErrorCode (*fieldfillintrange)(DMSwarmDataField, PetscInt, PetscInt, PetscInt);
+  PetscErrorCode (*sentlistcreate)(DMSwarmDataBucket, PetscInt, PetscInt, PetscInt, const PetscInt *, PetscInt *, PetscInt **);
+  PetscErrorCode (*sentlistdestroy)(DMSwarmDataBucket, PetscInt **);
 } DMSwarmDataBucketOps;
 
 struct _p_DMSwarmDataBucket {
@@ -103,19 +113,9 @@ PETSC_INTERN PetscErrorCode DMSwarmDataBucketFinalize(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetInitialSizes(DMSwarmDataBucket, const PetscInt, const PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes(DMSwarmDataBucket, const PetscInt, const PetscInt);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetSizes_Host(DMSwarmDataBucket, PetscInt, PetscInt);
-/* Defined in src/dm/impls/swarm/cupm/hip/; declared unconditionally, call only when PetscDefined(HAVE_HIP) */
+/* Defined in src/dm/impls/swarm/cupm/{cuda,hip}/; declared unconditionally, call only when PetscDefined(HAVE_CUDA) or PetscDefined(HAVE_HIP) respectively */
+PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetUpDevice_CUDA(DMSwarmDataBucket);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketSetUpDevice_HIP(DMSwarmDataBucket);
-/*
-  Device helpers for the migration fork in swarm_migrate.c (same build/call rule as above).
-  DMSwarmDataFieldFillIntRange_HIP() fills [start, end) of a PetscInt field's device mirror with a
-  constant and leaves the field device authoritative. DMSwarmSentListCreate_HIP() enumerates, in
-  strictly ascending order, the indices in [start, end) whose entry of a device-resident PetscInt
-  array equals a match value, into a freshly allocated device list released with
-  DMSwarmSentListDestroy_HIP().
-*/
-PETSC_INTERN PetscErrorCode DMSwarmDataFieldFillIntRange_HIP(DMSwarmDataField, PetscInt, PetscInt, PetscInt);
-PETSC_INTERN PetscErrorCode DMSwarmSentListCreate_HIP(PetscInt, PetscInt, PetscInt, const PetscInt *, PetscInt *, PetscInt **);
-PETSC_INTERN PetscErrorCode DMSwarmSentListDestroy_HIP(PetscInt **);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetSizes(DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetGlobalSizes(MPI_Comm, DMSwarmDataBucket, PetscInt *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode DMSwarmDataBucketGetDMSwarmDataFields(DMSwarmDataBucket, PetscInt *, DMSwarmDataField *[]);

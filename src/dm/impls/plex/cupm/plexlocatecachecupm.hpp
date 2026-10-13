@@ -22,6 +22,8 @@ namespace impl
 namespace kernels
 {
 
+using ::Petsc::device::cupm::kernels::util::mul_rn;
+
 /*
   Parameter block for the location kernel: the location cache flattened to device pointers and
   plain values, passed to the kernel by value.
@@ -49,44 +51,44 @@ struct DMPlexLocateCtx {
   The containment tests below are operation-for-operation device ports of the host tests in
   plexgeometry.c (DMPlexLocatePoint_Simplex_1D/2D/3D_Internal(), the linear
   DMPlexLocatePoint_Quad_2D/Hex_3D_Linear_Internal()) so that every marginal decision matches the
-  host bitwise. Floating-point contraction is disabled in each of them: the host library is built
-  at -O0 for a target without fused multiply-add, while HIP device compilation contracts by
-  default, and a contracted multiply-add can flip a containment decision on the cell boundary.
+  host bitwise. Floating-point contraction is prevented in each of them: the host library is built
+  at -O0 for a target without fused multiply-add, while device compilers contract by default, and
+  a contracted multiply-add can flip a containment decision on the cell boundary. Location decides
+  which cell, and hence which rank, owns a particle, so unlike the projection kernels it must
+  match the host exactly: every product therefore goes through mul_rn(), which no device compiler
+  fuses with an addition.
 */
 
 PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Segment(const PetscReal point[], const PetscReal v0[], const PetscReal invJ[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscReal eps = PETSC_SQRT_MACHINE_EPSILON;
-  const PetscReal xi  = invJ[0] * (point[0] - v0[0]);
+  const PetscReal xi  = mul_rn(invJ[0], point[0] - v0[0]);
 
   return (xi >= -eps) && (xi <= 2. + eps) ? PETSC_TRUE : PETSC_FALSE;
 }
 
 PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Triangle(const PetscReal point[], const PetscReal v0[], const PetscReal invJ[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscReal eps   = PETSC_SQRT_MACHINE_EPSILON;
   PetscReal       xi[2] = {0., 0.};
 
   for (PetscInt i = 0; i < 2; ++i) {
-    for (PetscInt j = 0; j < 2; ++j) xi[i] += invJ[i * 2 + j] * (point[j] - v0[j]);
+    for (PetscInt j = 0; j < 2; ++j) xi[i] += mul_rn(invJ[i * 2 + j], point[j] - v0[j]);
   }
   return (xi[0] >= -eps) && (xi[1] >= -eps) && (xi[0] + xi[1] <= 2.0 + eps) ? PETSC_TRUE : PETSC_FALSE;
 }
 
 PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Tetrahedron(const PetscReal point[], const PetscReal v0[], const PetscReal invJ[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscReal eps = PETSC_SQRT_MACHINE_EPSILON;
   const PetscReal x   = point[0];
   const PetscReal y   = point[1];
   const PetscReal z   = point[2];
   PetscReal       xi, eta, zeta;
 
-  xi   = invJ[0 * 3 + 0] * (x - v0[0]) + invJ[0 * 3 + 1] * (y - v0[1]) + invJ[0 * 3 + 2] * (z - v0[2]);
-  eta  = invJ[1 * 3 + 0] * (x - v0[0]) + invJ[1 * 3 + 1] * (y - v0[1]) + invJ[1 * 3 + 2] * (z - v0[2]);
-  zeta = invJ[2 * 3 + 0] * (x - v0[0]) + invJ[2 * 3 + 1] * (y - v0[1]) + invJ[2 * 3 + 2] * (z - v0[2]);
+  xi   = mul_rn(invJ[0 * 3 + 0], x - v0[0]) + mul_rn(invJ[0 * 3 + 1], y - v0[1]) + mul_rn(invJ[0 * 3 + 2], z - v0[2]);
+  eta  = mul_rn(invJ[1 * 3 + 0], x - v0[0]) + mul_rn(invJ[1 * 3 + 1], y - v0[1]) + mul_rn(invJ[1 * 3 + 2], z - v0[2]);
+  zeta = mul_rn(invJ[2 * 3 + 0], x - v0[0]) + mul_rn(invJ[2 * 3 + 1], y - v0[1]) + mul_rn(invJ[2 * 3 + 2], z - v0[2]);
 
   return (xi >= -eps) && (eta >= -eps) && (zeta >= -eps) && (xi + eta + zeta <= 2.0 + eps) ? PETSC_TRUE : PETSC_FALSE;
 }
@@ -94,7 +96,6 @@ PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Tetrahedron(const PetscR
 // The ray-casting, or even-odd algorithm, identical to DMPlexLocatePoint_Quad_2D_Linear_Internal()
 PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Quadrilateral(const PetscReal point[], const PetscReal coords[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscInt  faces[8]  = {0, 1, 1, 2, 2, 3, 3, 0};
   const PetscReal x         = point[0];
   const PetscReal y         = point[1];
@@ -112,7 +113,7 @@ PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Quadrilateral(const Pets
       break;
     }
     if ((y_j > y) != (y_i > y)) {
-      const PetscReal slope = (x - x_j) * (y_i - y_j) - (x_i - x_j) * (y - y_j);
+      const PetscReal slope = mul_rn(x - x_j, y_i - y_j) - mul_rn(x_i - x_j, y - y_j);
 
       if (slope == 0) {
         // point is a corner
@@ -128,7 +129,6 @@ PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Quadrilateral(const Pets
 // The six half-space tests of DMPlexLocatePoint_Hex_3D_Linear_Internal()
 PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Hexahedron(const PetscReal point[], const PetscReal coords[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscInt faces[24] = {0, 3, 2, 1, 5, 4, 7, 6, 3, 0, 4, 5, 1, 2, 6, 7, 3, 5, 6, 2, 0, 1, 7, 4};
 
   for (PetscInt f = 0; f < 6; ++f) {
@@ -140,13 +140,13 @@ PETSC_DEVICE_INLINE_DECL static PetscBool ContainsPoint_Hexahedron(const PetscRe
     v_j[0]    = coords[faces[f * 4 + 1] * 3 + 0] - coords[faces[f * 4 + 0] * 3 + 0];
     v_j[1]    = coords[faces[f * 4 + 1] * 3 + 1] - coords[faces[f * 4 + 0] * 3 + 1];
     v_j[2]    = coords[faces[f * 4 + 1] * 3 + 2] - coords[faces[f * 4 + 0] * 3 + 2];
-    normal[0] = v_i[1] * v_j[2] - v_i[2] * v_j[1];
-    normal[1] = v_i[2] * v_j[0] - v_i[0] * v_j[2];
-    normal[2] = v_i[0] * v_j[1] - v_i[1] * v_j[0];
+    normal[0] = mul_rn(v_i[1], v_j[2]) - mul_rn(v_i[2], v_j[1]);
+    normal[1] = mul_rn(v_i[2], v_j[0]) - mul_rn(v_i[0], v_j[2]);
+    normal[2] = mul_rn(v_i[0], v_j[1]) - mul_rn(v_i[1], v_j[0]);
     pp[0]     = coords[faces[f * 4 + 0] * 3 + 0] - point[0];
     pp[1]     = coords[faces[f * 4 + 0] * 3 + 1] - point[1];
     pp[2]     = coords[faces[f * 4 + 0] * 3 + 2] - point[2];
-    dot       = normal[0] * pp[0] + normal[1] * pp[1] + normal[2] * pp[2];
+    dot       = mul_rn(normal[0], pp[0]) + mul_rn(normal[1], pp[1]) + mul_rn(normal[2], pp[2]);
 
     if (dot < 0.0) return PETSC_FALSE;
   }
@@ -179,7 +179,6 @@ PETSC_DEVICE_INLINE_DECL static PetscBool CellContainsPoint(const DMPlexLocateCt
 // The upper-snap bin query of PetscGridHashGetEnclosingBoxQuery() (which has no lower snap)
 PETSC_DEVICE_INLINE_DECL static PetscBool EnclosingBin(const DMPlexLocateCtx &ctx, const PetscReal point[], PetscInt *bin) noexcept
 {
-#pragma clang fp contract(off)
   const PetscInt dim     = ctx.cdim;
   PetscInt       dbin[3] = {-1, -1, -1}, b;
 

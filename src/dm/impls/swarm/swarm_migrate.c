@@ -172,7 +172,6 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     swarm->de_layout_id = layout_id;
   }
   PetscCall(DMSwarmDataExTopologyGetNeighbours(de, &mynneigh, &myneigh));
-#if PetscDefined(HAVE_HIP)
   if (use_device) {
     /*
      Device migration fork: the particle payload stays in device memory end to end. The send
@@ -190,15 +189,15 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     void        *dest_d, *recv_d;
 
     PetscCall(DMSwarmGetFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
-    PetscCheck(PetscMemTypeDevice(mti), PetscObjectComm((PetscObject)dm), PETSC_ERR_PLIB, "hip-backend swarm returned a host pointer for its cell id field");
-    PetscCall(DMSwarmSentListCreate_HIP(0, npoints, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
+    PetscCheck(PetscMemTypeDevice(mti), PetscObjectComm((PetscObject)dm), PETSC_ERR_PLIB, "device-backend swarm returned a host pointer for its cell id field");
+    PetscCall((*swarm->db->ops.sentlistcreate)(swarm->db, 0, npoints, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
     PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
     /* every unlocated point is sent to every neighbour, so the count is nsent per neighbour exactly as in the host loops */
     PetscCall(DMSwarmDataExInitializeSendCount(de));
     for (r = 0; r < mynneigh; r++) PetscCall(DMSwarmDataExAddToSendCount(de, myneigh[r], nsent));
     PetscCall(DMSwarmDataExFinalizeSendCount(de));
     for (PetscInt f = 0; f < swarm->db->nfields; f++) record_size += swarm->db->field[f]->atomic_size;
-    PetscCall(DMSwarmDataExSetMemType(de, PETSC_MEMTYPE_HIP));
+    PetscCall(DMSwarmDataExSetMemType(de, swarm->db->memtype));
     PetscCall(DMSwarmDataExPackInitialize(de, record_size));
     for (r = 0; r < mynneigh; r++) {
       /* reserving this neighbour's segment and gathering the same ascending list into it reproduces the host segment bytes */
@@ -214,7 +213,7 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
       PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " sent points on the device\n", nsent));
     }
-    PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
+    PetscCall((*swarm->db->ops.sentlistdestroy)(swarm->db, &sentlist_d));
     PetscCall(DMSwarmDataBucketGetSizes(swarm->db, npoints_prior_migration, NULL, NULL));
     PetscCall(DMSwarmDataExBegin(de));
     PetscCall(DMSwarmDataExEnd(de));
@@ -224,7 +223,6 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
     PetscCall(PetscInfo(dm, "DMSwarmMigrate: unpacked %" PetscInt_FMT " received points on the device\n", n_points_recv));
     PetscFunctionReturn(PETSC_SUCCESS);
   }
-#endif
   PetscCall(DMSwarmDataExInitializeSendCount(de));
   for (p = 0; p < npoints; p++) {
     if (p_cellid[p] == DMLOCATEPOINT_POINT_NOT_FOUND) {
@@ -286,24 +284,25 @@ static PetscErrorCode DMSwarmMigrate_DMNeighborScatter(DM dm, DM dmcell, PetscBo
 }
 
 /*
- Attempt the point-location step of DMSwarmMigrate_CellDMScatter() on the device. For a hip-backend
- swarm whose cell DM is a DMPlex with a usable point-location geometry cache, the cell ids of the
- points [pStart, pStart + npoints) are computed in place in the cell id field's device mirror from
- the coordinate field's device mirror, reproducing the host location decisions bitwise, see
- DMPlexLocatePointsInPlace_Internal_HIP(). When useSeeds is PETSC_FALSE the incoming cell ids
- (freshly received points carry the sender's local cell numbers) are reset first by a device fill
- of the cell id range, matching the host path which locates received points through a fresh cell
- SF while keeping the cell id field off the host. On return *located indicates whether
- the device path ran; otherwise (host backend, non-DMPlex cell DM, unusable cache, multiple
- coordinate fields) the caller must run the host location path unchanged. The decision is made
- collectively consistent because the host path performs collective operations.
+ Attempt the point-location step of DMSwarmMigrate_CellDMScatter() on the device. For a CUDA- or
+ HIP-backend swarm whose cell DM is a DMPlex with a usable point-location geometry cache, the cell
+ ids of the points [pStart, pStart + npoints) are computed in place in the cell id field's device
+ mirror from the coordinate field's device mirror, reproducing the host location decisions
+ bitwise, see DMPlexLocatePointsInPlace_Internal_CUDA() and DMPlexLocatePointsInPlace_Internal_HIP().
+ When useSeeds is PETSC_FALSE the incoming cell ids (freshly received points carry the sender's
+ local cell numbers) are reset first by a device fill of the cell id range, matching the host path
+ which locates received points through a fresh cell SF while keeping the cell id field off the
+ host. On return *located indicates whether the device path ran; otherwise (host backend,
+ non-DMPlex cell DM, unusable cache, multiple coordinate fields) the caller must run the host
+ location path unchanged. The decision is made collectively consistent because the host path
+ performs collective operations.
 */
 static PetscErrorCode DMSwarmMigrate_LocatePointsDevice_Private(DM dm, DM dmcell, PetscInt pStart, PetscInt npoints, PetscBool useSeeds, PetscBool *located)
 {
   PetscFunctionBegin;
   *located = PETSC_FALSE;
-#if PetscDefined(HAVE_HIP)
-  if (((DM_Swarm *)dm->data)->backend == DMSWARM_BACKEND_HIP) {
+#if PetscDefined(HAVE_CUPM)
+  if (((DM_Swarm *)dm->data)->backend == DMSWARM_BACKEND_CUDA || ((DM_Swarm *)dm->data)->backend == DMSWARM_BACKEND_HIP) {
     DMSwarmCellDM celldm;
     PetscInt      Nfc, ok = 0;
     const char  **coordFields, *cellid;
@@ -333,12 +332,16 @@ static PetscErrorCode DMSwarmMigrate_LocatePointsDevice_Private(DM dm, DM dmcell
 
         /* reset the seeds in the device mirror directly; a host loop here would round-trip the whole cell id field through the host every migration cycle */
         PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(((DM_Swarm *)dm->data)->db, cellid, &cfield));
-        PetscCall(DMSwarmDataFieldFillIntRange_HIP(cfield, pStart, pStart + npoints, DMLOCATEPOINT_POINT_NOT_FOUND));
+        PetscCall((*((DM_Swarm *)dm->data)->db->ops.fieldfillintrange)(cfield, pStart, pStart + npoints, DMLOCATEPOINT_POINT_NOT_FOUND));
       }
       PetscCall(DMSwarmGetFieldReadAndMemType(dm, coordFields[0], &bs, NULL, &mtc, (void **)&coords_d));
       PetscCall(DMSwarmGetFieldAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
-      PetscCheck(PetscMemTypeDevice(mtc) && PetscMemTypeDevice(mti), PetscObjectComm((PetscObject)dm), PETSC_ERR_PLIB, "hip-backend swarm returned host pointers for its fields");
+      PetscCheck(PetscMemTypeDevice(mtc) && PetscMemTypeDevice(mti), PetscObjectComm((PetscObject)dm), PETSC_ERR_PLIB, "device-backend swarm returned host pointers for its fields");
+  #if PetscDefined(HAVE_CUDA)
+      PetscCall(DMPlexLocatePointsInPlace_Internal_CUDA(dmcell, npoints, bs, coords_d + pStart * bs, cellids_d + pStart));
+  #elif PetscDefined(HAVE_HIP)
       PetscCall(DMPlexLocatePointsInPlace_Internal_HIP(dmcell, npoints, bs, coords_d + pStart * bs, cellids_d + pStart));
+  #endif
       PetscCall(DMSwarmRestoreFieldAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, coordFields[0], &bs, NULL, &mtc, (void **)&coords_d));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: located %" PetscInt_FMT " points on the device\n", npoints));
@@ -415,15 +418,13 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
     PetscCall(PetscSFDestroy(&sfcell));
     PetscCall(DMSwarmRestoreField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
   }
-#if PetscDefined(HAVE_HIP)
   if (located_on_device) {
     DMSwarmDataField rfield;
 
     /* Cell ids were written in place in the cell id field's device mirror; the owning rank is recorded by a device fill so the rank field never round-trips through the host */
     PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, DMSwarmField_rank, &rfield));
-    PetscCall(DMSwarmDataFieldFillIntRange_HIP(rfield, 0, npoints, (PetscInt)rank));
+    PetscCall((*swarm->db->ops.fieldfillintrange)(rfield, 0, npoints, (PetscInt)rank));
   }
-#endif
 
   if (size > 1) {
     PetscCall(DMSwarmMigrate_DMNeighborScatter(dm, dmcell, remove_sent_points, located_on_device, &npoints_prior_migration));
@@ -451,7 +452,6 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
         PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       }
     }
-#if PetscDefined(HAVE_HIP)
     if (located_on_device && remove_sent_points) {
       /* device fork of the loop above: the compaction replays the host swap-with-last survivor order, see DMSwarmDataBucketCompact() */
       PetscInt    *cellids_d, *sentlist_d = NULL;
@@ -461,14 +461,13 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
       PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints_curr, NULL, NULL));
       PetscCall(DMSwarmGetFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
-      PetscCall(DMSwarmSentListCreate_HIP(0, npoints_curr, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
+      PetscCall((*swarm->db->ops.sentlistcreate)(swarm->db, 0, npoints_curr, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
       PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmDataBucketCompact(swarm->db, nsent, sentlist_d));
-      PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
+      PetscCall((*swarm->db->ops.sentlistdestroy)(swarm->db, &sentlist_d));
       PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " sent points on the device\n", nsent));
     }
-#endif
     PetscCall(DMSwarmGetLocalSize(dm, &npoints_prior_migration));
   }
 
@@ -529,15 +528,13 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
       PetscCall(PetscSFDestroy(&sfcell));
       PetscCall(DMSwarmRestoreField(dm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
     }
-#if PetscDefined(HAVE_HIP)
     if (located_on_device) {
       DMSwarmDataField rfield;
 
       /* Cell ids of the received points were written in place in the cell id field's device mirror; the owning rank is recorded by a device fill so the rank field never round-trips through the host */
       PetscCall(DMSwarmDataBucketGetDMSwarmDataFieldByName(swarm->db, DMSwarmField_rank, &rfield));
-      PetscCall(DMSwarmDataFieldFillIntRange_HIP(rfield, npoints_prior_migration, npoints_prior_migration + npoints_from_neighbours, (PetscInt)rank));
+      PetscCall((*swarm->db->ops.fieldfillintrange)(rfield, npoints_prior_migration, npoints_prior_migration + npoints_from_neighbours, (PetscInt)rank));
     }
-#endif
 
     /* remove points which left processor */
     if (!located_on_device) {
@@ -559,7 +556,6 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
         PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       }
     }
-#if PetscDefined(HAVE_HIP)
     if (located_on_device && remove_sent_points) {
       /*
        Device fork of the loop above, restricted to the received tail [npoints_prior_migration,
@@ -573,14 +569,13 @@ PetscErrorCode DMSwarmMigrate_CellDMScatter(DM dm, PetscBool remove_sent_points)
       PetscCall(PetscLogEventBegin(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(DMSwarmDataBucketGetSizes(swarm->db, &npoints2, NULL, NULL));
       PetscCall(DMSwarmGetFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
-      PetscCall(DMSwarmSentListCreate_HIP(npoints_prior_migration, npoints2, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
+      PetscCall((*swarm->db->ops.sentlistcreate)(swarm->db, npoints_prior_migration, npoints2, DMLOCATEPOINT_POINT_NOT_FOUND, cellids_d, &nsent, &sentlist_d));
       PetscCall(DMSwarmRestoreFieldReadAndMemType(dm, cellid, NULL, NULL, &mti, (void **)&cellids_d));
       PetscCall(DMSwarmDataBucketCompact(swarm->db, nsent, sentlist_d));
-      PetscCall(DMSwarmSentListDestroy_HIP(&sentlist_d));
+      PetscCall((*swarm->db->ops.sentlistdestroy)(swarm->db, &sentlist_d));
       PetscCall(PetscLogEventEnd(DMSWARM_RemovePoints, 0, 0, 0, 0));
       PetscCall(PetscInfo(dm, "DMSwarmMigrate: compacted away %" PetscInt_FMT " unlocated received points on the device\n", nsent));
     }
-#endif
   }
 
   /* check for error on removed points */

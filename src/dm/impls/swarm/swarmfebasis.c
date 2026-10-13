@@ -161,7 +161,9 @@ PetscErrorCode DMSwarmFEBasisGetDevice_Internal(PetscObject disc, DMSwarmFEBasis
 {
   PetscFunctionBegin;
   PetscCall(DMSwarmFEBasisGet_Internal(disc, basis));
-#if PetscDefined(HAVE_HIP)
+#if PetscDefined(HAVE_CUDA)
+  if ((*basis)->supported && !(*basis)->freedevice) PetscCall(DMSwarmFEBasisUpload_CUDA(*basis));
+#elif PetscDefined(HAVE_HIP)
   if ((*basis)->supported && !(*basis)->freedevice) PetscCall(DMSwarmFEBasisUpload_HIP(*basis));
 #endif
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -229,7 +231,9 @@ PetscErrorCode DMSwarmCellGeometryGetDevice_Internal(DM dm, DMSwarmCellGeometry 
     PetscCall(PetscObjectContainerCompose((PetscObject)dm, "_DMSwarmCellGeometry", g, DMSwarmCellGeometryDestroy_Private));
     PetscCall(PetscInfo(dm, "Built the particle mass matrix cell geometry for %" PetscInt_FMT " cells\n", cEnd - cStart));
   }
-#if PetscDefined(HAVE_HIP)
+#if PetscDefined(HAVE_CUDA)
+  if (!g->freedevice) PetscCall(DMSwarmCellGeometryUpload_CUDA(g));
+#elif PetscDefined(HAVE_HIP)
   if (!g->freedevice) PetscCall(DMSwarmCellGeometryUpload_HIP(g));
 #endif
   *geom = g;

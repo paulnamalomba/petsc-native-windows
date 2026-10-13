@@ -1358,4 +1358,77 @@ int main(int argc, char **argv)
              -field_petscdualspace_lagrange_trimmed true\
              -ksp_gmres_restart 500
 
+   # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_type basicsymplectic\
+           -dm_view -output_step 50 -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10
+     test:
+       suffix: none_bsi_2d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -em_type none -error -dm_swarm_backend cuda
+       output_file: output/ex6_none_bsi_2d_1.out
+     test:
+       suffix: coulomb_bsi_2d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex6_coulomb_bsi_2d_1.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_type basicsymplectic\
+           -em_type primal -em_pc_type svd\
+           -dm_view -output_step 50 -error -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10\
+           -petscspace_degree 2 -petscfe_default_quadrature_order 3 -sigma 1.0e-8 -timeScale 2.0e-14
+     test:
+       suffix: poisson_bsi_2d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex6_poisson_bsi_2d_1.out
+     test:
+       suffix: poisson_bsi_2d_1_dm_mat_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_vec_type cuda -dm_mat_type aijcusparse
+       output_file: output/ex6_poisson_bsi_2d_1.out
+     test:
+       suffix: poisson_bsi_2d_1_dm_mat_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_vec_type cuda -dm_mat_type aijcusparse -dm_swarm_backend cuda
+       output_file: output/ex6_poisson_bsi_2d_1.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_convergence_estimate -convest_num_refine 2 -em_type primal \
+           -mat_type baij -em_ksp_error_if_not_converged -em_pc_type svd \
+           -dm_view -output_step 50 -error -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10 \
+           -sigma 1.0e-8 -timeScale 2.0e-14
+     test:
+       suffix: dg_2d_average_backend_cuda
+       requires: cuda
+       args: -ts_type discgrad -ts_discgrad_type average -snes_type qn -dm_swarm_backend cuda
+       output_file: output/ex6_dg_2d_average.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 10,10 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 -petscpartitioner_type simple \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV -dm_swarm_num_species 1\
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -em_snes_type ksponly -em_pc_type svd -em_type primal -petscspace_degree 1\
+           -dm_view -output_step 50\
+           -pc_type svd -sigma 1.0e-8 -timeScale 2.0e-14 -ts_time_step 0.01 -ts_max_time 1.0 -ts_max_steps 10
+     test:
+       suffix: bsi_2d_mesh_1_par_2_backend_cuda
+       requires: cuda
+       nsize: 2
+       args: -ts_basicsymplectic_type 4 -dm_swarm_backend cuda
+       output_file: output/ex6_bsi_2d_mesh_1_par_2.out
+     test:
+       suffix: bsi_2d_mesh_1_par_4_backend_cuda
+       requires: cuda
+       nsize: 4
+       args: -ts_basicsymplectic_type 4 -dm_swarm_num_particles 0,0,2,0 -dm_swarm_backend cuda
+       output_file: output/ex6_bsi_2d_mesh_1_par_4.out
 TEST*/

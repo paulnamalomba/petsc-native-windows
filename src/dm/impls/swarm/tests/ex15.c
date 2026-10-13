@@ -471,4 +471,50 @@ int main(int argc, char **argv)
       suffix: rank_sweep_np4_backend_hip
       requires: hip
       args: -dm_swarm_backend hip
+
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  testset:
+    nsize: 2
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,4 -petscpartitioner_type simple\
+          -particle_order 2 -nsteps 4 -dt 0.1
+    output_file: output/ex15_migrate.out
+    test:
+      suffix: migrate_backend_cuda_scan
+      requires: cuda
+      args: -dm_plex_hash_location false -dm_swarm_backend cuda
+    test:
+      suffix: migrate_backend_cuda_hash
+      requires: cuda
+      args: -dm_plex_hash_location true -dm_swarm_backend cuda
+  testset:
+    nsize: 2
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,4 -petscpartitioner_type simple\
+          -particle_order 2 -nsteps 4 -dt 0.1 -report_timings
+    test:
+      suffix: timings_backend_cuda_scan
+      requires: cuda
+      args: -dm_plex_hash_location false -dm_swarm_backend cuda
+    test:
+      suffix: timings_backend_cuda_hash
+      requires: cuda
+      args: -dm_plex_hash_location true -dm_swarm_backend cuda
+  testset:
+    nsize: 2
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,4 -petscpartitioner_type simple\
+          -particle_order 2 -nsteps 4 -dt 0.1 -dm_plex_hash_location true -check
+    output_file: output/ex15_check.out
+    test:
+      suffix: check_backend_cuda_hash
+      requires: cuda
+      args: -dm_swarm_backend cuda
+  testset:
+    nsize: 4
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,16 -dm_plex_box_upper 1,1,4\
+          -petscpartitioner_type simple -particle_order 1 -nsteps 4 -dt 0.2 -push_distance 0.5\
+          -dm_plex_hash_location true
+    output_file: output/ex15_rank_sweep_np4.out
+    test:
+      suffix: rank_sweep_np4_backend_cuda
+      requires: cuda
+      args: -dm_swarm_backend cuda
 TEST*/

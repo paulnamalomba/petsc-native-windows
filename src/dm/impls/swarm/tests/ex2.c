@@ -1064,4 +1064,122 @@ int main(int argc, char *argv[])
       suffix: proj_bench_np4_dm_mat_backend_hip
       requires: hip
       args: -dm_swarm_backend hip -dm_vec_type hip -dm_mat_type aijhipsparse
+
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  test:
+    suffix: proj_tri_2_faces_backend_cuda
+    requires: triangle cuda
+    args: -dm_plex_box_faces 2,2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_2_faces.out
+  test:
+    suffix: proj_quad_backend_cuda_serial
+    requires: triangle cuda
+    nsize: 1
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type cuda -mat_type aijcusparse -ptof_ksp_type cg -ptof_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_serial.out
+  test:
+    suffix: proj_quad_cuda_parallel_backend_cuda
+    requires: triangle cuda
+    nsize: 2
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type cuda -mat_type aijcusparse -ptof_ksp_type cg -ptof_pc_type asm -ptof_sub_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_parallel.out
+  testset:
+    requires: triangle cuda
+    nsize: 2
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 8,8 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -dm_vec_type cuda -ptof_ksp_type cg -ptof_pc_type asm -ptof_sub_pc_type ilu -ptof_ksp_rtol 1e-15 -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_hip_parallel.out
+    test:
+      suffix: proj_quad_cuda_parallel_mass_legacy
+      args: -mat_type aijcusparse -dm_swarm_mass_coo 0
+    test:
+      suffix: proj_quad_cuda_parallel_dm_mat
+      args: -dm_mat_type aijcusparse
+    test:
+      suffix: proj_quad_cuda_parallel_dm_mat_backend_cuda
+      args: -dm_mat_type aijcusparse -dm_swarm_backend cuda
+  test:
+    suffix: proj_tri_5P_backend_cuda
+    requires: triangle cuda
+    args: -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_5P.out
+  test:
+    suffix: proj_quad_5P_backend_cuda
+    requires: triangle cuda
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -particlesPerCell 5 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_5P.out
+  test:
+    suffix: proj_tri_mdx_backend_cuda
+    requires: triangle cuda
+    args: -dm_plex_box_faces 1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_mdx.out
+  test:
+    suffix: proj_quad_mdx_backend_cuda
+    requires: cuda
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 2,2 -mesh_perturbation 1.0e-1 -moment_tol 5.0e-2 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_quad_mdx.out
+  test:
+    suffix: proj_tri_3d_backend_cuda
+    requires: ctetgen cuda
+    args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d.out
+  test:
+    suffix: proj_tri_3d_mdx_backend_cuda
+    requires: ctetgen cuda
+    args: -dm_plex_dim 3 -dm_plex_box_faces 1,1,1 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d_mdx.out
+  test:
+    suffix: proj_tri_3d_mdx_2_faces_backend_cuda
+    requires: ctetgen cuda
+    args: -dm_plex_dim 3 -dm_plex_box_faces 2,2,2 -mesh_perturbation 1.0e-1 -dm_view -sw_view -petscspace_degree 2 -petscfe_default_quadrature_order {{2 3}} -ptof_pc_type lu -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none -dm_swarm_backend cuda
+    filter: grep -v marker | grep -v atomic | grep -v usage
+    output_file: output/ex2_proj_tri_3d_mdx_2_faces.out
+  testset:
+    requires: cuda !complex
+    output_file: output/ex2_proj_quad_lsqr_prec_scale.out
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 4,4 \
+      -petscspace_degree 2 -petscfe_default_quadrature_order 3 \
+      -particlesPerCell 200 \
+      -ptof_pc_type lu \
+      -ftop_ksp_rtol 1e-17 -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero \
+      -dm_vec_type cuda -dm_mat_type aijcusparse
+    test:
+      suffix: proj_quad_lsqr_prec_scale_dm_mat_cuda
+    test:
+      suffix: proj_quad_lsqr_prec_scale_dm_mat_backend_cuda
+      args: -dm_swarm_backend cuda
+  test:
+    suffix: proj_shape_linear_quad_2d_mdx_backend_cuda
+    nsize: 2
+    requires: cuda
+    args: -shape -dm_plex_simplex 0 -dm_plex_box_faces 4,4\
+          -mesh_perturbation 1.0e-1\
+          -dm_view -sw_view\
+          -petscspace_degree 1 -petscfe_default_quadrature_order 1\
+          -pc_type redundant -dm_swarm_backend cuda
+    output_file: output/ex2_proj_shape_linear_quad_2d_mdx.out
+  testset:
+    nsize: 4
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 4,4,8 -dm_plex_box_upper 1,1,2\
+          -petscpartitioner_type simple -petscspace_degree 2 -particlesPerCell 8 -num_projections 2\
+          -ptof_ksp_type cg -ptof_pc_type jacobi -ptof_ksp_rtol 1e-14 -moment_tol 1e-10\
+          -num_reverse_projections 1 -ftop_ksp_type lsqr -ftop_pc_type none -ftop_ksp_rtol 1e-14
+    output_file: output/ex2_proj_bench_np4.out
+    test:
+      suffix: proj_bench_np4_dm_mat_cuda
+      requires: cuda
+      args: -dm_vec_type cuda -dm_mat_type aijcusparse
+    test:
+      suffix: proj_bench_np4_dm_mat_backend_cuda
+      requires: cuda
+      args: -dm_swarm_backend cuda -dm_vec_type cuda -dm_mat_type aijcusparse
 TEST*/

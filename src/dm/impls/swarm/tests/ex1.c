@@ -404,4 +404,90 @@ int main(int argc, char **argv)
           -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
           -dm_plex_hash_location false -dm_swarm_backend hip -use_gpu_aware_mpi 1
     output_file: output/ex1_swarm_migrate_scan_np4.out
+
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  test:
+    suffix: swarm_migrate_backend_cuda_scan
+    nsize: 2
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type cuda -dm_plex_hash_location false\
+          -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_vec_hip_scan.out
+  test:
+    suffix: swarm_migrate_backend_cuda_scan_no_gpu_aware
+    nsize: 2
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type cuda -dm_plex_hash_location false\
+          -dm_swarm_backend cuda -use_gpu_aware_mpi 0
+    output_file: output/ex1_swarm_migrate_vec_hip_scan.out
+  test:
+    suffix: swarm_migrate_backend_cuda_hash
+    nsize: 2
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type cuda -dm_plex_hash_location true\
+          -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_vec_hip_hash.out
+  test:
+    suffix: swarm_migrate_backend_cuda_hash_tensor_permutation
+    nsize: 2
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,10\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_vec_type cuda -dm_plex_hash_location true\
+          -set_closure_permutation -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_vec_hip_hash_tensor_permutation.out
+  test:
+    suffix: swarm_migrate_backend_cuda_tri
+    nsize: 2
+    requires: triangle cuda
+    args: -dm_plex_dim 2 -dm_plex_simplex 1 -dm_distribute_overlap 1 -dm_plex_box_faces 4,16\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_tri.out
+  test:
+    suffix: swarm_migrate_backend_cuda_tet
+    nsize: 2
+    requires: ctetgen cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 1 -dm_plex_reorder rcm -dm_distribute_overlap 1\
+          -dm_plex_box_faces 2,2,8 -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10.\
+          -dm_plex_box_bd none,none,none -dm_plex_hash_location false -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_tet.out
+  test:
+    suffix: swarm_migrate_backend_cuda_coord_deg2
+    nsize: 2
+    requires: cuda
+    args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10\
+          -dm_plex_box_lower 0.,0. -dm_plex_box_upper 1.,10. -dm_plex_box_bd none,none\
+          -dm_plex_hash_location false -dm_coord_petscspace_degree 2 -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_coord_deg2.out
+  test:
+    suffix: swarm_migrate_backend_cuda_scan_np4
+    nsize: 4
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend cuda
+    output_file: output/ex1_swarm_migrate_scan_np4.out
+  test:
+    suffix: swarm_migrate_backend_cuda_scan_np4_no_gpu_aware
+    nsize: 4
+    requires: cuda
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend cuda -use_gpu_aware_mpi 0
+    output_file: output/ex1_swarm_migrate_scan_np4.out
+  test:
+    suffix: swarm_migrate_backend_cuda_scan_np4_gpu_aware
+    nsize: 4
+    requires: cuda defined(PETSC_HAVE_MPI_GPU_AWARE)
+    args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_distribute_overlap 1 -dm_plex_box_faces 10,10,8\
+          -dm_plex_box_lower 0.,0.,0. -dm_plex_box_upper 1.,1.,10. -dm_plex_box_bd none,none,none\
+          -dm_plex_hash_location false -dm_swarm_backend cuda -use_gpu_aware_mpi 1
+    output_file: output/ex1_swarm_migrate_scan_np4.out
 TEST*/

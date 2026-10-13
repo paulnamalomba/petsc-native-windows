@@ -153,4 +153,13 @@ int main(int argc, char **args)
       suffix: p4
       nsize: 4
 
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  testset:
+    suffix: 2d_cuda
+    args: -dim 2 -da_grid_x 8 -da_grid_y 8 -np 4 -da_bd_all {{none periodic}} -pic_sw_view
+    test:
+      suffix: p1
+      requires: cuda
+      args: -pic_dm_swarm_backend cuda
+      output_file: output/ex12_2d_p1.out
 TEST*/

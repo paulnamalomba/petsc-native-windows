@@ -32,16 +32,14 @@ struct DMSwarmFEBasisCtx {
 };
 
 /*
-  The evaluation below reproduces PetscFECreateTabulation() (B only) for the bases DMSwarmFEBasisGet_Internal() accepts,
-  operation for operation, so that the results are bitwise identical to the host: the point loop of
-  PetscDTPKDEvalJet() (jet 0) followed by its scaling, or the coordinate basis of PetscSpaceEvaluate_Polynomial() for
-  degree 1; the products of PetscSpaceEvaluate_Tensor() in factor order; and the BLAS gemm of TensorContract_Private()
-  in its reference loop order (C = 0, then C += invV[l, n] * prime[l] for increasing l). Floating-point contraction is
-  disabled because the host library and its BLAS are built for a target without fused multiply-add.
+  The evaluation below computes PetscFECreateTabulation() (B only) for the bases DMSwarmFEBasisGet_Internal() accepts,
+  with the same steps: the point loop of PetscDTPKDEvalJet() (jet 0) followed by its scaling, or the coordinate basis of
+  PetscSpaceEvaluate_Polynomial() for degree 1; the products of PetscSpaceEvaluate_Tensor() in factor order; and the
+  contraction of TensorContract_Private() with invV. The values agree with the host to rounding: the device compiler
+  may contract multiply-adds, which the host library (built for a target without fused multiply-add) does not.
 */
 PETSC_DEVICE_INLINE_DECL static void DMSwarmFEBasisFactorPrime(const DMSwarmFEBasisCtx &ctx, const PetscReal x[], PetscReal p[]) noexcept
 {
-#pragma clang fp contract(off)
   const PetscInt dim = ctx.fdim;
 
   switch (ctx.ptype) {
@@ -79,7 +77,6 @@ PETSC_DEVICE_INLINE_DECL static void DMSwarmFEBasisFactorPrime(const DMSwarmFEBa
 /* B[pdim]: the nodal basis functions at the reference point xi[dim] */
 PETSC_DEVICE_INLINE_DECL static void DMSwarmFEBasisTabulate(const DMSwarmFEBasisCtx &ctx, const PetscReal xi[], PetscReal B[]) noexcept
 {
-#pragma clang fp contract(off)
   PetscReal prime[DMSWARM_FEBASIS_MAX_PDIM];
 
   if (ctx.tensor) {
@@ -128,13 +125,12 @@ struct DMSwarmMassCtx {
 /*
   One thread per sort CSR slot q, writing the numF values of the particle in that slot at q * numF, the position
   DMSwarmComputeMassMatrixCOO_Private() gives them on the host: CoordinatesRealToRef() with the reference origin -1,
-  the tabulation above, and the elemMat entry 0.0 += B * w of DMSwarmFillMassMatrix(), all without contraction.
+  the tabulation above, and the elemMat entry 0.0 += B * w of DMSwarmFillMassMatrix().
 */
 PETSC_KERNEL_DECL static void mass_values(const DMSwarmMassCtx ctx, const PetscInt npoints, PetscScalar *PETSC_RESTRICT vals)
 {
 #if !PetscDefined(USE_COMPLEX)
   ::Petsc::device::cupm::kernels::util::grid_stride_1D(npoints, [&](PetscInt q) {
-  #pragma clang fp contract(off)
     const PetscInt   dim = ctx.basis.dim, c = ctx.cell[q];
     const PetscReal *x  = &ctx.coords[ctx.list[q] * dim];
     const PetscReal *v0 = &ctx.v0[c * dim], *invJ = &ctx.invJ[c * dim * dim];
@@ -176,13 +172,12 @@ struct DMSwarmMassSquareCtx {
   one, whatever the particle distribution. A thread block of 256 threads computes one tile: it stages the basis values
   of the tile's rows and columns in shared memory (each a contiguous range of B, as the slots of a cell are), then each
   thread accumulates a 2 x 2 register tile, with consecutive threads writing consecutive entries of a row. Every entry
-  is summed in increasing k from 0.0 without contraction, the loop of the reference BLAS gemm that
-  DMSwarmComputeMassMatrixSquare_Private() calls, so the values match the host bitwise.
+  is summed in increasing k from 0.0, the loop order of the reference BLAS gemm that
+  DMSwarmComputeMassMatrixSquare_Private() calls; the values agree with the host to rounding.
 */
 PETSC_KERNEL_DECL static void mass_square_values(const DMSwarmMassSquareCtx ctx, PetscScalar *PETSC_RESTRICT vals)
 {
 #if !PetscDefined(USE_COMPLEX)
-  #pragma clang fp              contract(off)
   constexpr PetscInt            T = DMSWARM_MASS_SQUARE_TILE, H = T / 2;
   extern __shared__ PetscScalar mass_square_shared[];
   PetscScalar                  *rows = mass_square_shared, *cols = mass_square_shared + T * ctx.ld;

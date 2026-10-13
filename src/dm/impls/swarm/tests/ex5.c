@@ -685,4 +685,61 @@ int main(int argc, char **argv)
        args: -ts_type theta -ts_theta_theta 0.5 \
                -mat_type baij -ksp_error_if_not_converged -pc_type lu
 
+   # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -error -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10
+     test:
+       suffix: bsi_2d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex5_bsi_2d_1.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_type theta -ts_theta_theta 0.5 -ts_convergence_estimate -convest_num_refine 2 \
+             -mat_type baij -ksp_error_if_not_converged -pc_type lu \
+           -dm_view -output_step 50 -error -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10
+     test:
+       suffix: im_2d_0_backend_cuda
+       requires: cuda
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 -dm_swarm_backend cuda
+       output_file: output/ex5_im_2d_0.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 10,10 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 -petscpartitioner_type simple \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_function circleSingleX -dm_swarm_velocity_function circleSingleV \
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -ts_time_step 0.01 -ts_max_time 10.0 -ts_max_steps 10
+     test:
+       suffix: bsi_2d_mesh_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -error -dm_swarm_backend cuda
+       output_file: output/ex5_bsi_2d_mesh_1.out
+     test:
+       suffix: bsi_2d_mesh_1_par_2_backend_cuda
+       requires: cuda
+       nsize: 2
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex5_bsi_2d_mesh_1_par_2.out
+     test:
+       suffix: bsi_2d_mesh_1_par_4_backend_cuda
+       requires: cuda
+       nsize: 4
+       args: -ts_basicsymplectic_type 1 -dm_swarm_num_particles 0,0,2,0 -dm_swarm_backend cuda
+       output_file: output/ex5_bsi_2d_mesh_1_par_4.out
+   testset:
+     requires: defined(PETSC_HAVE_EXECUTABLE_EXPORT)
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 10,10 -dm_plex_box_lower -5,-5 -dm_plex_box_upper 5,5 \
+           -dm_swarm_num_particles 10 -dm_swarm_coordinate_function circleMultipleX -dm_swarm_velocity_function circleMultipleV \
+           -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: bsi_2d_multiple_1_backend_cuda
+       requires: cuda
+       args: -ts_type basicsymplectic -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex5_bsi_2d_multiple_1.out
 TEST*/

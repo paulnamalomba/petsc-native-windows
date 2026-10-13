@@ -137,4 +137,19 @@ int main(int argc, char **argv)
       suffix: bjacobi_dm_mat_backend_hip
       args: -dm_swarm_backend hip
 
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  testset:
+    requires: double triangle cuda
+    output_file: output/ex1_bjacobi.out
+    args: -dm_plex_simplex 0 -dm_plex_box_faces 4,2 -dm_plex_box_lower -2.0,0.0 -dm_plex_box_upper 2.0,2.0 \
+          -np 50 -petscspace_degree 2 -dm_plex_hash_location \
+          -ptof_ksp_type cg -ptof_pc_type ilu -ptof_ksp_rtol 1.e-14 \
+          -ftop_ksp_type lsqr -ftop_pc_type bjacobi -ftop_sub_pc_type lu -ftop_sub_pc_factor_shift_type nonzero \
+          -dm_view -swarm_view -ftop_ksp_rtol 1.e-14 -dm_vec_type cuda -dm_mat_type aijcusparse
+    filter: grep -v DM_ | grep -v atomic
+    test:
+      suffix: bjacobi_dm_mat_cuda
+    test:
+      suffix: bjacobi_dm_mat_backend_cuda
+      args: -dm_swarm_backend cuda
 TEST*/

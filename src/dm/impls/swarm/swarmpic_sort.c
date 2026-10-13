@@ -338,11 +338,13 @@ PetscErrorCode DMSwarmSortGetAccess(DM sw)
     PetscCall(DMSwarmSortDestroy(&ctx));
     PetscCall(DMSwarmCellDMGetSort(celldm, &ctx));
   }
-  /* Backend dispatch: a device-memtype bucket gets the device setup/destroy ops installed here,
+  /* Backend dispatch: a device-backend swarm gets the device setup/destroy ops installed here,
      the one place where the sort context meets the swarm (same precedent as the bucket ops
-     table, which is installed from DMSwarmSetBackend()). PetscDefined() keeps the branch
-     compiled out of non-HIP builds. */
-  if (PetscDefined(HAVE_HIP) && PetscMemTypeHIP(swarm->db->memtype)) PetscCall(DMSwarmSortSetUpDevice_HIP(ctx));
+     table, which is installed from DMSwarmSetBackend()). The backend rather than the memtype
+     decides, since PETSC_MEMTYPE_KOKKOS aliases a device memtype. PetscDefined() keeps each
+     branch compiled out of builds without its backend. */
+  if (PetscDefined(HAVE_CUDA) && swarm->backend == DMSWARM_BACKEND_CUDA) PetscCall(DMSwarmSortSetUpDevice_CUDA(ctx));
+  if (PetscDefined(HAVE_HIP) && swarm->backend == DMSWARM_BACKEND_HIP) PetscCall(DMSwarmSortSetUpDevice_HIP(ctx));
 
   /* get the number of cells */
   PetscCall(DMSwarmGetCellDM(sw, &dm));

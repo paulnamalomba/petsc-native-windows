@@ -206,4 +206,10 @@ int main(int argc, char **argv)
     args: -dm_swarm_backend hip -sw_view ::ascii_info_detail
     filter: grep -v atomic | grep -v usage
 
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  test:
+    suffix: cuda
+    requires: cuda
+    args: -dm_swarm_backend cuda -sw_view ::ascii_info_detail
+    filter: grep -v atomic | grep -v usage
 TEST*/

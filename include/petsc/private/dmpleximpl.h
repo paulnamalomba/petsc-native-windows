@@ -402,7 +402,10 @@ PETSC_INTERN PetscErrorCode DMPlexInvalidateStaleLocationCache_Internal(DM);
 PETSC_INTERN PetscErrorCode DMPlexGetLocationCache_Internal(DM, DMPlexLocationCache *);
 PETSC_INTERN PetscErrorCode DMPlexGetLocationCacheDevice_Internal(DM, DMPlexLocationCache *);
 PETSC_INTERN PetscErrorCode DMPlexLocationCacheDestroy_Internal(DMPlexLocationCache *);
-/* Defined in src/dm/impls/plex/cupm/hip/; declared unconditionally, call only when PetscDefined(HAVE_HIP) */
+/* Defined in src/dm/impls/plex/cupm/{cuda,hip}/; declared unconditionally, call only when PetscDefined(HAVE_CUDA) or PetscDefined(HAVE_HIP) respectively */
+PETSC_INTERN PetscErrorCode DMPlexLocationCacheUpload_CUDA(DMPlexLocationCache);
+PETSC_INTERN PetscErrorCode DMPlexLocationCacheFreeDevice_CUDA(DMPlexLocationCache);
+PETSC_INTERN PetscErrorCode DMPlexLocatePointsInPlace_Internal_CUDA(DM, PetscInt, PetscInt, const PetscReal[], PetscInt[]);
 PETSC_INTERN PetscErrorCode DMPlexLocationCacheUpload_HIP(DMPlexLocationCache);
 PETSC_INTERN PetscErrorCode DMPlexLocationCacheFreeDevice_HIP(DMPlexLocationCache);
 PETSC_INTERN PetscErrorCode DMPlexLocatePointsInPlace_Internal_HIP(DM, PetscInt, PetscInt, const PetscReal[], PetscInt[]);

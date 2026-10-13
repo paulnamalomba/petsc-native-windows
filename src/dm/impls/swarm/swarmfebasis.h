@@ -17,7 +17,7 @@ typedef enum {
 
 /*
   A scalar finite element (or finite volume) basis flattened for evaluation on the device, reproducing
-  PetscFECreateTabulation() (B only) bitwise: the prime basis, as a single space on simplices or as a product of
+  PetscFECreateTabulation() (B only) to rounding: the prime basis, as a single space on simplices or as a product of
   one-variable factors on tensor cells, followed by the contraction with the prime-to-nodal matrix invV
 */
 typedef struct _n_DMSwarmFEBasis *DMSwarmFEBasis;
@@ -55,6 +55,13 @@ struct _n_DMSwarmCellGeometry {
 PETSC_INTERN PetscErrorCode DMSwarmFEBasisGet_Internal(PetscObject, DMSwarmFEBasis *);
 PETSC_INTERN PetscErrorCode DMSwarmFEBasisGetDevice_Internal(PetscObject, DMSwarmFEBasis *);
 PETSC_INTERN PetscErrorCode DMSwarmCellGeometryGetDevice_Internal(DM, DMSwarmCellGeometry *);
+#if PetscDefined(HAVE_CUDA)
+PETSC_INTERN PetscErrorCode DMSwarmFEBasisUpload_CUDA(DMSwarmFEBasis);
+PETSC_INTERN PetscErrorCode DMSwarmFEBasisTabulate_Internal_CUDA(DMSwarmFEBasis, PetscInt, const PetscReal[], PetscReal[]);
+PETSC_INTERN PetscErrorCode DMSwarmCellGeometryUpload_CUDA(DMSwarmCellGeometry);
+PETSC_INTERN PetscErrorCode DMSwarmMassMatrixSetValuesCOO_Internal_CUDA(Mat, DMSwarmFEBasis, DMSwarmCellGeometry, PetscInt, const PetscInt[], const PetscInt[], const PetscReal[], PetscInt, PetscBool);
+PETSC_INTERN PetscErrorCode DMSwarmMassMatrixSquareSetValuesCOO_Internal_CUDA(Mat, DMSwarmFEBasis, DMSwarmCellGeometry, PetscInt, const PetscInt[], const PetscInt[], const PetscReal[], PetscInt, PetscBool, PetscInt, const PetscInt[], const PetscCount[], const PetscCount[]);
+#endif
 #if PetscDefined(HAVE_HIP)
 PETSC_INTERN PetscErrorCode DMSwarmFEBasisUpload_HIP(DMSwarmFEBasis);
 PETSC_INTERN PetscErrorCode DMSwarmFEBasisTabulate_Internal_HIP(DMSwarmFEBasis, PetscInt, const PetscReal[], PetscReal[]);

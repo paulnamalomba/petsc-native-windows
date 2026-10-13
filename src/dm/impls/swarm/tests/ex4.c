@@ -647,4 +647,55 @@ int main(int argc, char **argv)
        suffix: dg_average
        args: -dm_plex_dim 1 -dm_plex_box_faces 1 -dm_plex_box_lower -1 -dm_plex_box_upper 1 -ts_discgrad_type average
 
+   # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+   testset:
+     args: -dm_plex_dim 1 -dm_plex_box_faces 1 -dm_plex_box_lower -1 -dm_plex_box_upper 1 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_density constant \
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: bsi_1_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex4_bsi_1.out
+   testset:
+     args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_density constant \
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: bsi_2d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex4_bsi_2d_1.out
+   testset:
+     args: -dm_plex_dim 3 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1,-1 -dm_plex_box_upper 1,1,1 \
+           -dm_swarm_num_particles 2 -dm_swarm_coordinate_density constant \
+           -ts_type basicsymplectic -ts_convergence_estimate -convest_num_refine 2 \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: bsi_3d_1_backend_cuda
+       requires: cuda
+       args: -ts_basicsymplectic_type 1 -dm_swarm_backend cuda
+       output_file: output/ex4_bsi_3d_1.out
+   testset:
+     args: -dm_swarm_num_particles 2 -dm_swarm_coordinate_density constant \
+           -ts_type theta -ts_theta_theta 0.5 -ts_convergence_estimate -convest_num_refine 2 \
+             -mat_type baij -ksp_error_if_not_converged -pc_type lu \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: im_2d_backend_cuda
+       requires: cuda
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1 -dm_swarm_backend cuda
+       output_file: output/ex4_im_2d.out
+   testset:
+     args: -dm_swarm_num_particles 2 -dm_swarm_coordinate_density constant \
+           -ts_type discgrad -ts_discgrad_type none -ts_convergence_estimate -convest_num_refine 2 \
+             -mat_type baij -ksp_error_if_not_converged -pc_type lu \
+           -dm_view -output_step 50 -error
+     test:
+       suffix: dg_2d_backend_cuda
+       requires: cuda
+       args: -dm_plex_dim 2 -dm_plex_simplex 0 -dm_plex_box_faces 1,1 -dm_plex_box_lower -1,-1 -dm_plex_box_upper 1,1 -dm_swarm_backend cuda
+       output_file: output/ex4_dg_2d.out
 TEST*/

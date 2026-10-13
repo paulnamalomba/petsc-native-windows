@@ -597,4 +597,100 @@ int main(int argc, char *argv[])
       args: -dm_plex_simplex 0 -field 1 -dm_swarm_backend hip
       output_file: output/ex11_quad_fv_f1.out
 
+  # CUDA twins of the hip tests above: the same configurations under the cuda backend, sharing their expected outputs
+  testset:
+    requires: triangle
+    args: -dm_refine 1 -petscspace_degree 2 -moments 3 \
+          -ptof_pc_type lu  \
+          -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
+    test:
+      suffix: tri_fe_f0_backend_cuda
+      requires: cuda
+      args: -field 0 -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fe_f0.out
+    test:
+      suffix: tri_fe_f1_backend_cuda
+      requires: cuda
+      args: -field 1 -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fe_f1.out
+    test:
+      suffix: tri_fe_grad_backend_cuda
+      requires: cuda
+      args: -field 0 -grad -gptof_ksp_type lsqr -gptof_pc_type none -gptof_ksp_rtol 1e-10 -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fe_grad.out
+    test:
+      suffix: tri_fe_f0_dm_mat_cuda
+      requires: cuda
+      args: -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse
+      output_file: output/ex11_tri_fe_f0.out
+    test:
+      suffix: tri_fe_f0_dm_mat_backend_cuda
+      requires: cuda
+      args: -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fe_f0.out
+    test:
+      suffix: quad_fe_f0_dm_mat_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse
+      output_file: output/ex11_quad_fe_f0.out
+    test:
+      suffix: quad_fe_f0_dm_mat_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fe_f0.out
+    test:
+      suffix: quad_fe_f0_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fe_f0.out
+    test:
+      suffix: quad_fe_f1_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 1 -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fe_f1.out
+  testset:
+    requires: triangle
+    args: -dm_refine 1 -moments 1 -fv \
+          -ptof_pc_type lu \
+          -ftop_ksp_rtol 1e-15 -ftop_ksp_type lsqr -ftop_pc_type none
+    test:
+      suffix: tri_fv_f0_backend_cuda
+      requires: cuda
+      args: -field 0 -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fv_f0.out
+    test:
+      suffix: tri_fv_f1_backend_cuda
+      requires: cuda
+      args: -field 1 -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fv_f1.out
+    test:
+      suffix: tri_fv_f0_dm_mat_cuda
+      requires: cuda
+      args: -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse
+      output_file: output/ex11_tri_fv_f0.out
+    test:
+      suffix: tri_fv_f0_dm_mat_backend_cuda
+      requires: cuda
+      args: -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse -dm_swarm_backend cuda
+      output_file: output/ex11_tri_fv_f0.out
+    test:
+      suffix: quad_fv_f0_dm_mat_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse
+      output_file: output/ex11_quad_fv_f0.out
+    test:
+      suffix: quad_fv_f0_dm_mat_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_vec_type cuda -dm_mat_type aijcusparse -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fv_f0.out
+    test:
+      suffix: quad_fv_f0_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 0 -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fv_f0.out
+    test:
+      suffix: quad_fv_f1_backend_cuda
+      requires: cuda
+      args: -dm_plex_simplex 0 -field 1 -dm_swarm_backend cuda
+      output_file: output/ex11_quad_fv_f1.out
 TEST*/

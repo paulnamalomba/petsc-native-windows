@@ -122,6 +122,7 @@ struct _p_DMSwarmSort {
   PetscInt     ncells_d, npoints_d; /* allocated sizes of the device arrays, -1 when unallocated */
 };
 
+PETSC_INTERN PetscErrorCode DMSwarmSortSetUpDevice_CUDA(DMSwarmSort);
 PETSC_INTERN PetscErrorCode DMSwarmSortSetUpDevice_HIP(DMSwarmSort);
 
 PETSC_INTERN PetscErrorCode DMSwarmMigrate_Push_Basic(DM, PetscBool);

@@ -288,10 +288,12 @@ PetscErrorCode DMPlexGetLocationCacheDevice_Internal(DM dm, DMPlexLocationCache 
   PetscFunctionBegin;
   PetscCall(DMPlexGetLocationCache_Internal(dm, cache));
   PetscCheck(!(*cache)->unavailable, PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Point-location geometry cache unavailable for this DM configuration; use the host location path");
-#if PetscDefined(HAVE_HIP)
+#if PetscDefined(HAVE_CUDA)
+  if (!(*cache)->onDevice) PetscCall(DMPlexLocationCacheUpload_CUDA(*cache));
+#elif PetscDefined(HAVE_HIP)
   if (!(*cache)->onDevice) PetscCall(DMPlexLocationCacheUpload_HIP(*cache));
 #else
-  SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Device location cache requires PETSc configured with HIP");
+  SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Device location cache requires PETSc configured with CUDA or HIP");
 #endif
   PetscFunctionReturn(PETSC_SUCCESS);
 }

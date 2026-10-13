@@ -23,7 +23,7 @@ PETSC_INTERN PetscErrorCode DMSwarmFEBasisUpload_HIP(DMSwarmFEBasis basis)
 
 /*
   DMSwarmFEBasisTabulate_Internal_HIP - Evaluate the nodal basis functions at reference points on the device,
-  reproducing PetscFECreateTabulation() (B only) bitwise
+  reproducing PetscFECreateTabulation() (B only) to rounding
 
   Input Parameters:
 + basis   - A supported basis with device mirrors, see DMSwarmFEBasisGetDevice_Internal()
@@ -73,7 +73,7 @@ PETSC_INTERN PetscErrorCode DMSwarmCellGeometryUpload_HIP(DMSwarmCellGeometry ge
 - useDelta - Use weight 1 instead of the cell Jacobian determinant
 
   Note:
-  The values are bitwise identical to those of the host COO assembly, in the same COO order.
+  The values agree with those of the host COO assembly to rounding, in the same COO order.
 */
 PETSC_INTERN PetscErrorCode DMSwarmMassMatrixSetValuesCOO_Internal_HIP(Mat mass, DMSwarmFEBasis basis, DMSwarmCellGeometry geom, PetscInt npoints, const PetscInt list_d[], const PetscInt cell_d[], const PetscReal coords_d[], PetscInt numF, PetscBool useDelta)
 {
@@ -101,7 +101,7 @@ PETSC_INTERN PetscErrorCode DMSwarmMassMatrixSetValuesCOO_Internal_HIP(Mat mass,
 - tile_offsets    - [ncells + 1] first DMSWARM_MASS_SQUARE_TILE tile of each cell, in host memory
 
   Note:
-  The values are bitwise identical to those of the host COO assembly, in the same COO order.
+  The values agree with those of the host COO assembly to rounding, in the same COO order.
 */
 PETSC_INTERN PetscErrorCode DMSwarmMassMatrixSquareSetValuesCOO_Internal_HIP(Mat mass, DMSwarmFEBasis basis, DMSwarmCellGeometry geom, PetscInt npoints, const PetscInt list_d[], const PetscInt cell_d[], const PetscReal coords_d[], PetscInt numF, PetscBool useDelta, PetscInt ncells, const PetscInt pcell_offsets_d[], const PetscCount sq_offsets[], const PetscCount tile_offsets[])
 {
