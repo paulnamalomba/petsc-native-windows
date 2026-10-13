@@ -4553,7 +4553,7 @@ cdef class Mat(Object):
         cdef PetscReal rval = asReal(tol)
         CHKERR(MatFilter(self.mat, rval, PETSC_FALSE, PETSC_FALSE))
 
-    def filter(self, tol: float, compress: bool = False, keep: bool = False) -> None:
+    def filter(self, tol: float, compress: bool = False, keep_diagonal: bool = False) -> None:
         """Set entries with an absolute value of at most tol to zero.
 
         Collective.
