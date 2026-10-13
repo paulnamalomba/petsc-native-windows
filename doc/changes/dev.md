@@ -64,6 +64,7 @@
 - Add `-mat_spd` to set `MAT_SPD` from the options database in `MatSetFromOptions()`
 - Change `MatSetOption()` to error when a symmetry-related option contradicts an already known property
 - Add support for `MatZeroRows()` and `MatZeroRowsColumns()` with a nonzero diagonal value on a `MATIS` whose local matrix does not implement `MatSetValues()`, such as `MATSHELL`
+- Add `MatGetRowSumAbs()` for `MATHYPRE`, on the host and the device, and device implementations of `MatGetRowSumAbs()` for `MATAIJCUSPARSE`, `MATAIJHIPSPARSE`, and `MATAIJKOKKOS`; previously the AIJ device types copied the matrix values to the host
 
 ```{rubric} MatCoarsen:
 ```
