@@ -71,7 +71,7 @@ static PetscScalar LocalShift(void)
   return TestScalar(0.35, 0.2);
 }
 
-static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], void *ctx)
+static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], PetscCtx ctx)
 {
   PetscFunctionBeginUser;
   for (PetscInt i = 0; i < n; ++i) PetscCall(MatShift(sub[i], LocalShift()));
