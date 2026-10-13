@@ -509,8 +509,10 @@ static PetscErrorCode PCMatApply_ASM_Private(PC pc, Mat X, Mat Y, PetscBool tran
 {
   PC_ASM     *osm  = (PC_ASM *)pc->data;
   PCASMType   type = osm->type == PC_ASM_WEIGHTED ? PC_ASM_BASIC : osm->type; /* PC_ASM_WEIGHTED scatters like PC_ASM_BASIC, then applies the PCASMWeightedSetScaling() weights */
-  Mat         L, Z, W;
-  PetscInt    N, n = 0;
+  Mat         L, Z, W, y;
+  MatType     mtype;
+  PetscInt    N, n = 0, m, u, ny;
+  PetscBool   reuse, bound[2];
   ScatterMode forward = SCATTER_FORWARD, reverse = SCATTER_REVERSE;
 
   PetscFunctionBegin;
@@ -519,24 +521,48 @@ static PetscErrorCode PCMatApply_ASM_Private(PC pc, Mat X, Mat Y, PetscBool tran
   PetscCheck(osm->loctype == PC_COMPOSITE_MULTIPLICATIVE || osm->loctype == PC_COMPOSITE_ADDITIVE, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONG, "Invalid local composition type: %s", PCCompositeTypes[osm->loctype]);
   PetscCall(MatGetSize(X, NULL, &N));
   if (!N) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(VecGetLocalSize(osm->x[0], &m));
+  PetscCall(VecGetLocalSize(osm->lx, &u));
   if (osm->matwork[0]) PetscCall(MatGetSize(osm->matwork[0], NULL, &n));
   if (N != n) {
-    for (PetscInt i = 0; i < 3; ++i) PetscCall(MatDestroy(&osm->matwork[i]));
+    for (PetscInt i = 0; i < 2; ++i) PetscCall(MatDestroy(&osm->matwork[i]));
   }
   if (!osm->matwork[0]) {
-    VecType  vtype;
-    PetscInt m;
+    VecType vtype;
 
-    PetscCall(VecGetLocalSize(osm->lx, &m));
-    PetscCall(VecGetType(osm->lx, &vtype));
-    PetscCall(MatCreateDenseFromVecType(PETSC_COMM_SELF, vtype, m, N, m, N, PETSC_DECIDE, NULL, &osm->matwork[0]));
-    PetscCall(VecGetLocalSize(osm->x[0], &m));
     PetscCall(VecGetType(osm->x[0], &vtype));
-    for (PetscInt i = 1; i < 3; ++i) PetscCall(MatCreateDenseFromVecType(PETSC_COMM_SELF, vtype, m, N, m, N, PETSC_DECIDE, NULL, &osm->matwork[i]));
+    PetscCall(MatCreateDenseFromVecType(PETSC_COMM_SELF, vtype, m, N, m, N, PETSC_DECIDE, NULL, &osm->matwork[0]));
   }
-  L = osm->matwork[0];
-  Z = osm->matwork[1];
-  W = osm->matwork[2];
+  Z = osm->matwork[0];
+  PetscCall(MatDenseGetLocalMatrix(Y, &y));
+  PetscCall(MatGetLocalSize(y, &ny, NULL));
+  PetscCall(MatGetType(Z, &mtype));
+  PetscCall(PetscObjectTypeCompare((PetscObject)y, mtype, &reuse));
+  if (reuse) {
+    PetscCall(MatBoundToCPU(Z, &bound[0]));
+    PetscCall(MatBoundToCPU(y, &bound[1]));
+    reuse = (PetscBool)(ny >= m && bound[0] == bound[1]);
+  }
+  if (reuse) {
+    PetscScalar *array;
+
+    PetscCall(MatDestroy(&osm->matwork[1]));
+    /* Discard old output values without copying them to the device before taking a view. */
+    PetscCall(MatDenseGetArrayWriteAndMemType(y, &array, NULL));
+    PetscCall(MatDenseRestoreArrayWriteAndMemType(Y, &array));
+    W = y;
+    if (ny != m) PetscCall(MatDenseGetSubMatrix(y, 0, m, 0, N, &W));
+  } else {
+    if (!osm->matwork[1]) {
+      VecType vtype;
+
+      PetscCall(VecGetType(osm->x[0], &vtype));
+      PetscCall(MatCreateDenseFromVecType(PETSC_COMM_SELF, vtype, m, N, m, N, PETSC_DECIDE, NULL, &osm->matwork[1]));
+    }
+    W = osm->matwork[1];
+  }
+  L = W;
+  if (u != m) PetscCall(MatDenseGetSubMatrix(W, 0, u, 0, N, &L));
 
   /* Local-only restriction leaves ghost rows untouched. */
   if ((!transpose && !(type & PC_ASM_RESTRICT)) || (transpose && !(type & PC_ASM_INTERPOLATE))) {
@@ -546,6 +572,7 @@ static PetscErrorCode PCMatApply_ASM_Private(PC pc, Mat X, Mat Y, PetscBool tran
   if ((!transpose && !(type & PC_ASM_INTERPOLATE)) || (transpose && !(type & PC_ASM_RESTRICT))) reverse = SCATTER_REVERSE_LOCAL;
   PetscCall(MatDenseScatter_Private(osm->restriction, X, L, INSERT_VALUES, forward));
   PetscCall(MatDenseScatter_Private(osm->lrestriction[0], L, Z, INSERT_VALUES, forward));
+  if (u != m) PetscCall(MatDenseRestoreSubMatrix(W, &L));
   /* solve the overlapping 0-block */
   if (!transpose) {
     PetscCall(PetscLogEventBegin(PC_ApplyOnBlocks, osm->ksp[0], Z, W, 0));
@@ -560,15 +587,19 @@ static PetscErrorCode PCMatApply_ASM_Private(PC pc, Mat X, Mat Y, PetscBool tran
   PetscCall(KSPCheckMatSolve(osm->ksp[0], pc, W));
   if (!transpose && osm->type == PC_ASM_WEIGHTED) PetscCall(MatDiagonalScale(W, osm->scaling[0], NULL));
 
-  /* Reuse the union workspace for accumulating the local solution. */
+  /* The right-hand side is dead after the solve, so reuse it for accumulation. */
+  L = Z;
+  if (u != m) PetscCall(MatDenseGetSubMatrix(Z, 0, u, 0, N, &L));
   PetscCall(MatZeroEntries(L));
   if (osm->lprolongation && ((!transpose && !(type & PC_ASM_INTERPOLATE)) || (transpose && !(type & PC_ASM_RESTRICT)))) {
     PetscCall(MatDenseScatter_Private(osm->lprolongation[0], W, L, ADD_VALUES, forward));
   } else {
     PetscCall(MatDenseScatter_Private(osm->lrestriction[0], W, L, ADD_VALUES, reverse));
   }
+  if (reuse && ny != m) PetscCall(MatDenseRestoreSubMatrix(y, &W));
   PetscCall(MatZeroEntries(Y));
   PetscCall(MatDenseScatter_Private(osm->restriction, L, Y, ADD_VALUES, reverse));
+  if (u != m) PetscCall(MatDenseRestoreSubMatrix(Z, &L));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -657,7 +688,7 @@ static PetscErrorCode PCReset_ASM(PC pc)
   PC_ASM *osm = (PC_ASM *)pc->data;
 
   PetscFunctionBegin;
-  for (PetscInt i = 0; i < 3; ++i) PetscCall(MatDestroy(&osm->matwork[i]));
+  for (PetscInt i = 0; i < 2; ++i) PetscCall(MatDestroy(&osm->matwork[i]));
   if (osm->scaling) {
     for (PetscInt i = 0; i < osm->n_local_true; i++) PetscCall(VecDestroy(&osm->scaling[i]));
     PetscCall(PetscFree(osm->scaling));
