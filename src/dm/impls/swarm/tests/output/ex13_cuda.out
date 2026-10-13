@@ -1,0 +1,77 @@
+field phi     blocksize 1 type real
+field vel     blocksize 2 type real
+field tag     blocksize 1 type int
+field payload blocksize 1 type struct
+field csum    blocksize 2 type user
+After initial fill: global size 3
+  [0] nlocal 3
+  [0]  0: pid  9223372036854775807 phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid -9223372036854775808 phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: pid                 1002 phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+After DMSwarmAddPoint() + DMSwarmAddNPoints(2): global size 6
+  [0] nlocal 6
+  [0]  0: pid  9223372036854775807 phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid -9223372036854775808 phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: pid                 1002 phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: pid                    0 phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [0]  4: pid                    0 phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+  [0]  5: pid                    0 phi    0.00 vel (   0.00,    0.00) tag     0 payload (   0,   0.00) csum (    0,     0)
+After filling the added points: global size 6
+  [0] nlocal 6
+  [0]  0: pid  9223372036854775807 phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid -9223372036854775808 phi    1.50 vel (   1.10,    1.20) tag    -1 payload (   3,   0.25) csum (   10,    11)
+  [0]  2: pid                 1002 phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: pid                 1050 phi   50.50 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [0]  4: pid                 1051 phi   51.50 vel (  51.10,   51.20) tag   -51 payload ( 103,  12.75) csum (  510,   511)
+  [0]  5: pid                 1052 phi   52.50 vel (  52.10,   52.20) tag   -52 payload ( 105,  13.00) csum (  520,   521)
+After copy 0 -> last, remove index 1, remove last: global size 4
+  [0] nlocal 4
+  [0]  0: pid  9223372036854775807 phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid  9223372036854775807 phi    0.50 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: pid                 1002 phi    2.50 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: pid                 1050 phi   50.50 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+Vec Object: DMSwarmSharedField_phi 1 MPI process
+  type: seqcuda
+0.5
+0.5
+2.5
+50.5
+DM Object: Particles 1 MPI process
+  type: swarm
+DMSwarmDataBucketView: 
+  L                  = 4 
+  buffer             = 4 
+  allocated          = 10 
+  nfields registered = 7 
+  memtype            = PETSC_MEMTYPE_CUDA 
+                            blocksize        = 1 
+    [  0]     DMSwarm_pid : offload          = PETSC_OFFLOAD_CPU 
+                            blocksize        = 1 
+    [  1]    DMSwarm_rank : offload          = PETSC_OFFLOAD_CPU 
+                            blocksize        = 1 
+    [  2]             phi : offload          = PETSC_OFFLOAD_GPU 
+                            blocksize        = 2 
+    [  3]             vel : offload          = PETSC_OFFLOAD_CPU 
+                            blocksize        = 1 
+    [  4]             tag : offload          = PETSC_OFFLOAD_CPU 
+                            blocksize        = 1 
+    [  5]         payload : offload          = PETSC_OFFLOAD_CPU 
+                            blocksize        = 2 
+    [  6]            csum : offload          = PETSC_OFFLOAD_CPU 
+After scaling phi by 2 through the global Vec: global size 4
+  [0] nlocal 4
+  [0]  0: pid  9223372036854775807 phi    1.00 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid  9223372036854775807 phi    1.00 vel (   0.10,    0.20) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: pid                 1002 phi    5.00 vel (   2.10,    2.20) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: pid                 1050 phi  101.00 vel (  50.10,   50.20) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+  [0] ||vel||_1 105.20
+After scaling vel by 0.5 through the local Vec: global size 4
+  [0] nlocal 4
+  [0]  0: pid  9223372036854775807 phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid  9223372036854775807 phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  2: pid                 1002 phi    5.00 vel (   1.05,    1.10) tag    -2 payload (   5,   0.50) csum (   20,    21)
+  [0]  3: pid                 1050 phi  101.00 vel (  25.05,   25.10) tag   -50 payload ( 101,  12.50) csum (  500,   501)
+After shrinking to 2 local points: global size 2
+  [0] nlocal 2
+  [0]  0: pid  9223372036854775807 phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
+  [0]  1: pid  9223372036854775807 phi    1.00 vel (   0.05,    0.10) tag     0 payload (   1,   0.00) csum (    0,     1)
