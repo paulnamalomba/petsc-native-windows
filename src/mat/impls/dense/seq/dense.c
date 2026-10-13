@@ -2239,6 +2239,9 @@ PetscErrorCode MatDenseGetArray(Mat A, PetscScalar *array[]) PeNS
 
   Level: intermediate
 
+  Note:
+  Calling `MatAssemblyBegin()`/`MatAssemblyEnd()` after this routine is unnecessary and should be avoided.
+
 .seealso: [](ch_matrices), `Mat`, `MATDENSE`, `MatDenseGetArray()`, `MatDenseGetArrayRead()`, `MatDenseRestoreArrayRead()`, `MatDenseGetArrayWrite()`, `MatDenseRestoreArrayWrite()`
 @*/
 PetscErrorCode MatDenseRestoreArray(Mat A, PetscScalar *array[]) PeNS
@@ -2334,6 +2337,9 @@ PetscErrorCode MatDenseGetArrayWrite(Mat A, PetscScalar *array[]) PeNS
 - array - pointer to the data (may be `NULL`)
 
   Level: intermediate
+
+  Note:
+  Calling `MatAssemblyBegin()`/`MatAssemblyEnd()` after this routine is unnecessary and should be avoided.
 
 .seealso: [](ch_matrices), `Mat`, `MATDENSE`, `MatDenseGetArrayWrite()`, `MatDenseGetArray()`, `MatDenseRestoreArray()`, `MatDenseGetArrayRead()`, `MatDenseRestoreArrayRead()`
 @*/
@@ -3804,6 +3810,9 @@ PetscErrorCode MatDenseGetColumnVec(Mat A, PetscInt col, Vec *v)
 
   Level: intermediate
 
+  Note:
+  Calling `MatAssemblyBegin()`/`MatAssemblyEnd()` after this routine is unnecessary and should be avoided.
+
 .seealso: [](ch_matrices), `Mat`, `MATDENSE`, `MATDENSECUDA`, `MATDENSEHIP`, `MatDenseGetColumnVec()`, `MatDenseGetColumnVecRead()`, `MatDenseGetColumnVecWrite()`, `MatDenseRestoreColumnVecRead()`, `MatDenseRestoreColumnVecWrite()`
 @*/
 PetscErrorCode MatDenseRestoreColumnVec(Mat A, PetscInt col, Vec *v)
@@ -3927,6 +3936,9 @@ PetscErrorCode MatDenseGetColumnVecWrite(Mat A, PetscInt col, Vec *v)
 - v   - the `Vec` object (may be `NULL`)
 
   Level: intermediate
+
+  Note:
+  Calling `MatAssemblyBegin()`/`MatAssemblyEnd()` after this routine is unnecessary and should be avoided.
 
 .seealso: [](ch_matrices), `Mat`, `MATDENSE`, `MATDENSECUDA`, `MATDENSEHIP`, `MatDenseGetColumnVec()`, `MatDenseGetColumnVecRead()`, `MatDenseGetColumnVecWrite()`, `MatDenseRestoreColumnVec()`, `MatDenseRestoreColumnVecRead()`
 @*/
