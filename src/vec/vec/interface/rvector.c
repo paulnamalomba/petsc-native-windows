@@ -2091,6 +2091,9 @@ PetscErrorCode VecGetArray(Vec x, PetscScalar *a[])
 
   Level: beginner
 
+  Note:
+  Calling `VecAssemblyBegin()`/`VecAssemblyEnd()` after this routine is unnecessary and should be avoided.
+
 .seealso: [](ch_vectors), `Vec`, `VecGetArray()`, `VecRestoreArrayRead()`, `VecRestoreArrays()`, `VecPlaceArray()`, `VecRestoreArray2d()`,
           `VecGetArrayPair()`, `VecRestoreArrayPair()`
 @*/
@@ -2242,6 +2245,9 @@ PetscErrorCode VecGetArrayWrite(Vec x, PetscScalar *a[])
 - a - location of pointer to array obtained from `VecGetArray()`
 
   Level: beginner
+
+  Note:
+  Calling `VecAssemblyBegin()`/`VecAssemblyEnd()` after this routine is unnecessary and should be avoided.
 
 .seealso: [](ch_vectors), `Vec`, `VecGetArray()`, `VecRestoreArrayRead()`, `VecRestoreArrays()`, `VecPlaceArray()`, `VecRestoreArray2d()`,
           `VecGetArrayPair()`, `VecRestoreArrayPair()`, `VecGetArrayWrite()`

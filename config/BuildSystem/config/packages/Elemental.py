@@ -3,13 +3,13 @@ import config.package
 class Configure(config.package.CMakePackage):
   def __init__(self, framework):
     config.package.CMakePackage.__init__(self, framework)
-    self.gitcommit        = '962cf01ce0ccb5cca6d6bb81e9b1d0b46cac9592' # petsc/0.87.7 on May 31, 2021
+    self.gitcommit        = '5740442230fc320632b5585dcb1ec0bfb8ab359e' # balay/ci-clang-22-ucx-fix oct-13-2026
     self.download         = ['git://https://github.com/elemental/Elemental','https://github.com/elemental/Elemental/archive/'+self.gitcommit+'.tar.gz']
     self.liblist          = [['libEl.a','libElSuiteSparse.a','libpmrrr.a']]
     self.includes         = ['El.hpp']
     self.precisions       = ['single','double']
     self.buildLanguages   = ['Cxx']
-    self.maxCxxVersion    = 'c++14'
+    self.minCmakeVersion  = (3,12,0)
     self.hastests         = 1
     self.hastestsdatafiles= 1
     self.downloaddirnames = ['Elemental']
