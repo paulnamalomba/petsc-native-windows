@@ -160,6 +160,103 @@ class Configure(config.base.Configure):
       self.libraries.libraries.extend(librariessock)
     return
 
+  def DumpCMakeconfig(self):
+    ''' Create a CMake configuration file '''
+
+    includes = []
+    libdir = ""
+    if self.framework.argDB['prefix']:
+        includes += [os.path.join(self.installdir.dir, "include")]
+        libdir = os.path.join(self.installdir.dir, "lib")
+    else:
+        includes += [
+            os.path.join(self.petscdir.dir, self.arch.arch, "include"),
+            os.path.join(self.petscdir.dir, "include")
+        ]
+        libdir = os.path.join(self.petscdir.dir, self.arch.arch, "lib")
+
+    properties = [
+        'INTERFACE_INCLUDE_DIRECTORIES "%s"' % ";".join(includes),
+        'INTERFACE_LINK_LIBRARIES "%s"' % self.petsclib,
+        'INTERFACE_LINK_OPTIONS "-L%s"' % libdir
+    ]
+    if (self.setCompilers.CPPFLAGS.strip()):
+        properties.append('INTERFACE_COMPILE_OPTIONS "%s"' % self.setCompilers.CPPFLAGS)
+
+    config_content = [
+        'if("${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" LESS 2.8)',
+        '   message(FATAL_ERROR "CMake >= 2.8.0 required")',
+        'endif()',
+        'if(CMAKE_VERSION VERSION_LESS "2.8.3")',
+        '   message(FATAL_ERROR "CMake >= 2.8.3 required")',
+        'endif()',
+        'cmake_policy(PUSH)',
+        'cmake_policy(VERSION 2.8.3...3.23)',
+        '',
+        '# Commands may need to know the format version.',
+        'set(CMAKE_IMPORT_FILE_VERSION 1)',
+        '',
+        '# Handle multiple inclusion',
+        'if(TARGET PETSc::PETSc)',
+        '  unset(CMAKE_IMPORT_FILE_VERSION)',
+        '  cmake_policy(POP)',
+        '  return()',
+        'endif()',
+        '',
+        'add_library(PETSc::PETSc INTERFACE IMPORTED)',
+        'set_target_properties(PETSc::PETSc PROPERTIES'
+    ] + properties + [
+        ')',
+        '',
+        '# Commands beyond this point should not need to know the version.',
+        'set(CMAKE_IMPORT_FILE_VERSION)',
+        'cmake_policy(POP)'
+    ]
+
+    version_content = [
+        'set(PACKAGE_VERSION "%s")' % self.petscdir.version,
+        'if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)',
+        '  set(PACKAGE_VERSION_COMPATIBLE FALSE)',
+        'else()',
+        '  set(CVF_VERSION_MAJOR "%s")' % self.petscdir.version.split(".")[0],
+        '  if(PACKAGE_FIND_VERSION_RANGE)',
+        '    # both endpoints of the range must have the expected major version',
+        '    math (EXPR CVF_VERSION_MAJOR_NEXT "${CVF_VERSION_MAJOR} + 1")',
+        '    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR',
+        '        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL "INCLUDE" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)',
+        '          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL "EXCLUDE" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))',
+        '      set(PACKAGE_VERSION_COMPATIBLE FALSE)',
+        '    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR',
+        '        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL "INCLUDE" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)',
+        '        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL "EXCLUDE" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))',
+        '      set(PACKAGE_VERSION_COMPATIBLE TRUE)',
+        '    else()',
+        '      set(PACKAGE_VERSION_COMPATIBLE FALSE)',
+        '    endif()',
+        '  else()',
+        '    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)',
+        '      set(PACKAGE_VERSION_COMPATIBLE TRUE)',
+        '    else()',
+        '      set(PACKAGE_VERSION_COMPATIBLE FALSE)',
+        '    endif()',
+        '    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)',
+        '      set(PACKAGE_VERSION_EXACT TRUE)',
+        '    endif()',
+        '  endif()',
+        'endif()'
+    ]
+
+    if not os.path.exists(os.path.join(self.petscdir.dir,self.arch.arch,'lib','cmake')):
+      os.makedirs(os.path.join(self.petscdir.dir,self.arch.arch,'lib','cmake'))
+
+    with open(os.path.join(self.petscdir.dir,self.arch.arch,'lib','cmake',"petsc-config.cmake"),'w') as fd:
+        fd.write("\n".join(config_content)+"\n");
+
+    with open(os.path.join(self.petscdir.dir,self.arch.arch,'lib','cmake',"petsc-config-version.cmake"),'w') as fd:
+        fd.write("\n".join(version_content)+"\n");
+
+    return
+
   def DumpPkgconfig(self, petsc_pc):
     ''' Create a pkg-config file '''
     if not os.path.exists(os.path.join(self.petscdir.dir,self.arch.arch,'lib','pkgconfig')):
@@ -1406,6 +1503,7 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
     self.framework.argDB.save(force = True)
     self.DumpPkgconfig('PETSc.pc')
     self.DumpPkgconfig('petsc.pc')
+    self.DumpCMakeconfig()
     self.DumpModule()
     self.postProcessPackages()
     self.framework.log.write('================================================================================\n')

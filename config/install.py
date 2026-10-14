@@ -557,6 +557,7 @@ for file in files:
   def installLib(self):
     self.copies.extend(self.copytree(self.archLibDir, self.destLibDir, copyFunc = self.copyLib, exclude = ['.DIR'],recurse = 0))
     self.copies.extend(self.copytree(os.path.join(self.archLibDir,'pkgconfig'), os.path.join(self.destLibDir,'pkgconfig'), copyFunc = self.copyLib, exclude = ['.DIR'],recurse = 0))
+    self.copies.extend(self.copytree(os.path.join(self.archLibDir,'cmake'), os.path.join(self.destLibDir,'cmake'), copyFunc = self.copyLib, exclude = ['.DIR'],recurse = 0))
     return
 
   def outputInstallDone(self):
