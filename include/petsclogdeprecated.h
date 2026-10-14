@@ -1,6 +1,9 @@
 #pragma once
 
-#include <petsclog.h>
+/* This header is a continuation of petsclog.h: it is included at the bottom of petsclog.h and must
+   be preceded by petsclog.h (for the logging types and for PetscLogDefaultBegin() and
+   PetscLogLegacyCallbacksBegin()). It deliberately does not include petsclog.h itself so that the
+   two headers do not form a cyclic inclusion. */
 
 /* MANSEC = Sys */
 /* SUBMANSEC = Log */

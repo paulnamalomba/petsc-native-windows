@@ -23,6 +23,8 @@ The option -square_initial indicates it should use a square wave initial conditi
 to generate InitialSolution.heat
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscts.h>

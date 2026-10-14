@@ -11,6 +11,7 @@ static char help[] = "A test for MatAssembly that heavily relies on PetscSortInt
  */
 
 // PETSc includes
+#include <petscoptions.h>
 #include <petscmat.h>
 
 // C++ includes

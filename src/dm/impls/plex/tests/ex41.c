@@ -1,5 +1,6 @@
 static const char help[] = "Tests for adaptive refinement";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmplextransform.h>
 

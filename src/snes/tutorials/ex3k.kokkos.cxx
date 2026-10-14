@@ -1,5 +1,6 @@
 static char help[] = "Newton methods to solve u'' + u^{2} = f in parallel. Uses Kokkos\n\\n";
 
+#include <petscoptions.h>
 #include <petscdmda_kokkos.hpp>
 #include <petscsnes.h>
 

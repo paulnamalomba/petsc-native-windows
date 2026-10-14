@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/sfimpl.h> /*I "petscsf.h" I*/
 #include <petsc/private/hashseti.h>
 #include <petsc/private/viewerimpl.h>

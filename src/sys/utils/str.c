@@ -4,6 +4,7 @@
   they are broken or have the wrong prototypes.
 */
 #include <petsc/private/petscimpl.h> /*I  "petscsys.h"   I*/
+#include <petscoptions.h>
 #if PetscDefined(HAVE_STRINGS_H)
   #include <strings.h> /* strcasecmp */
 #endif

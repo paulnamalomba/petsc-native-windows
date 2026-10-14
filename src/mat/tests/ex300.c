@@ -3,6 +3,7 @@ static char help[] = "Show MatShift BUG happening after copying a matrix with no
    Contributed by: Eric Chamberland
 */
 #include <petscmat.h>
+#include <petscviewer.h>
 
 /* DEFINE this to turn on/off the bug: */
 #define SET_2nd_PROC_TO_HAVE_NO_LOCAL_LINES

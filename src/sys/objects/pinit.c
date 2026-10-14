@@ -5,6 +5,7 @@
 #include <petsc/private/petscimpl.h> /*I  "petscsys.h"   I*/
 #include <petsc/private/logimpl.h>
 #include <petscviewer.h>
+#include <petscoptions.h>
 #include <petsc/private/garbagecollector.h>
 
 #if !PetscDefined(HAVE_WINDOWS_COMPILERS)
@@ -22,11 +23,6 @@ EXTERN_C_BEGIN
   #endif
 void __gcov_flush(void);
 EXTERN_C_END
-#endif
-
-#if PetscDefined(SERIALIZE_FUNCTIONS)
-PETSC_INTERN PetscFPT PetscFPTData;
-PetscFPT              PetscFPTData = 0;
 #endif
 
 #if PetscDefined(HAVE_SAWS)
@@ -65,9 +61,6 @@ PetscMPIInt Petsc_SharedTmp_keyval = MPI_KEYVAL_INVALID;
 const char *const PetscBools[]     = {"FALSE", "TRUE", "PetscBool", "PETSC_", NULL};
 const char *const PetscBool3s[]    = {"FALSE", "TRUE", "UNKNOWN", "PetscBool3", "PETSC_", NULL};
 const char *const PetscCopyModes[] = {"COPY_VALUES", "OWN_POINTER", "USE_POINTER", "PetscCopyMode", "PETSC_", NULL};
-
-PetscBool PetscPreLoadingUsed = PETSC_FALSE;
-PetscBool PetscPreLoadingOn   = PETSC_FALSE;
 
 PetscInt PetscHotRegionDepth;
 
@@ -454,7 +447,38 @@ PETSC_INTERN char **PetscGlobalArgs, **PetscGlobalArgsFortran;
 int                 PetscGlobalArgc        = 0;
 char              **PetscGlobalArgs        = NULL;
 char              **PetscGlobalArgsFortran = NULL;
-PetscSegBuffer      PetscCitationsList;
+
+static PetscSegBuffer PetscCitationsList;
+
+/*@
+  PetscCitationsRegister - Register a bibtex item to obtain credit for an implemented algorithm used in the code.
+
+  Not Collective; No Fortran Support
+
+  Input Parameters:
++ cite - the bibtex item, formatted to displayed on multiple lines nicely
+- set  - a boolean variable initially set to `PETSC_FALSE`; this is used to insure only a single registration of the citation
+
+  Options Database Key:
+. -citations [filename] - print out the bibtex entries for the given computation
+
+  Level: intermediate
+
+.seealso: `PetscFinalize()`
+@*/
+PetscErrorCode PetscCitationsRegister(const char cite[], PetscBool *set)
+{
+  size_t len;
+  char  *vstring;
+
+  PetscFunctionBegin;
+  if (set && *set) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(PetscStrlen(cite, &len));
+  PetscCall(PetscSegBufferGet(PetscCitationsList, (PetscCount)len, &vstring));
+  PetscCall(PetscArraycpy(vstring, cite, len));
+  if (set) *set = PETSC_TRUE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 PetscErrorCode PetscCitationsInitialize(void)
 {
@@ -1177,10 +1201,6 @@ PETSC_INTERN PetscErrorCode PetscInitialize_Common(const char *prog, const char 
   if (!PetscBinaryBigEndian()) PetscCallMPI(MPI_Register_datarep((char *)"petsc", PetscDataRep_read_conv_fn, PetscDataRep_write_conv_fn, PetscDataRep_extent_fn, NULL));
 #endif
 
-#if PetscDefined(SERIALIZE_FUNCTIONS)
-  PetscCall(PetscFPTCreate(10000));
-#endif
-
 #if PetscDefined(HAVE_HWLOC)
   {
     PetscViewer viewer;
@@ -1543,10 +1563,6 @@ PetscErrorCode PetscFinalize(void)
     PetscCall(PetscFree(cits));
   }
   PetscCall(PetscSegBufferDestroy(&PetscCitationsList));
-
-#if PetscDefined(SERIALIZE_FUNCTIONS)
-  PetscCall(PetscFPTDestroy());
-#endif
 
 #if PetscDefined(HAVE_X)
   flg1 = PETSC_FALSE;

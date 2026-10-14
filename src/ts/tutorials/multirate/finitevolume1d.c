@@ -1,6 +1,6 @@
 #include "finitevolume1d.h"
+#include <petscviewer.h>
 #include <petscdmda.h>
-#include <petscdraw.h>
 #include <petsc/private/tsimpl.h>
 
 #include <petsc/private/kernels/blockinvert.h> /* For the Kernel_*_gets_* stuff for BAIJ */

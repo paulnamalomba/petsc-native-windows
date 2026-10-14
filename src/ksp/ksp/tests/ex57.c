@@ -4,6 +4,7 @@
     Example contributed by: Mike Wick <michael.wick.1980@gmail.com>
 */
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

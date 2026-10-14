@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 
 extern PetscErrorCode MatInodeAdjustForInodes_SeqAIJ_Inode(Mat, IS *, IS *);

@@ -1,6 +1,7 @@
 static char help[] = "Tests taking part of existing array to create a new vector.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

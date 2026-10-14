@@ -33,6 +33,7 @@ static char help[] = "Illustrates use of the preconditioner GASM.\n \
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscmat.h>
 

@@ -49,6 +49,7 @@ See https://petsc.org/release/manual/fe the and the paper "Achieving High Perfor
 */
 
 /* Include the necessary definitions */
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

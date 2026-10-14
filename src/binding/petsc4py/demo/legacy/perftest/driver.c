@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc.h>
 
 EXTERN_C_BEGIN

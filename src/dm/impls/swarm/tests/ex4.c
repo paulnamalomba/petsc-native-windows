@@ -50,6 +50,7 @@ static char help[] = "Testing integrators on the simple harmonic oscillator\n";
       energy/exact energy 1573.06 / 1573.06 (0.0000000000)
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>

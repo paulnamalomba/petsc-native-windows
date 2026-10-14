@@ -12,6 +12,8 @@ and eventually adaptivity.\n\n\n";
     mu     = E / (2 (1 + nu))
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

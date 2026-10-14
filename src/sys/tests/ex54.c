@@ -1,7 +1,7 @@
 static char help[] = "Tests options file parsing.\n\n";
 
 #include <petscsys.h>
-#include <petscviewer.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

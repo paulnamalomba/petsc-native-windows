@@ -1,5 +1,6 @@
 static char help[] = "Multiphase flow in a porous medium in 1d.\n\n";
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 #include <petscsnes.h>
 

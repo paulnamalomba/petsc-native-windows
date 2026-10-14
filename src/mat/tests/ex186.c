@@ -1,4 +1,5 @@
 #include <petscmat.h>
+#include <petscviewer.h>
 
 static char help[] = "Example of MatMat ops with MatDense in PETSc.\n";
 

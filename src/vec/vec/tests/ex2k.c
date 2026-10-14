@@ -14,6 +14,7 @@ static char help[] = "Benchmarking VecMDot() or VecMAXPY()\n";
   $ srun -n1 -c32 --gpus-per-node=8 --gpu-bind=closest ./ex2k -vec_type kokkos
 */
 
+#include <petscoptions.h>
 #include <petscvec.h>
 #include <petscdevice.h>
 

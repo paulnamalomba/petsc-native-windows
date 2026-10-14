@@ -1,4 +1,5 @@
 #include <petsc/private/petscimpl.h> /*I "petscsys.h" I*/
+#include <petscoptions.h>
 
 #if !defined(PETSC_PYTHON_EXE)
   #define PETSC_PYTHON_EXE "python"

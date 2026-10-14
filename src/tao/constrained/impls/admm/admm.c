@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/tao/constrained/impls/admm/admm.h> /*I "petsctao.h" I*/
 #include <petsctao.h>
 #include <petsc/private/petscimpl.h>

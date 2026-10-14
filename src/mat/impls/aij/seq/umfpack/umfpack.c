@@ -7,6 +7,8 @@
    that one cannot use 64BIT_INDICES on 32-bit pointer systems [as Suitesparse_long is 32-bit only]
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 
 #if PetscDefined(USE_64BIT_INDICES)

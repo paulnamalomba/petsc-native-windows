@@ -21,10 +21,11 @@ static const char help[] = "1D periodic Finite Volume solver in slope-limiter fo
                            " you can choose the number of grids by -da_grid_x.\n"
                            " you can choose the value of a by -physics_advect_a1 and -physics_advect_a2.\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdm.h>
 #include <petscdmda.h>
-#include <petscdraw.h>
 #include <petsc/private/tsimpl.h>
 
 #include <petsc/private/kernels/blockinvert.h> /* For the Kernel_*_gets_* stuff for BAIJ */

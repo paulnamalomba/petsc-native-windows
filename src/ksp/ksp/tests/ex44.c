@@ -1,5 +1,6 @@
 static char help[] = "Solves a tridiagonal linear system.  Designed to compare SOR for different Mat impls.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

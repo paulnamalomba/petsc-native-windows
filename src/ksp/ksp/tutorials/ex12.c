@@ -28,6 +28,7 @@ Input parameters include:\n\
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 PETSC_EXTERN PetscErrorCode PCCreate_Jacobi(PC);

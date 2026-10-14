@@ -1,5 +1,5 @@
-#include <petscsys.h> /*I  "petscsys.h"  I*/
-#include <petsc/private/petscimpl.h>
+#include <petsc/private/petscimpl.h> /*I "petscsys.h" I*/
+#include <petscoptions.h>
 
 PetscLogEvent PETSC_BuildTwoSided;
 PetscLogEvent PETSC_BuildTwoSidedF;

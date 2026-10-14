@@ -1,5 +1,6 @@
 static char help[] = "Tests DMGetCompatibility() with a 3D DMDA.\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscdmstag.h>

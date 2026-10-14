@@ -1,5 +1,6 @@
 static char help[] = "This program illustrates the use of PETSc-fftw interface for real DFT\n";
 #include <petscmat.h>
+#include <petscviewer.h>
 #include <fftw3-mpi.h>
 
 extern PetscErrorCode InputTransformFFT(Mat, Vec, Vec);

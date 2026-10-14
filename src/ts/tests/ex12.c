@@ -31,10 +31,10 @@ static char help[] = "Tests PetscObjectSetOptions() for TS object\n\n";
    Include the "petscdmda.h" to allow us to use the distributed array data
    structures to manage the parallel grid.
 */
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdm.h>
 #include <petscdmda.h>
-#include <petscdraw.h>
 
 /*
    User-defined application context - contains data needed by the

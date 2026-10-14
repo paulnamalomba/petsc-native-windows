@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/characteristicimpl.h>
 
 static PetscBool CharacteristicPackageInitialized = PETSC_FALSE;

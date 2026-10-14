@@ -25,6 +25,8 @@ This example is intended to test VI solvers.\n\n\n";
   -snes_vi_monitor -snes_converged_reason -convest_monitor
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

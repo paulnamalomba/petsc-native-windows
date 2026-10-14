@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/taoimpl.h>
 
 static PetscBool TaoPackageInitialized = PETSC_FALSE;

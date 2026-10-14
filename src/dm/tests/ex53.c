@@ -10,6 +10,8 @@ sliceid - set the location where the slice will be extracted from the parent vec
    2D vector.
    */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 
 int main(int argc, char **argv)

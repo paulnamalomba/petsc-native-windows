@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/nest/matnestimpl.h> /*I   "petscmat.h"   I*/
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/mat/impls/shell/shell.h>

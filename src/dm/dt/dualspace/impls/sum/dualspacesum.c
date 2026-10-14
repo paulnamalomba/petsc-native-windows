@@ -1,4 +1,5 @@
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
+#include <petscviewer.h>
 
 /*@
   PetscDualSpaceSumGetNumSubspaces - Get the number of spaces in the sum space

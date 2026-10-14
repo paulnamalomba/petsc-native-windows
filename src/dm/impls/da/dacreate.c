@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/dmdaimpl.h> /*I   "petscdmda.h"   I*/
 
 static PetscErrorCode DMSetFromOptions_DA(DM da, PetscOptionItems PetscOptionsObject)

@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/snesimpl.h>       /*I "petscsnes.h"  I*/
 #include <petsc/private/linesearchimpl.h> /*I "petscsnes.h"  I*/
 #include <petscdmshell.h>
@@ -5024,7 +5026,7 @@ PetscErrorCode SNESSolve(SNES snes, Vec b, Vec x)
     if (snes->lagpre_persist) snes->pre_iter += snes->iter;
 
     PetscCall(PetscOptionsCreateViewer(PetscObjectComm((PetscObject)snes), ((PetscObject)snes)->options, ((PetscObject)snes)->prefix, "-snes_test_local_min", NULL, NULL, &flg));
-    if (flg && !PetscPreLoadingOn) PetscCall(SNESTestLocalMin(snes));
+    if (flg) PetscCall(SNESTestLocalMin(snes));
     /* Call converged reason views. This may involve user-provided viewers as well */
     PetscCall(SNESConvergedReasonViewFromOptions(snes));
 

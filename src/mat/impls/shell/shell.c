@@ -4,6 +4,7 @@
   much of anything.
 */
 
+#include <petscoptions.h>
 #include <../src/mat/impls/shell/shell.h> /*I "petscmat.h" I*/
 
 /*

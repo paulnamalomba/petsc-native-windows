@@ -1,5 +1,7 @@
 static const char help[] = "Tests MatGetSchurComplement\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 PetscErrorCode MatNormDifference(Mat A, Mat B, PetscReal *norm)

@@ -5,7 +5,7 @@
 */
 
 #include <petsc/private/ftnimpl.h>
-#include <petscviewer.h>
+#include <petscoptions.h>
 
 #if PetscDefined(HAVE_FORTRAN_CAPS)
   #define petscoptionsbegin_               PETSCOPTIONSBEGIN

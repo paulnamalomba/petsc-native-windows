@@ -12,6 +12,7 @@ use -hdf5 to specify HDF5 viewer format for subvector I/O \n\n";
    The arithmetic mean is also calculated in order to test VecMean().
 */
 
+#include <petscoptions.h>
 #include <petscvec.h>
 #include <petscviewerhdf5.h>
 

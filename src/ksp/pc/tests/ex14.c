@@ -12,6 +12,7 @@ static char help[] = "Tests that PCApplyTranspose() is the transpose of PCApply(
 */
 
 #include <petscksp.h>
+#include <petscoptions.h>
 
 /*
   Writes the 1D upwind advection-diffusion stencil into A. The advection makes the sub and

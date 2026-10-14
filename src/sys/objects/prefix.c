@@ -1,6 +1,7 @@
 /*
      Provides utility routines for manulating any type of PETSc object.
 */
+#include <petscoptions.h>
 #include <petsc/private/petscimpl.h> /*I   "petscsys.h"    I*/
 
 /*@

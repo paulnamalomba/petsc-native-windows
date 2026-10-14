@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "hostdevice.hpp"
 
 namespace Petsc

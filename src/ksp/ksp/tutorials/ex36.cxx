@@ -65,6 +65,7 @@ static char help[] = "\
                       Usage: ./ex36 -bc dirichlet -nu .01 -n 10\n";
 
 /* PETSc includes */
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdmmoab.h>
 

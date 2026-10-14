@@ -2,6 +2,7 @@ static const char help[] = "Test MatDiagonalScale() on dense matrices with scali
 
 // Contributed by: Steven Dargaville
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /* The scaling Vecs take their type from -vec_type, independently of the Mat type set

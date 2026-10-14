@@ -1,6 +1,7 @@
 static char help[] = "Tests PCView() before PCSetup() with -pc_type lu.\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 #include <petscpc.h>
 
 int main(int argc, char **args)

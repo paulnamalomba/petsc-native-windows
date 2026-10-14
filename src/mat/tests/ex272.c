@@ -1,5 +1,6 @@
 static const char help[] = "Test MatPtAP with MATDIAGONAL and MATCONSTANTDIAGONAL\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /* KOKKOS: Following two cases will fail, as MatDiagonalScale_{Seq,MPI}AIJKOKKOS does

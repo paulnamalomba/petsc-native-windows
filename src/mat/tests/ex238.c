@@ -1,5 +1,6 @@
 static char help[] = "Creates MatSeqBAIJ matrix of given BS for timing tests of MatMult().\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

@@ -1,6 +1,7 @@
 static const char help[] = "Test PetscSF with integers and MPIU_2INT \n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 #include <petscsf.h>
 #include <petscdevice.h>
 

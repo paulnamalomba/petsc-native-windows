@@ -11,6 +11,8 @@ Example: mpiexec -n <np> ./ex125 -f <matrix binary file> -nrhs 4 -mat_solver_typ
   petsc
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 PetscErrorCode CreateRandom(PetscInt n, PetscInt m, Mat *A)

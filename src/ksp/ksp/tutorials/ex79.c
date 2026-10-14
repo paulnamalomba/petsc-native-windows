@@ -1,5 +1,6 @@
 static char help[] = "Solves a linear system with a block of right-hand sides, apply a preconditioner to the same block.\n\n";
 
+#include <petscoptions.h>
 #include <petsc.h>
 
 #if PetscDefined(HAVE_HYPRE_DEVICE)

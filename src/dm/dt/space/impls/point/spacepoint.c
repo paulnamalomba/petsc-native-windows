@@ -1,5 +1,6 @@
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
-#include <petsc/private/dtimpl.h>      /*I "petscdt.h" I*/
+#include <petscviewer.h>
+#include <petsc/private/dtimpl.h> /*I "petscdt.h" I*/
 
 static PetscErrorCode PetscSpacePointView_Ascii(PetscSpace sp, PetscViewer viewer)
 {

@@ -1,6 +1,8 @@
 /*
  Provides an interface to the PaStiX sparse solver
  */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/mat/impls/aij/mpi/mpiaij.h>
 #include <../src/mat/impls/sbaij/seq/sbaij.h>

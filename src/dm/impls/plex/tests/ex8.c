@@ -1,5 +1,6 @@
 static char help[] = "Tests for cell geometry\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef enum {

@@ -1,9 +1,9 @@
 static char help[] = "Simple example to test separable objective optimizers.\n";
 
+#include <petscoptions.h>
 #include <petsc.h>
 #include <petsctao.h>
 #include <petscvec.h>
-#include <petscmath.h>
 
 #define NWORKLEFT  4
 #define NWORKRIGHT 12

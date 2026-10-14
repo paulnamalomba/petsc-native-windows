@@ -7,6 +7,8 @@ static char help[] = "Mini-app to benchmark matrix--matrix multiplication\n\n";
    P. Jolivet, J. E. Roman, and S. Zampini (2020).
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc.h>
 
 #if PetscDefined(HAVE_MKL_SPARSE_OPTIMIZE)

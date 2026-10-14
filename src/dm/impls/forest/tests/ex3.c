@@ -1,5 +1,6 @@
 static char help[] = "Tests adaptive refinement using DMForest, and uses HDF5.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmforest.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>

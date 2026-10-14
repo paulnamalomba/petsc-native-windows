@@ -1,5 +1,6 @@
 static char help[] = "Tests MATH2OPUS\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <petscsf.h>
 

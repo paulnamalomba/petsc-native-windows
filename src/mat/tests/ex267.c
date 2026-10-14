@@ -1,5 +1,6 @@
 static char help[] = "Test different MatSolve routines with MATTRANSPOSEVIRTUAL.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 PetscErrorCode TestMatrix(const char *test, Mat A, PetscInt nrhs, PetscBool inplace, PetscBool chol)

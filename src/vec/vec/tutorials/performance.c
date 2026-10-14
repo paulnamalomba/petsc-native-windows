@@ -3,6 +3,7 @@ static char help[] = "Time vector operations on GPU\n";
    The technical report and resources for generating data can be found in the
    repository:  https://gitlab.com/hannah_mairs/summit-performance */
 
+#include <petscoptions.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

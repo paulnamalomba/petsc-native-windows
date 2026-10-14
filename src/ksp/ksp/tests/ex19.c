@@ -19,6 +19,7 @@ static char help[] = "Solvers Laplacian with multigrid, bad way.\n\
     system of equations.
 */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdm.h>
 #include <petscdmda.h>

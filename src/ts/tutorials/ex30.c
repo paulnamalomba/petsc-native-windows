@@ -1,5 +1,6 @@
 static char help[] = "Biological network from https://link.springer.com/article/10.1007/s42967-023-00297-3\n\n\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscsf.h>
 #include <petscdmplex.h>

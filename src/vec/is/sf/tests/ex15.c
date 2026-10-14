@@ -7,6 +7,7 @@ tests VecScatterRemap on parallel to parallel (PtoP) vecscatter, sequential gene
 general (SGToSG) vecscatter and sequential general to sequential stride 1 (SGToSS_Stride1) vecscatter.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

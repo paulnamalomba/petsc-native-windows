@@ -1,5 +1,6 @@
 static char help[] = "Tests MatGetMultPetscSF() for the parallel AIJ, BAIJ, SBAIJ, dense, and SELL matrix types.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <petscsf.h>
 

@@ -1,4 +1,5 @@
-#include <petscdmda.h>                 /*I  "petscdmda.h"  I*/
+#include <petscdmda.h> /*I  "petscdmda.h"  I*/
+#include <petscviewer.h>
 #include <petsc/private/dmswarmimpl.h> /*I  "petscdmswarm.h"  I*/
 #include "../src/dm/impls/swarm/data_bucket.h"
 

@@ -1,4 +1,5 @@
 #include <../src/vec/vec/impls/nest/vecnestimpl.h> /*I  "petscvec.h"   I*/
+#include <petscviewer.h>
 
 /* check all blocks are filled */
 static PetscErrorCode VecAssemblyBegin_Nest(Vec v)

@@ -17,6 +17,7 @@ static char help[] = "Solves a time-dependent nonlinear PDE.\n";
 
   ------------------------------------------------------------------------- */
 
+#include <petscoptions.h>
 #include <petscdmda.h>
 #include <petscts.h>
 

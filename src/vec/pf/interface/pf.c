@@ -1,6 +1,8 @@
 /*
     The PF mathematical functions interface routines, callable by users.
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/vec/pf/pfimpl.h> /*I "petscpf.h" I*/
 
 PetscClassId      PF_CLASSID          = 0;

@@ -1,5 +1,6 @@
 static char help[] = "Tests BDDC Nedelec support and user-defined primal vertices.\n\n";
 
+#include <petscoptions.h>
 #include <petsc/private/pcbddcimpl.h>
 
 int main(int argc, char **args)

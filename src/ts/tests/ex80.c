@@ -1,5 +1,6 @@
 static char help[] = "Constant acceleration check with 2nd-order generalized-alpha.\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

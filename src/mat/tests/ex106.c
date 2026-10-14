@@ -2,6 +2,7 @@ static char help[] = "Test repeated LU factorizations. Used for checking memory 
   -m <size> : problem size\n\
   -mat_nonsym : use nonsymmetric matrix (default is symmetric)\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 int main(int argc, char **args)
 {

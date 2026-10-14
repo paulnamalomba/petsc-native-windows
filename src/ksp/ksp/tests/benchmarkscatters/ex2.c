@@ -1,6 +1,6 @@
 static char help[] = "Tests shared memory subcommunicators\n\n";
-#include <petscsys.h>
 #include <petscvec.h>
+#include <petscviewer.h>
 
 /*
    One can use petscmpiexec -n 3 -hosts localhost,Barrys-MacBook-Pro.local ./ex2 -info to mimic

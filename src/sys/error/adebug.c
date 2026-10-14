@@ -3,6 +3,7 @@
 */
 #define PETSC_DESIRE_FEATURE_TEST_MACROS /* for fileno() */
 #include <petscsys.h>                    /*I   "petscsys.h"   I*/
+#include <petscoptions.h>
 #include <signal.h>
 #if PetscDefined(HAVE_UNISTD_H)
   #include <unistd.h>

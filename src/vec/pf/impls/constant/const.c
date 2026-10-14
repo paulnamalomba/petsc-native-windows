@@ -1,4 +1,6 @@
 #include <../src/vec/pf/pfimpl.h> /*I "petscpf.h" I*/
+#include <petscviewer.h>
+#include <petscoptions.h>
 
 static PetscErrorCode PFApply_Constant(void *value, PetscInt n, const PetscScalar *x, PetscScalar *y)
 {

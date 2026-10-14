@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/ksp/ksp/impls/cg/gltr/gltrimpl.h> /*I "petscksp.h" I*/
 #include <petscblaslapack.h>
 

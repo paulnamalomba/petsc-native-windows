@@ -6,6 +6,7 @@ static char help[] = "2D Shallow water equations forward model with MMS verifica
                      "  ./ex4fwd -test_mms_spatial_order -steps 5 -dt 1e-4\n"
                      "  ./ex4fwd -test_mms_spatial_order -conv_nx_coarse 20 -conv_ny_coarse 20 -conv_refine 2 -steps 5 -dt 1e-4\n\n";
 
+#include <petscoptions.h>
 #include <petscdmda.h>
 #include <petscts.h>
 #include "ex4.h"

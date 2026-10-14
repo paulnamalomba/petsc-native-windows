@@ -11,6 +11,8 @@ static char help[] = "Reads a PETSc matrix from a file partitions it\n\n";
   Example of usage:
     mpiexec -n 3 ex73 -f <matfile> -mat_partitioning_type parmetis/scotch -viewer_binary_skip_info -nox
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

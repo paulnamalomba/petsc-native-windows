@@ -1,5 +1,6 @@
 #pragma once
 
+#include <petscoptions.h>
 #include <petsc/private/deviceimpl.h>
 
 #include <petsc/private/cpp/utility.hpp> // std::pair

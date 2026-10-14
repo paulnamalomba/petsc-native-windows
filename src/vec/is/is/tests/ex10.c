@@ -1,5 +1,6 @@
 static char help[] = "Tests ISFilter().\n\n";
 
+#include <petscoptions.h>
 #include <petscis.h>
 #include <petscviewer.h>
 

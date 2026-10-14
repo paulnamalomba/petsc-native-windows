@@ -1,5 +1,6 @@
 static char help[] = "Test some operations of SeqDense matrices with an LDA larger than M.\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

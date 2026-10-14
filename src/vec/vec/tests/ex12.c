@@ -3,6 +3,7 @@ This does case when we are merely selecting the local part of the\n\
 parallel vector.\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

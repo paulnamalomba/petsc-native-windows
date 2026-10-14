@@ -5,6 +5,8 @@ Load of 1.0 in x direction on all nodes (not a true uniform load).\n\
   -ne <size>      : number of (square) quadrilateral elements in each dimension\n\
   -alpha <v>      : scaling of material coefficient in embedded circle\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

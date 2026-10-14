@@ -1,5 +1,6 @@
 static char help[] = "Create a Plex Schwarz P surface with quads\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 int main(int argc, char **argv)

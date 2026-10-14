@@ -8,6 +8,7 @@ static char help[] = "Solves a one-dimensional steady upwind advection system wi
      petscis.h     - index sets
      petscviewer.h - viewers
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

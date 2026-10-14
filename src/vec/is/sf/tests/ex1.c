@@ -1,5 +1,6 @@
 static const char help[] = "Test star forest communication (PetscSF)\n\n";
 
+#include <petscoptions.h>
 #include <petscsf.h>
 #include <petsc/private/sfimpl.h>
 

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/mat/impls/shell/shell.h> /*I "petscmat.h" I*/
 
 const char *const MatCompositeMergeTypes[] = {"left", "right", "MatCompositeMergeType", "MAT_COMPOSITE_", NULL};

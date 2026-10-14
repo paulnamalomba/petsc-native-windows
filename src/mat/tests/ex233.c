@@ -1,5 +1,6 @@
 static char help[] = "Tests MatMPI{AIJ,BAIJ,SBAIJ}SetPreallocationCSR\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

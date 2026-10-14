@@ -2,6 +2,7 @@ static char help[] = "Test PCBDDCGraphCreateLocalSubdomainAdjacency() against th
                      "Use -nfields to select the number of fields, with arrays -dofs_type and -p describing their layouts.\n"
                      "Use -bc_dir_dofs and -bc_neu_dofs to mark boundary dofs for each field, and -bc_label to select the boundary label.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdt.h>
 #include <petsc/private/pcbddcprivateimpl.h>

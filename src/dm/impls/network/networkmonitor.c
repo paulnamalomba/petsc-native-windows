@@ -1,4 +1,5 @@
 #include <petscdmnetwork.h> /*I  "petscdmnetwork.h"  I*/
+#include <petscviewer.h>
 #include <petscdraw.h>
 
 /*@

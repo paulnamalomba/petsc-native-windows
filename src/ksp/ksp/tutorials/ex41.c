@@ -9,6 +9,7 @@ static char help[] = "Reads a PETSc matrix and vector from a socket connection, 
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

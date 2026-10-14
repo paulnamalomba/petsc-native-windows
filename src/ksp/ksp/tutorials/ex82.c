@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscksp.h>
 
 static char help[] = "Solves a linear system using PCHPDDM and MATHTOOL.\n\n";

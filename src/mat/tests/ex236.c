@@ -1,6 +1,7 @@
 static char help[] = "Test CPU/GPU memory leaks, MatMult and MatMultTransposeAdd during successive matrix assemblies\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

@@ -20,10 +20,19 @@
 
 - Add `--with-meson-exec` to select an existing Meson executable
 
+- Remove the `--with-serialize-functions` configure option and the associated function-pointer serialization feature (`PETSC_SERIALIZE_FUNCTIONS`)
+- Remove the `PetscPreLoad*` functionality and code that used it
+
 ```{rubric} Sys:
 ```
 
 - Add `PetscCommCreateNonempty()` and `PetscCommDestroyNonempty()` for external libraries, such as ParMETIS and PT-SCOTCH, that require every process of their communicator to own data
+
+- Remove `petscoptions.h` from `petscsys.h`; code that calls the options database routines, such as `PetscOptionsGetInt()` and `PetscOptionsBegin()`, must now include `petscoptions.h` explicitly
+- Remove `petscviewer.h` from other commonly used include files; code that calls the viewer routines must now include `petscviewer.h` explicitly
+- Reduce the include dependencies of `petscviewer.h`, `petscdraw.h`, `petscoptions.h`, `petscbt.h`, `petsclog.h`, which no longer force the inclusion of `petscsys.h`;
+  code that relied on these headers to pull in `petscsys.h` must include `petscsys.h`, for example, explicitly
+- Move the PETSc memory-management API (`PetscMalloc()`, `PetscFree()`, and related routines) into the new header `petscmem.h`; the API remains available through `petscsys.h`
 
 ```{rubric} Event Logging:
 ```

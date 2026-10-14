@@ -2,6 +2,7 @@
    Defines the abstract operations on AO (application orderings)
 */
 #include <../src/vec/is/ao/aoimpl.h> /*I "petscao.h" I*/
+#include <petscoptions.h>
 
 /* Logging support */
 PetscClassId  AO_CLASSID;

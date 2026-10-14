@@ -1,5 +1,6 @@
 static char help[] = "Example usage of extracting single cells with their associated fields from a swarm and putting it in a new swarm object\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>
 #include <petscts.h>

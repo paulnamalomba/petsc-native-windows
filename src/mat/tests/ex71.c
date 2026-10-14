@@ -1,5 +1,7 @@
 static char help[] = "Passes a sparse matrix to MATLAB.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

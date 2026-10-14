@@ -7,6 +7,8 @@ Input parameters include\n\
   -f <input_file> : file to load\n\
 e.g. ./ex116 -f $DATAFILESPATH/matrices/small  \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 #include <petscblaslapack.h>
 

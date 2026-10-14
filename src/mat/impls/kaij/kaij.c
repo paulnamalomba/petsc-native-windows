@@ -23,6 +23,7 @@
 */
 
 #include <../src/mat/impls/kaij/kaij.h> /*I "petscmat.h" I*/
+#include <petscviewer.h>
 #include <../src/mat/utils/freespace.h>
 #include <petsc/private/vecimpl.h>
 

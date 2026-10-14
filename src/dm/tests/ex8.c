@@ -1,6 +1,7 @@
 static char help[] = "Test parallel ruotines for GLVis\n\n";
 
 #include <petscdmshell.h>
+#include <petscviewer.h>
 #include <petsc/private/glvisvecimpl.h>
 
 PetscErrorCode VecView_Shell(Vec v, PetscViewer viewer)

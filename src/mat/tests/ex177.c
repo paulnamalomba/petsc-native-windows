@@ -1,5 +1,7 @@
 static char help[] = "Tests various routines in MatKAIJ format.\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 #define IMAX 15
 

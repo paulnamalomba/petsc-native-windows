@@ -9,6 +9,7 @@ static char help[] = "Test duplication/destruction of FFTW vecs \n\n";
    mpiexec -np <np> ./ex228
 */
 
+#include <petscoptions.h>
 #include <petscmat.h>
 int main(int argc, char **args)
 {

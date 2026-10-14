@@ -24,6 +24,7 @@ static char help[] = "Solve a toy 2D problem on a staggered grid\n\n";
   on an orthogonal grid.
 
 */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscksp.h>
 #include <petscdmstag.h> /* Includes petscdmproduct.h */

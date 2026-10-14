@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/snes/impls/gs/gsimpl.h> /*I "petscsnes.h"  I*/
 
 /*@

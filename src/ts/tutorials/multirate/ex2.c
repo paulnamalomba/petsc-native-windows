@@ -9,6 +9,8 @@ static char help[] = "Basic problem for multi-rate method.\n";
 
 F*/
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 typedef struct {

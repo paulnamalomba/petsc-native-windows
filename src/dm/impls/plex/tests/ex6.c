@@ -1,5 +1,6 @@
 static char help[] = "Tests for DMLabel lookup\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

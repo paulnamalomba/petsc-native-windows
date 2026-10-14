@@ -1,6 +1,7 @@
 static char help[] = "Test MatProductReplaceMats() \n\
 Modified from the code contributed by Pierre Jolivet \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

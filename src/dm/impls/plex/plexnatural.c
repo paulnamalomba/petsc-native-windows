@@ -1,4 +1,5 @@
 #include <petsc/private/dmpleximpl.h> /*I      "petscdmplex.h"   I*/
+#include <petscviewer.h>
 
 /*@
   DMPlexSetMigrationSF - Sets the `PetscSF` for migrating from a parent `DM` into this `DM`

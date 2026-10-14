@@ -15,6 +15,8 @@ F*/
   The gradient is computed with the discrete adjoint of an implicit theta method, see ex3adj.c for details.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscts.h>
 #include "ex3.h"

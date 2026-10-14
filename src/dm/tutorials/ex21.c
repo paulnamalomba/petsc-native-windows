@@ -5,6 +5,8 @@ Options: \n\
 -nt       : Number of timestep to perform \n\
 -view     : Write out initial condition and time dependent data \n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc.h>
 #include <petscdm.h>
 #include <petscdmda.h>

@@ -1,6 +1,7 @@
 static char help[] = "Tests PetscLogView() called from different places.\n\n";
 
-#include <petscsys.h>
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 int main(int argc, char **args)

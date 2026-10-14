@@ -42,6 +42,8 @@ static char help[] = "Large-deformation Elasticity Buckling Example";
 
   ------------------------------------------------------------------------F*/
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscsnes.h>
 #include <petscdm.h>
 #include <petscdmda.h>

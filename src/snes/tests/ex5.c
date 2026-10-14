@@ -11,6 +11,7 @@ This example tests PCVPBJacobiSetBlocks().\n\n";
      petscksp.h   - linear solvers
 */
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 /*

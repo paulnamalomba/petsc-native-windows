@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <petsc/private/dmpleximpl.h> /*I "petscdmplex.h" I*/
 #include <petsclandau.h>              /*I "petsclandau.h"   I*/

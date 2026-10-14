@@ -7,6 +7,8 @@
   F(t,U,Udot) = 0
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/tsimpl.h> /*I   "petscts.h"   I*/
 #include <petscdm.h>
 #include <petscdt.h>

@@ -7,6 +7,7 @@ Modified from the code contributed by Yaning Liu @lbl.gov \n\n";
    mpiexec -n <np> ./ex103 -mat_type aij
 */
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

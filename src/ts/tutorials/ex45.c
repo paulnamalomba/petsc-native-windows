@@ -3,6 +3,7 @@ We solve the heat equation in a rectangular\n\
 domain, using a parallel unstructured mesh (DMPLEX) to discretize it.\n\
 Contributed by: Julian Andrej <juan@tf.uni-kiel.de>\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 #include <petscts.h>

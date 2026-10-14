@@ -11,6 +11,7 @@ static char help[] = "Serial bouncing ball example to test TS event feature.\n";
   the TS run is requested to terminate from the PostEvent() callback.
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

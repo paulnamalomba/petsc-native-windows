@@ -1,5 +1,7 @@
 static char help[] = "Pseudotransient continuation to solve a many-variable system that comes from the 2 variable Rosenbrock function + trivial.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 static PetscErrorCode FormIJacobian(TS, PetscReal, Vec, Vec, PetscReal, Mat, Mat, void *);

@@ -1,5 +1,6 @@
 static char help[] = "Test GLVis high-order support with DMDAs\n\n";
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscdmplex.h>

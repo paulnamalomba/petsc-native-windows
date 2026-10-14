@@ -3,6 +3,8 @@ static char help[] = "This example shows 1) how to transfer vectors from a paren
   required to cover all processes in PETSC_COMM_WORLD; 3) how to copy a vector from a parent communicator to vectors on its child communicators.\n\
   To run any example with VECCUDA vectors, add -vectype cuda to the argument list\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 int main(int argc, char **argv)
 {

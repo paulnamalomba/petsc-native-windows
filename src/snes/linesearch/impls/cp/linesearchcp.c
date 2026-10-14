@@ -1,4 +1,5 @@
 #include <petsc/private/linesearchimpl.h>
+#include <petscviewer.h>
 #include <petscsnes.h>
 
 static PetscErrorCode SNESLineSearchApply_CP(SNESLineSearch linesearch)

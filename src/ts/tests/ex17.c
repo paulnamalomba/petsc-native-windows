@@ -1,5 +1,7 @@
 static char help[] = "Solves the ODE du/dt = poly(t), u(0) = 0. Tests TSResize for varying size.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 PetscScalar poly(PetscInt p, PetscReal t)

@@ -1,6 +1,7 @@
 static char help[] = "Tests BDDC coarse solver reuse when the coarse MPI communicator changes.\n\n";
 
 #include <petsc/private/pcbddcimpl.h>
+#include <petscoptions.h>
 
 int main(int argc, char **args)
 {

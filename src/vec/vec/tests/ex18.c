@@ -2,6 +2,7 @@ static char help[] = "Compares BLAS dots on different machines. Input\n\
 arguments are\n\
   -n <length> : local vector length\n\n";
 
+#include <petscoptions.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

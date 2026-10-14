@@ -1,6 +1,7 @@
 static char help[] = "Tests BDDC reuse after PCReset() and KSPReset().\n\n";
 
 #include <petsc/private/pcbddcimpl.h>
+#include <petscoptions.h>
 
 int main(int argc, char **args)
 {

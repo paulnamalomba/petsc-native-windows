@@ -1,5 +1,6 @@
 static const char help[] = "Test KDTree\n\n";
 
+#include <petscoptions.h>
 #include <petsc.h>
 
 static inline PetscReal Distance(PetscInt dim, const PetscReal *PETSC_RESTRICT x, const PetscReal *PETSC_RESTRICT y)

@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcbddcimpl.h> /*I "petscpc.h" I*/ /* header file for Fortran wrappers */
 #include <petsc/private/pcbddcprivateimpl.h>
 #include <petscblaslapack.h>

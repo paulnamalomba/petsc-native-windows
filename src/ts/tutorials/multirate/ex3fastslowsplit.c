@@ -14,6 +14,8 @@ F*/
   ys stands for the slow component and yf stands for the fast component. On the RHS for yf, only the term -\frac{-2.0+yf^2-\cos(5.0*t)}{2.0*yf} is treated implicitly while the rest is treated explicitly.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscts.h>
 
 typedef struct {

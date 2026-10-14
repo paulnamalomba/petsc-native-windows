@@ -37,6 +37,8 @@ puts it into the Sieve ordering.
 
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

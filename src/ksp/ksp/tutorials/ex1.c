@@ -10,6 +10,7 @@ static char help[] = "Solves a tridiagonal linear system with KSP.\n\n";
 
   Note:  The corresponding parallel example is ex23.c
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

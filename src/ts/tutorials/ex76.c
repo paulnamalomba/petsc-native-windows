@@ -30,6 +30,7 @@ To look at nonlinear solver convergence, use
 [3] J. Principe and R. Codina, "Mathematical models for thermally coupled low speed flows", Adv. in Theo. and App. Mech., 2(1), pp.93--112, 2009.
 F*/
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscts.h>

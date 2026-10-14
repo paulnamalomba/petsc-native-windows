@@ -1,5 +1,6 @@
 static char help[] = "Tests save/load of plex/section/vec on different numbers of processes in HDF5.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmshell.h>
 #include <petscdmplex.h>
 #include <petscsection.h>

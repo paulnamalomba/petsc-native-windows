@@ -1,4 +1,5 @@
 #include <petsc/private/taoimpl.h> /*I "petsctao.h" I*/
+#include <petscviewer.h>
 
 typedef struct _n_TaoTerm_Callbacks TaoTerm_Callbacks;
 

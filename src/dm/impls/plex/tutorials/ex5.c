@@ -1,5 +1,6 @@
 static char help[] = "Demonstrate HDF5 parallel load-save-reload cycle\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>
 #define EX "ex5.c"

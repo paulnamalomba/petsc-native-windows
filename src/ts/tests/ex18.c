@@ -11,6 +11,7 @@ static char help[] = "Solves a DAE with a non-trivial mass matrix. \n\n";
    It is equivalent to solve dU/dt = U, U = U0 with solution U = U0 * exp(tfinal)
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 PetscErrorCode IFunction(TS, PetscReal, Vec, Vec, Vec, void *);

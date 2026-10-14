@@ -4,6 +4,7 @@
 */
 #include <petsc/private/petscimpl.h> /*I "petscsys.h" I*/
 #include <petscviewer.h>
+#include <petscoptions.h>
 
 #include <petsc/private/hashmap.h>
 /*

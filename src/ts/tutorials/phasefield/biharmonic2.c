@@ -22,10 +22,11 @@ Evolve the Cahn-Hillard equations: (this fails after a few timesteps 12/17/2017)
 ./biharmonic2 -ts_monitor -snes_monitor -ts_monitor_draw_solution  -pc_type lu  -draw_pause .1 -snes_converged_reason   -ts_type beuler    -da_refine 6  -draw_fields 1  -kappa .00001 -ts_time_step 5.96046e-06 -cahn-hillard
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscts.h>
-#include <petscdraw.h>
 
 /*
    User-defined routines

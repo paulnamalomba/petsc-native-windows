@@ -3,6 +3,7 @@
     Testing examples can be found in ~src/mat/tests
 */
 
+#include <petscoptions.h>
 #include <petscdevice_cuda.h>
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
 

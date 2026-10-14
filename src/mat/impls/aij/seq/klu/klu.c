@@ -7,6 +7,8 @@
    that KLU SuiteSparse_long version MUST be built with 64-bit integers when used.
 
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 
 #if PetscDefined(USE_64BIT_INDICES)

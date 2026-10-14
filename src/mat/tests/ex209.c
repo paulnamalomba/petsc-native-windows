@@ -4,6 +4,8 @@ static char help[] = "Test MatTransposeMatMult() \n\n";
   mpiexec -n 8 ./ex209 -f <inputfile> (e.g., inputfile=ceres_solver_iteration_001_A.petsc)
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

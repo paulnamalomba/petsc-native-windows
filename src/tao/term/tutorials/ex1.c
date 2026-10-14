@@ -1,5 +1,7 @@
 const char help[] = "Basic TaoTerm usage";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 
 int main(int argc, char **argv)

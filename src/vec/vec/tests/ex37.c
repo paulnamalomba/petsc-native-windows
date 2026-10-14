@@ -1,5 +1,7 @@
 static char help[] = "Nest vector functionality.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 static PetscErrorCode GetISs(Vec vecs[], IS is[], PetscBool inv)

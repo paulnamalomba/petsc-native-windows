@@ -2,6 +2,8 @@
    Defines a block Jacobi preconditioner.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/pc/impls/bjacobi/bjacobi.h> /*I "petscpc.h" I*/
 
 static PetscErrorCode PCSetUp_BJacobi_Singleblock(PC, Mat, Mat);

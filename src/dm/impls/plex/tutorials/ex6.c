@@ -1,5 +1,6 @@
 static char help[] = "Spectral element access patterns with Plex\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

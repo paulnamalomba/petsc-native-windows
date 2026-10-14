@@ -1,6 +1,7 @@
 static char help[] = "Test VTK structured grid (.vts) viewer support\n\n";
 
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmda.h>
 
 /*

@@ -8,6 +8,7 @@ static char help[] = "Solves a variable Poisson problem with KSP.\n\n";
      petscis.h     - index sets            petscksp.h - Krylov subspace methods
      petscviewer.h - viewers               petscpc.h  - preconditioners
 */
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /*

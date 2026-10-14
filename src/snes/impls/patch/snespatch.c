@@ -1,7 +1,8 @@
 /*
       Defines a SNES that can consist of a collection of SNESes on patches of the domain
 */
-#include <petsc/private/vecimpl.h>     /* For vec->map */
+#include <petsc/private/vecimpl.h> /* For vec->map */
+#include <petscviewer.h>
 #include <petsc/private/snesimpl.h>    /*I "petscsnes.h" I*/
 #include <petsc/private/pcpatchimpl.h> /* We need internal access to PCPatch right now, until that part is moved to Plex */
 #include <petscsf.h>

@@ -1,8 +1,8 @@
 static const char help[] = "Test overlapped communication on a single star forest (PetscSF)\n\n";
 
 #include <petscvec.h>
-#include <petscsf.h>
 #include <petscviewer.h>
+#include <petscsf.h>
 
 int main(int argc, char **argv)
 {

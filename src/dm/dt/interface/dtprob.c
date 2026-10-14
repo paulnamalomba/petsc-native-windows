@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdt.h> /*I "petscdt.h" I*/
 
 #include <petscvec.h>

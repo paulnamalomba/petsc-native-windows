@@ -13,6 +13,8 @@ F*/
   Solve the same optimization problem as in ex3opt.c.
   Use finite difference to approximate the gradients.
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscts.h>
 #include "ex3.h"

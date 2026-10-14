@@ -1,5 +1,6 @@
 static char help[] = "test least-squares problem created from a mapped taoterm quadratic";
 
+#include <petscoptions.h>
 #include <petsctao.h>
 
 int main(int argc, char **argv)

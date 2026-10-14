@@ -1,5 +1,6 @@
 static char help[] = "Test of Colorized Scatter Plot.\n";
 
+#include <petscoptions.h>
 #include <petscdraw.h>
 #include <petscvec.h>
 #include <petscis.h>

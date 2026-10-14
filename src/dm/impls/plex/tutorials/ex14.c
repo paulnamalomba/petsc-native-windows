@@ -1,6 +1,7 @@
 const char help[] = "Set up a PetscSF for halo exchange between local vectors";
 
 #include <petscdmplex.h>
+#include <petscviewer.h>
 #include <petscsf.h>
 
 int main(int argc, char **argv)

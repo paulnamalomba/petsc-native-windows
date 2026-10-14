@@ -2,7 +2,6 @@
     Creates hypre ijmatrix from PETSc matrix
 */
 
-#include <petscpkg_version.h>
 #include <petsc/private/petschypre.h>
 #include <petscmathypre.h>
 #include <petsc/private/matimpl.h>
@@ -10,6 +9,8 @@
 #include <../src/mat/impls/hypre/mhypre.h>
 #include <../src/mat/impls/aij/mpi/mpiaij.h>
 #include <../src/vec/vec/impls/hypre/vhyp.h>
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <HYPRE.h>
 #include <HYPRE_utilities.h>
 #include <_hypre_parcsr_ls.h>

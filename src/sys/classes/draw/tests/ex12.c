@@ -1,6 +1,7 @@
 static char help[] = "Makes a simple bar graph.\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 #include <petscdraw.h>
 
 int main(int argc, char **argv)

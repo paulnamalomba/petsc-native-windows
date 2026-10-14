@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/matimpl.h>
 
 #define DEFAULT_STASH_SIZE 10000

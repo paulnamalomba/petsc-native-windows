@@ -1,4 +1,5 @@
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
+#include <petscviewer.h>
 #include <petsc/private/petscimpl.h>
 
 typedef struct _n_PetscFE_Vec {

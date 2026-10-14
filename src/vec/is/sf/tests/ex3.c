@@ -2,6 +2,8 @@ static char help[] = "Test PetscSFFetchAndOp on patterned SF graphs. PetscSFFetc
  and PetscSFReduce. So it is a good test to see if they all work for patterned graphs.\n\
  Run with ./prog -op [replace | sum]\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 #include <petscsf.h>
 int main(int argc, char **argv)

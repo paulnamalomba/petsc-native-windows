@@ -1,5 +1,6 @@
 static char help[] = "Test MatDenseGetSubMatrix() on a CUDA matrix and MatFlag() on dense matrices.\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /*

@@ -1,5 +1,6 @@
 static char help[] = "Test MATMFFD for the rectangular case\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static PetscErrorCode myF(PetscCtx ctx, Vec x, Vec y)

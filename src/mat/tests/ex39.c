@@ -1,5 +1,7 @@
 static char help[] = "Tests Elemental interface.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

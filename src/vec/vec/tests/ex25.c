@@ -2,6 +2,7 @@ static char help[] = "Scatters from a parallel vector to a sequential vector.  I
 this case processor zero is as long as the entire parallel vector; rest are zero length.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

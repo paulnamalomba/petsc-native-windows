@@ -2,6 +2,7 @@
    Examples in CSP11/Algorithms/MINRESQLP/minresQLP.m comments */
 static char help[] = "Tests MINRES-QLP.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 static PetscErrorCode Get2DStencil(PetscInt i, PetscInt j, PetscInt n, PetscInt idxs[])

@@ -4,6 +4,7 @@ static const char help[] = "Simple libCEED test to calculate surface area using 
   This is a recreation of libCeed Example 2: https://libceed.readthedocs.io/en/latest/examples/ceed/
 */
 
+#include <petscoptions.h>
 #include <petscdmceed.h>
 #include <petscdmplexceed.h>
 #include <petscfeceed.h>

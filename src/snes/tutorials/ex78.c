@@ -16,6 +16,7 @@ static char help[] = "Newton methods to solve u''  = f in parallel with periodic
      petscksp.h   - linear solvers
 */
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscsnes.h>

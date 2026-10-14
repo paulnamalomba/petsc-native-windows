@@ -18,6 +18,7 @@ following Howarth-Dorodnitsyn transformation with boundary conditions
 f(0) = f'(0) = 0, f'(\infty) = 1, h(\infty) = 1, h = \theta(0). Where \theta = T/T_{\infty}
 Note: density (\rho) and viscosity (\mu) are treated as constants in this example
 F*/
+#include <petscoptions.h>
 #include <petscsnes.h>
 #include <petscdt.h>
 

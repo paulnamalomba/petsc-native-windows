@@ -1,6 +1,7 @@
 static char help[]     = "Test that shared points on interface of partitions can be rebalanced.\n\n";
 static char FILENAME[] = "ex31.c";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>
 #include <petscsf.h>

@@ -18,6 +18,7 @@
            insure that the user calls the routines in the correct order
 */
 
+#include <petscoptions.h>
 #include <petsc/private/vecimpl.h> /*I   "petscvec.h"    I*/
 
 static PetscMPIInt MPIU_Iallreduce(void *sendbuf, void *recvbuf, PetscMPIInt count, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm, MPI_Request *request)

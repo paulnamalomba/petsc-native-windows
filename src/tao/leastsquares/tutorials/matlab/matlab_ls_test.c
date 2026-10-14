@@ -8,6 +8,7 @@ The interface calls:\n\
 TestingPlot.m is called outside of TAO/Pounders to produce a performance profile\n\
 of the results compared to the MATLAB fminsearch algorithm.\n";
 
+#include <petscoptions.h>
 #include <petsctao.h>
 #include <petscmatlab.h>
 

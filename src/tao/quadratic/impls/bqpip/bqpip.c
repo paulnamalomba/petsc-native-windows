@@ -4,6 +4,7 @@
 
  */
 
+#include <petscoptions.h>
 #include <../src/tao/quadratic/impls/bqpip/bqpipimpl.h>
 #include <petscksp.h>
 

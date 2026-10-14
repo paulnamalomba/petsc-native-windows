@@ -1,5 +1,6 @@
 static char help[] = "Tests PetscSectionView()/Load() with HDF5.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmshell.h>
 #include <petscdmplex.h>
 #include <petscsection.h>

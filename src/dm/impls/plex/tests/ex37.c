@@ -1,5 +1,6 @@
 static const char help[] = "Test of CAD functionality";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 /* TODO

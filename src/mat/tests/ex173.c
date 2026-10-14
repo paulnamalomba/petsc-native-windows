@@ -8,6 +8,8 @@ static char help[] = "Test MatrixMarket outputting.\n\n";
      petscis.h     - index sets            petscviewer.h - viewers
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

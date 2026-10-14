@@ -24,6 +24,7 @@ static char help[] = "Solve a toy 3D problem on a staggered grid\n\n";
      ./ex3 -pinpressure 1 -pc_type lu -pc_factor_mat_solver_type umfpack
 
 */
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscksp.h>
 #include <petscdmstag.h>

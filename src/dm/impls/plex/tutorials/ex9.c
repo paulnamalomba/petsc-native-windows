@@ -1,5 +1,6 @@
 static char help[] = "Evaluate the shape quality of a mesh\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

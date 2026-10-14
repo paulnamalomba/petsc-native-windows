@@ -14,6 +14,7 @@ static char help[] = "Tests TSARKIMEX adjoint parameter sensitivities when the p
   discretization error.
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef enum {

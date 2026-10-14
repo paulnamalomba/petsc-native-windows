@@ -1,5 +1,6 @@
 static char help[] = "Test query functions for DMNetwork \n\n";
 
+#include <petscoptions.h>
 #include <petscdmnetwork.h>
 
 /*

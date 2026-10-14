@@ -50,6 +50,8 @@
    using a given Amesos2 solver interface.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <Teuchos_ScalarTraits.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_GlobalMPISession.hpp>

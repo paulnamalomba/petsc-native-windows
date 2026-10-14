@@ -1,4 +1,5 @@
 #include <petsc/private/glvisviewerimpl.h>
+#include <petscviewer.h>
 #include <petsc/private/glvisvecimpl.h>
 
 static PetscErrorCode PetscViewerGLVisVecInfoDestroy_Private(PetscCtxRt ptr)

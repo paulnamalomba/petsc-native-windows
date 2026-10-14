@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/dmpleximpl.h> /*I      "petscdmplex.h"   I*/
 
 /* TODO PetscArrayExchangeBegin/End */

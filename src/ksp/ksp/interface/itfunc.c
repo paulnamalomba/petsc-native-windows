@@ -2,6 +2,8 @@
       Interface KSP routines that the user calls.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/kspimpl.h> /*I "petscksp.h" I*/
 #include <petsc/private/matimpl.h> /*I "petscmat.h" I*/
 #include <petscdm.h>

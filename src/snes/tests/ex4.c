@@ -15,6 +15,7 @@ This examples solves
   F\genfrac{(}{)}{0pt}{}{x_0}{x_1} = \genfrac{(}{)}{0pt}{}{\sin(3 x_0) + x_0}{x_1}
 \end{equation}
 F*/
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 /*

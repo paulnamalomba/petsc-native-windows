@@ -1,4 +1,5 @@
-#include <petscsys.h> /*I  "petscviewer.h"  I*/
+#include <../src/sys/classes/viewer/impls/socket/socket.h> /*I "petscviewer.h" I*/
+#include <petscoptions.h>
 
 #if PetscDefined(NEEDS_UTYPE_TYPEDEFS)
 /* Some systems have inconsistent include files that use but do not
@@ -40,7 +41,6 @@ typedef unsigned long  u_long;
   #include <Winsock2.h>
 #endif
 #include <sys/stat.h>
-#include <../src/sys/classes/viewer/impls/socket/socket.h>
 
 #if PetscDefined(NEED_CLOSE_PROTO)
 PETSC_EXTERN int close(int);

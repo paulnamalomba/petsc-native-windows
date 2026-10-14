@@ -1,5 +1,6 @@
 static char help[] = "Tests for mesh interpolation\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 /* List of test meshes

@@ -1,6 +1,7 @@
 static char help[] = "Run Birthday Spacing Tests for PetscRandom.\n\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 #include <petscviewer.h>
 
 /* L'Ecuyer & Simard, 2001.

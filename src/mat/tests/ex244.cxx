@@ -4,6 +4,8 @@ static char help[] = "Tests MatConvert(), MatLoad() for MATSCALAPACK interface.\
    mpiexec -n <np> ./ex244 -fA <A_data> -fB <B_data> -orig_mat_type <type> -orig_mat_type <mat_type>
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

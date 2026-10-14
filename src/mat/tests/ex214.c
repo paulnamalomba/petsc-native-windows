@@ -1,6 +1,8 @@
 static char help[] = "Tests MatMatSolve() and MatMatTransposeSolve() for computing inv(A) with MUMPS.\n\
 Example: mpiexec -n <np> ./ex214 -displ \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

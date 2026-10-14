@@ -1,6 +1,7 @@
 static char help[] = "Test different KSP and Mat prefixes.\n\n";
 
 #include <petscksp.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

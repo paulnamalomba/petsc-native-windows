@@ -10,6 +10,8 @@
        n_local = maximum over all processors of n_local_true
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcasmimpl.h> /*I "petscpc.h" I*/
 #include <petsc/private/matimpl.h>
 

@@ -1,5 +1,6 @@
 static char help[] = "An example of writing a global Vec from a DMPlex with HDF5 format.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>
 

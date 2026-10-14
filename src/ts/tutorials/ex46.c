@@ -5,6 +5,7 @@ This example supports discretized auxiliary fields (Re) as well as\n\
 multilevel nonlinear solvers.\n\
 Contributed by: Julian Andrej <juan@tf.uni-kiel.de>\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscts.h>

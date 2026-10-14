@@ -1,4 +1,5 @@
 #include <petscsys.h>
+#include <petscoptions.h>
 
 /*@
   PetscOptionsGetenv - Gets an environmental variable, broadcasts to all

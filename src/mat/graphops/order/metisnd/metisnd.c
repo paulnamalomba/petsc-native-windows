@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <petsc/private/matorderimpl.h>
 #include <petsc/private/matmetisimpl.h>

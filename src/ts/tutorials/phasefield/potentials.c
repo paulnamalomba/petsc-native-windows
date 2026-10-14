@@ -1,6 +1,7 @@
 static char help[] = "Plots the various potentials used in the examples.\n";
 
 #include <petscdmda.h>
+#include <petscviewer.h>
 #include <petscts.h>
 #include <petscdraw.h>
 

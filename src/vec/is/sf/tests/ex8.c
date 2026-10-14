@@ -1,5 +1,7 @@
 static char help[] = "Test VecScatterCreateToZero, VecScatterCreateToAll\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 int main(int argc, char **argv)
 {

@@ -1,6 +1,7 @@
 const char help[] = "Test PCMatSetApplyOperation() and PCMatGetApplyOperation()";
 
 #include <petscpc.h>
+#include <petscviewer.h>
 
 static PetscErrorCode TestVecEquality(Vec x, Vec y)
 {

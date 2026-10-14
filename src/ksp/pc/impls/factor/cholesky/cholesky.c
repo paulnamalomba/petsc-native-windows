@@ -3,6 +3,7 @@
    Note: this need not be considered a preconditioner since it supplies
          a direct solver.
 */
+#include <petscoptions.h>
 #include <../src/ksp/pc/impls/factor/factor.h> /*I "petscpc.h" I*/
 
 typedef struct {

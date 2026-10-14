@@ -2,6 +2,8 @@
  GAMG geometric-algebric multigrid PC - Mark Adams 2011
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/pc/impls/gamg/gamg.h> /*I "petscpc.h" I*/
 #include <petscblaslapack.h>
 #include <petscdm.h>

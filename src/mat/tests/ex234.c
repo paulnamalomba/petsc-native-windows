@@ -1,6 +1,7 @@
 static char help[] = "Basic test of various routines with SBAIJ matrices\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

@@ -4,6 +4,7 @@
  */
 
 #include <petsc/private/dmdaimpl.h> /*I   "petscdmda.h"    I*/
+#include <petscviewer.h>
 
 #include <petscdraw.h>
 static PetscErrorCode DMView_DA_3d(DM da, PetscViewer viewer)

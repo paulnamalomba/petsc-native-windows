@@ -1,5 +1,6 @@
 static char help[] = "Tests mesh adaptation with DMPlex and pragmatic.\n";
 
+#include <petscoptions.h>
 #include <petsc/private/dmpleximpl.h>
 
 #include <petscsnes.h>

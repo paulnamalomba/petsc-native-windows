@@ -1,4 +1,5 @@
 #include <petsc/private/dmpleximpl.h> /*I      "petscdmplex.h"   I*/
+#include <petscviewer.h>
 #include <petscsf.h>
 
 /*@

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/tao/pde_constrained/impls/lcl/lcl.h>
 static PetscErrorCode LCLComputeLagrangianAndGradient(TaoLineSearch, Vec, PetscReal *, Vec, void *);
 static PetscErrorCode LCLComputeAugmentedLagrangianAndGradient(TaoLineSearch, Vec, PetscReal *, Vec, void *);

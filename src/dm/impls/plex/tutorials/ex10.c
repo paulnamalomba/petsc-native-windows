@@ -1,5 +1,6 @@
 static char help[] = "TDycore Mesh Examples\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 typedef struct {

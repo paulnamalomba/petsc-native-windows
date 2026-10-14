@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "petscdm.h"
 static char help[] = "Tests for particle initialization using the KS test\n\n";
 

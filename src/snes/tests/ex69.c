@@ -4,6 +4,7 @@ static char help[] = "Tests recovery from domain errors in MatMult() and PCApply
       See src/ksp/ksp/tutorials/ex19.c from which this was copied
 */
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 #include <petscdm.h>
 #include <petscdmda.h>

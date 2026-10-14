@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 
 static char help[] = "Demonstrate PCFIELDSPLIT after MatZeroRowsColumns() inside PCREDISTRIBUTE";

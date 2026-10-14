@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <../src/tao/bound/impls/bqnk/bqnk.h>
 
 static const char *BNK_AS[64] = {"none", "bertsekas"};

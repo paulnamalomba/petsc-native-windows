@@ -3,7 +3,7 @@
 */
 
 #include <petsc/private/drawimpl.h> /*I "petscdraw.h" I*/
-#include <petscviewer.h>            /*I "petscviewer.h" I*/
+#include <petscoptions.h>
 
 PetscClassId PETSC_DRAWBAR_CLASSID = 0;
 

@@ -1,6 +1,7 @@
 static char help[] = "This example is based on ex1.c, but generates a random network of chosen sizes and parameters. \n\
   Usage: -n determines number of nodes. The nonnegative seed can be specified with the flag -seed, otherwise the program generates a random seed.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmnetwork.h>
 #include <petscksp.h>
 #include <time.h>

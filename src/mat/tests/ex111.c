@@ -10,6 +10,7 @@ static char help[] = "Tests sequential and parallel MatMatMatMult() and MatPtAP(
     Example of usage: mpiexec -n 3 ./ex41 -Mx 10 -My 10 -Mz 10
 */
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

@@ -32,6 +32,7 @@ The following options are available:
 
  */
 
+#include <petscoptions.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscsnes.h>

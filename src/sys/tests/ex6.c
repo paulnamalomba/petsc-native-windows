@@ -1,6 +1,7 @@
 static char help[] = "Tests options database";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 #define PetscTestCheck(expr) PetscCheck(expr, PETSC_COMM_SELF, PETSC_ERR_LIB, "Assertion: `%s' failed.", PetscStringize(expr))
 

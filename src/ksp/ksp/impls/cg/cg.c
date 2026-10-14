@@ -40,6 +40,8 @@
     related to the type of matrix (e.g. complex symmetric) being solved and
     data used during the optional Lanczos process used to compute eigenvalues
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/ksp/impls/cg/cgimpl.h> /*I "petscksp.h" I*/
 extern PetscErrorCode KSPComputeExtremeSingularValues_CG(KSP, PetscReal *, PetscReal *);
 extern PetscErrorCode KSPComputeEigenvalues_CG(KSP, PetscInt, PetscReal *, PetscReal *, PetscInt *);

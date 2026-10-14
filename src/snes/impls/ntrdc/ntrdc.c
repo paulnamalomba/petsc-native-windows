@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/snes/impls/ntrdc/ntrdcimpl.h> /*I   "petscsnes.h"   I*/
 
 typedef struct {

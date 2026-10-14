@@ -3,6 +3,7 @@
     Testing examples can be found in ~src/mat/tests
 */
 
+#include <petscoptions.h>
 #include <../src/mat/impls/fft/fft.h> /*I "petscmat.h" I*/
 EXTERN_C_BEGIN
 #if !PetscDefined(HAVE_MPIUNI)

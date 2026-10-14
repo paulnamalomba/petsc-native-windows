@@ -19,6 +19,7 @@ The PDE will be the Laplace equation with homogeneous boundary conditions
 
 F*/
 
+#include <petscoptions.h>
 #include <petsc.h>
 #include <petscfe.h>
 

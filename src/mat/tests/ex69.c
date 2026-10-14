@@ -2,8 +2,8 @@ static char help[] = "Tests MatCreateDenseCUDA(), MatDenseCUDAPlaceArray(), MatD
   or MatCreateDenseHIP(), MatDenseHIPPlaceArray(), MatDenseHIPReplaceArray(), and MatDenseHIPResetArray(),\n\
   as well as MatDiagonalScale() on device.\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
-#include <petscpkg_version.h>
 
 #if !defined(PETSC_PKG_CUDA_VERSION_GE)
   #define PETSC_PKG_CUDA_VERSION_GE(MAJ, MIN, PAT) 0

@@ -1,5 +1,6 @@
 static char help[] = "Tests L2 projection with DMSwarm using delta function particles and deposition of linear shape.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscfe.h>
 #include <petscdmswarm.h>

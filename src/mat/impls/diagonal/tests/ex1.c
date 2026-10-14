@@ -1,6 +1,7 @@
 const char help[] = "Test MATDIAGONAL";
 
 #include <petsc/private/petscimpl.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **argv)

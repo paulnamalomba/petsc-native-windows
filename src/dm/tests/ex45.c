@@ -11,6 +11,7 @@
 _._._._._._._._._._._._._._._._._._._._._.*/
 
 #include <petscdmda.h>
+#include <petscviewer.h>
 
 int main(int argc, char *argv[])
 {

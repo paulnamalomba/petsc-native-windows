@@ -8,6 +8,7 @@ static char help[] = "Tests MatMeshToCellGraph()\n\n";
      petscis.h     - index sets            petscviewer.h - viewers
 */
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

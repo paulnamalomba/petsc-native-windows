@@ -8,6 +8,8 @@
  * An example demonstrates how to use hierarchical partitioning approach
  */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 static char help[] = "Illustrates use of hierarchical partitioning.\n";

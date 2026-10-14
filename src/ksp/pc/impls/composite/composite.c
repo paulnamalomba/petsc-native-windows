@@ -1,6 +1,8 @@
 /*
       Defines a preconditioner that can consist of a collection of PCs
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcimpl.h>
 #include <petscksp.h> /*I "petscksp.h" I*/
 

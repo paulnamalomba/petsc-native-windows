@@ -7,6 +7,7 @@ Use -transpose to solve a second time with a nonsymmetric operator and KSPMatSol
 Use -selfscale to solve a second time after turning KSPRichardsonSetSelfScale() on.\n\
 Use -n to set the size of the system and -nrhs to set the number of right-hand sides.\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /*

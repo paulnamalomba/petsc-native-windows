@@ -1,6 +1,7 @@
 static char help[] = "Solves u`` + u^{2} = f with Newton-like methods. Using\n\
  matrix-free techniques with user-provided explicit matrix for computing the preconditioner.\n\n";
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 extern PetscErrorCode FormJacobian(SNES, Vec, Mat, Mat, void *);

@@ -1,5 +1,7 @@
 static char help[] = "Tests DMSLICED operations\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmsliced.h>
 
 int main(int argc, char *argv[])

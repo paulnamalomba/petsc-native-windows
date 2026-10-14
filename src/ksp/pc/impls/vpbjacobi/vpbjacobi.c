@@ -1,4 +1,5 @@
 #include <../src/ksp/pc/impls/vpbjacobi/vpbjacobi.h>
+#include <petscviewer.h>
 #include <petsc/private/matimpl.h>
 
 static PetscErrorCode PCApply_VPBJacobi(PC pc, Vec x, Vec y)

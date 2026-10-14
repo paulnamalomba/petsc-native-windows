@@ -1,5 +1,6 @@
 const char help[] = "Test DMPlexInsertBoundaryValues with DMPlexSetClosurePermutationTensor.\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 static PetscErrorCode bc_func(PetscInt dim, PetscReal time, const PetscReal coords[], PetscInt num_comp_u, PetscScalar *u, PetscCtx ctx)

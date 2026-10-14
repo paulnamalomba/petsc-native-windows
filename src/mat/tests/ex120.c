@@ -1,6 +1,7 @@
 static char help[] = "Test LAPACK routine ZHEEV, ZHEEVX, ZHEGV and ZHEGVX. \n\
 ZHEEV computes all eigenvalues and, optionally, eigenvectors of a complex Hermitian matrix A. \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <petscblaslapack.h>
 

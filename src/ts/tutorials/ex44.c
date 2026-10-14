@@ -11,6 +11,7 @@ static char help[] = "Parallel bouncing ball example formulated as a second-orde
   the TS run is requested to terminate from the PostEvent() callback.
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

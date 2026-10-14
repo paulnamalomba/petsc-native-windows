@@ -1,5 +1,4 @@
 #include <petscsys.h>
-#include <petscbt.h>
 #include <petscviewer.h>
 
 /*@

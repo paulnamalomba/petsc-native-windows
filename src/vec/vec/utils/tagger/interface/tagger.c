@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/vecimpl.h> /*I "petscvec.h" I*/
 
 /*@

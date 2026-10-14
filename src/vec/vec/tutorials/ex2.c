@@ -8,6 +8,7 @@ static char help[] = "Builds a parallel vector with 1 component on the first pro
      petscviewer.h - viewers
 */
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

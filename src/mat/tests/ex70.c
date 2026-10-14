@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static char help[] = "Tests MatMat operations with MAT_REUSE_MATRIX and already allocated dense result.\n\n";

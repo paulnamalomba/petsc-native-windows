@@ -1,5 +1,6 @@
 /* function subroutines used by power.c */
 
+#include <petscoptions.h>
 #include "power.h"
 
 PetscErrorCode GetListofEdges_Power(PFDATA *pfdata, PetscInt *edgelist)

@@ -16,6 +16,7 @@ static char help[] = "Benchmarking various accessing methods of DMDA vectors on 
   Overall, C is -2% ~ 5% faster than PETSc. But Kokkos is 1.6~3.6x slower than PETSc
 */
 
+#include <petscoptions.h>
 #include <petscdmda_kokkos.hpp>
 #include <petscdm.h>
 #include <petscdmda.h>

@@ -7,6 +7,7 @@
      petscviewer.h - viewers               petscpc.h  - preconditioners
      petscksp.h   - linear solvers
 */
+#include <petscoptions.h>
 #include <petscsnes.h>
 #include <petscao.h>
 

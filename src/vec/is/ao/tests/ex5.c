@@ -4,6 +4,7 @@
 static char help[] = "Test memory scalable AO.\n\n";
 
 #include <petsc.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 #include <petscmat.h>
 #include <petscao.h>

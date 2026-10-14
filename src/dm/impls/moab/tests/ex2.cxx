@@ -1,5 +1,6 @@
 static char help[] = "Create a box mesh with DMMoab and test defining a tag on the mesh\n\n";
 
+#include <petscoptions.h>
 #include <petscdmmoab.h>
 
 typedef struct {

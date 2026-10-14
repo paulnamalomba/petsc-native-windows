@@ -24,6 +24,7 @@ static char help[] = "Tests ML interface. Modified from ~src/ksp/ksp/tests/ex19.
            -mg_levels_1_ksp_max_it 10 -mg_fine_ksp_max_it 10
 */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdm.h>
 #include <petscdmda.h>

@@ -1,5 +1,6 @@
 static char help[] = "Test for function and field projection\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscds.h>
 

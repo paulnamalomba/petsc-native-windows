@@ -3,6 +3,7 @@
      pcimpl.h - private include file intended for use by all preconditioners
 */
 #define PETSC_SKIP_IMMINTRIN_H_CUDAWORKAROUND 1
+#include <petscoptions.h>
 #include <petsc/private/pcimpl.h> /*I "petscpc.h" I*/
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/vec/vec/impls/dvecimpl.h>

@@ -6,6 +6,7 @@ static char help[] = "Test FEM layout and GlobalToNaturalSF\n\n";
      -ua_vec_view -s_vec_view
 */
 
+#include <petscoptions.h>
 #include <petsc.h>
 #include <exodusII.h>
 

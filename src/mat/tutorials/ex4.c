@@ -5,6 +5,7 @@
 static char help[] = "Illustrate the use of MatResetPreallocation.\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

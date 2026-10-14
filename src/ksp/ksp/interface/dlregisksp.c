@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/pcimpl.h>
 #include <petsc/private/pcpatchimpl.h> /* For new events */
 #include <petsc/private/kspimpl.h>

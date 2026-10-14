@@ -1,5 +1,6 @@
 #define PETSC_DESIRE_FEATURE_TEST_MACROS /* for strdup() */
 #include <petsc/private/petscimpl.h>     /*I  "petscsys.h"  I*/
+#include <petscoptions.h>
 
 #if PetscDefined(HAVE_YAML)
   #include <yaml.h> /* use external LibYAML */

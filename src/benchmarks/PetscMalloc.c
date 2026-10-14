@@ -1,5 +1,4 @@
-#include <petscsys.h>
-#include <petsctime.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

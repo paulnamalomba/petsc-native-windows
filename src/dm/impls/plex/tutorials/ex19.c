@@ -1,5 +1,7 @@
 static const char help[] = "Test of PETSc CAD Shape Optimization & Mesh Modification Technology";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplexegads.h>
 #include <petsc/private/hashmapi.h>
 

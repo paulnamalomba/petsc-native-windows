@@ -3,6 +3,7 @@
 */
 #include <petsc/private/petscimpl.h> /*I   "petscsys.h"    I*/
 #include <petscviewer.h>
+#include <petscoptions.h>
 
 PETSC_INTERN PetscObject *PetscObjects;
 PETSC_INTERN PetscInt     PetscObjectsCounts;

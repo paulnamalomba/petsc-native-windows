@@ -1,5 +1,6 @@
 static char help[] = "Surface processes in geophysics.\n\n";
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 #include <petscdm.h>
 #include <petscdmda.h>

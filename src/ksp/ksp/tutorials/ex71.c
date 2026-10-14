@@ -4,6 +4,7 @@ on a uniform grid of [0,cells_x] x [0,cells_y] x [0,cells_z]\n\n";
 
 /* Contributed by Wim Vanroose <wim@vanroo.se> */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscpc.h>
 #include <petscdm.h>

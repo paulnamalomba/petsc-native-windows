@@ -1,5 +1,7 @@
 static const char help[] = "Test DMCreateInjection() for mapping coordinates in 3D";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 #include <petscmat.h>
 #include <petscdm.h>

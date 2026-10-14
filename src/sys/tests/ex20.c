@@ -1,6 +1,7 @@
 static const char help[] = "Tests PetscOptionsPrefix{Push,Pop} and PetscOptionsDeprecated\n\n";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char *argv[])
 {

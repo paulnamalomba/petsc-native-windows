@@ -1,5 +1,6 @@
 static char help[] = "Exhaustive memory tracking for DMPlex.\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 static PetscErrorCode EstimateMemory(DM dm, PetscLogDouble *est)

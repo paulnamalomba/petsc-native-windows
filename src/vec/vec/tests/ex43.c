@@ -1,5 +1,6 @@
 static char help[] = "Tests VecMDot(),VecDot(),VecMTDot(), and VecTDot()\n";
 
+#include <petscoptions.h>
 #include <petscvec.h>
 
 int main(int argc, char **argv)

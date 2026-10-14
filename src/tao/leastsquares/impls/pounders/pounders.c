@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/tao/leastsquares/impls/pounders/pounders.h>
 
 static PetscErrorCode pounders_h(Tao subtao, Vec v, Mat H, Mat Hpre, PetscCtx ctx)

@@ -1,7 +1,7 @@
-#include "petscsys.h"
 static char help[] = "Tests DMSwarm with DMShell\n\n";
 
 #include <petscsf.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmshell.h>
 #include <petscdmda.h>

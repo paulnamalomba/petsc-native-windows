@@ -1,7 +1,8 @@
 static char help[] = "Tests 1D cell-based discretization tools.\n\n";
 
-#include <petscdt.h>
+#include <petscoptions.h>
 #include <petscviewer.h>
+#include <petscdt.h>
 
 int main(int argc, char **argv)
 {

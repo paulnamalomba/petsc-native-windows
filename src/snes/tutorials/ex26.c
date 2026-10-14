@@ -13,6 +13,7 @@ and coarse space adaptivity.\n\n\n";
 
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

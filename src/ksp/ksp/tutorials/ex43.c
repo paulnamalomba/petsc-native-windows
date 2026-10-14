@@ -51,6 +51,8 @@ Options: \n"
 
 /* Contributed by Dave May */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 #include <petscdm.h>
 #include <petscdmda.h>

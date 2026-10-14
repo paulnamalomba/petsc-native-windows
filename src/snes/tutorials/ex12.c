@@ -14,6 +14,7 @@ Information on refinement:
    -info :~sys,vec,is,mat,ksp,snes,ts
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscdmadaptor.h>
 #include <petscsnes.h>

@@ -1,6 +1,8 @@
 static char help[] = "Example of inverting a block diagonal matrix.\n"
                      "\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

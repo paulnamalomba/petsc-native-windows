@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscwebclient.h>
 PETSC_PRAGMA_DIAGNOSTIC_IGNORED_BEGIN("-Wdeprecated-declarations")
 

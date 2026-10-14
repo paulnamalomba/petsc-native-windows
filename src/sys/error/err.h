@@ -1,6 +1,7 @@
 #pragma once
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 static inline PetscErrorCode PetscErrorMemoryMessage(PetscErrorCode n)
 {

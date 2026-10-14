@@ -2,6 +2,7 @@ static char help[] = "Solves a tridiagonal linear system with KSP. \n\
                       Modified from ex1.c to illustrate reuse of preconditioner \n\
                       Written as requested by [petsc-maint #63875] \n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 int main(int argc, char **args)

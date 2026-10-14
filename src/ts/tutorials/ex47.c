@@ -27,6 +27,7 @@ For a vector quantity a, we likewise have
   r2:
 */
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscts.h>
 #include <petscds.h>

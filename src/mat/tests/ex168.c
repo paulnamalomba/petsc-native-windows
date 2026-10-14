@@ -1,6 +1,8 @@
 static char help[] = "Tests external Clique direct solvers. Simplified from ex130.c\n\
 Example: mpiexec -n <np> ./ex168 -f <matrix binary file> \n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

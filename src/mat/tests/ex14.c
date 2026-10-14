@@ -1,6 +1,7 @@
 static char help[] = "Tests sequential and parallel MatGetRow() and MatRestoreRow().\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

@@ -1,6 +1,7 @@
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/bmimpl.h> /*I  "petscbm.h"   I*/
 #include <petscviewer.h>
+#include <petscoptions.h>
 
 PetscClassId             BM_CLASSID;
 static PetscBool         PetscBenchPackageInitialized = PETSC_FALSE;

@@ -2,6 +2,7 @@
  GAMG geometric-algebraic multigrid PC - Mark Adams 2011
  */
 
+#include <petscoptions.h>
 #include <../src/ksp/pc/impls/gamg/gamg.h> /*I "petscpc.h" I*/
 
 #if PetscDefined(HAVE_TRIANGLE)

@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petscdmforest.h>
 #include <petsc/private/petscimpl.h>
 #include "petsc_p4est_package.h"

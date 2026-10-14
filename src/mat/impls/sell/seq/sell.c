@@ -1,6 +1,8 @@
 /*
   Defines the basic matrix operations for the SELL matrix storage format.
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/sell/seq/sell.h> /*I   "petscmat.h"  I*/
 #include <petscblaslapack.h>
 #include <petsc/private/kernels/blocktranspose.h>

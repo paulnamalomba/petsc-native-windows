@@ -6,6 +6,7 @@
 
 */
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscdmshell.h>
 #include <petscksp.h>
 

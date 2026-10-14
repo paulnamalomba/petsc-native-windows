@@ -4,6 +4,8 @@
 TODO Explain maros example
 ---------------------------------------------------------------------- */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 
 static char help[] = "";

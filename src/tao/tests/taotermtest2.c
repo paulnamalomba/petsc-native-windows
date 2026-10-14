@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsctao.h>
 
 static char help[] = "Using TaoTermShell with mapping matrices that are not diagonal.\n";

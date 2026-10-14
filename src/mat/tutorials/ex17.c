@@ -1,5 +1,7 @@
 static char help[] = "Example of using graph partitioning with a matrix in which some procs have empty ownership\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

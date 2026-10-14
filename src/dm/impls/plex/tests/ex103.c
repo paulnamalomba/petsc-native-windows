@@ -1,6 +1,7 @@
 static char help[] = "Test CGNS parallel load-save-reload cycle, including data and DMLabels\n\n";
 // This is a modification of src/dm/impls/plex/tutorials/ex15.c, but with additional tests that don't make sense for a tutorial problem (such as verify FaceLabels)
 
+#include <petscoptions.h>
 #include <petscdmlabel.h>
 #include <petscdmplex.h>
 #include <petscsf.h>

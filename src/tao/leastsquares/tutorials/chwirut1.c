@@ -9,6 +9,7 @@
 */
 
 #include <petsctao.h>
+#include <petscviewer.h>
 
 /*
 Description:   These data are the result of a NIST study involving

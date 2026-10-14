@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscregressor.h>
 
 static char help[] = "Tests some linear PetscRegressor types with different regularizers.\n\n";

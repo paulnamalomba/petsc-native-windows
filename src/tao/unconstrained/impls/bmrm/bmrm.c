@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/tao/unconstrained/impls/bmrm/bmrm.h>
 
 static PetscErrorCode init_df_solver(TAO_DF *);

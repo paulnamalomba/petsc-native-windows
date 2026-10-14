@@ -1,4 +1,5 @@
 #include <petsc/private/taoimpl.h> /*I "petsctao.h" I*/
+#include <petscviewer.h>
 
 typedef struct _n_TaoTerm_Quadratic TaoTerm_Quadratic;
 

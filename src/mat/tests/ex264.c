@@ -1,5 +1,6 @@
 static char help[] = "Test MatConvert() with a MATNEST with scaled and shifted MATTRANSPOSEVIRTUAL blocks.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 /*

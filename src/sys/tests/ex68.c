@@ -1,6 +1,7 @@
 const char help[] = "Test PetscLogEventsPause() and PetscLogEventsUnpause()";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

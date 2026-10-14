@@ -35,6 +35,7 @@ Run with a critical point line search; solve succeeds:
 */
 
 #include <math.h>
+#include <petscviewer.h>
 #include <petscsnes.h>
 
 extern PetscErrorCode FormJacobian(SNES, Vec, Mat, Mat, void *);

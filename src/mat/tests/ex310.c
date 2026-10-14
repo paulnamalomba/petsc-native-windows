@@ -1,5 +1,6 @@
 static char help[] = "Tests block sparse-dense matrix products.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static PetscErrorCode CheckEqual(Mat A, Mat B)

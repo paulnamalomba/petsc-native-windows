@@ -21,6 +21,7 @@ static char help[] = "Solves the time independent Bratu problem using pseudo-tim
     this file automatically includes "petscsys.h" and other lower-level
     PETSc include files.
 */
+#include <petscoptions.h>
 #include <petscts.h>
 
 /*

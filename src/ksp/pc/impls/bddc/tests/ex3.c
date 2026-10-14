@@ -1,6 +1,7 @@
 static char help[] = "Tests no-net-flux constraints combined with a supplied near-nullspace.\n\n";
 
 #include <petsc/private/pcbddcimpl.h>
+#include <petscoptions.h>
 
 static PetscErrorCode CheckConstraint(Mat C, Vec v)
 {

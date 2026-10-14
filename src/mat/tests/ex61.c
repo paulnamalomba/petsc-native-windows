@@ -1,5 +1,7 @@
 static char help[] = "Tests MatSeq(B)AIJSetColumnIndices().\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscmat.h>
 
 /*

@@ -9,6 +9,8 @@ Input arguments are\n\
   We thank Chris Cox <clcox@clemson.edu> for contributing the original code
 ----------------------------------------------------------------------------*/
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscksp.h>
 #include <petscts.h>
 

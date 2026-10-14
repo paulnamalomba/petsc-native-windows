@@ -2,6 +2,7 @@ static char help[] = "Tests LU, Cholesky, and QR factorization and MatMatSolve()
                       For MATSEQDENSE matrix, the factorization is just a thin wrapper to LAPACK.       \n\
                       For MATSEQDENSECUDA, it uses cusolverDn routines \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 static PetscErrorCode createMatsAndVecs(PetscInt m, PetscInt n, PetscInt nrhs, PetscBool full, Mat *_mat, Mat *_RHS, Mat *_SOLU, Vec *_x, Vec *_y, Vec *_b)

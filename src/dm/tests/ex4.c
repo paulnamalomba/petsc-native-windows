@@ -1,5 +1,7 @@
 static char help[] = "Tests various 2-dimensional DMDA routines.\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 

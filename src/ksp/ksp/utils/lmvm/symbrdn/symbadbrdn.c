@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include "symbrdn.h" /*I "petscksp.h" I*/
 
 static PetscErrorCode MatMult_LMVMSymBadBrdn_Recursive(Mat B, Vec X, Vec Y)

@@ -1,5 +1,6 @@
 static char help[] = "Tests quadrature.\n\n";
 
+#include <petscoptions.h>
 #include <petscdt.h>
 
 static void func1(const PetscReal a[], void *unused, PetscReal *val)

@@ -1,11 +1,11 @@
 /*
-
    This file defines part of the initialization of PETSc
 
   This file uses regular malloc and free because it cannot be known
   what malloc is being used until it has already processed the input.
 */
 #include <petsc/private/petscimpl.h> /*I  "petscsys.h"   I*/
+#include <petscoptions.h>
 #include <petsc/private/logimpl.h>
 
 #if PetscDefined(HAVE_UNISTD_H)

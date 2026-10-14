@@ -1,6 +1,7 @@
 static char help[] = "Update the data in a VECVIENNACL via a CL kernel.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 #include <CL/cl.h>
 
 const char *kernelSrc = "\n"

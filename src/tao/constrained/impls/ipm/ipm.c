@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsctaolinesearch.h>
 #include <../src/tao/constrained/impls/ipm/ipm.h> /*I "ipm.h" I*/
 

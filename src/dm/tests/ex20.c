@@ -1,5 +1,6 @@
 static char help[] = "Tests DMDACreate3d() memory usage\n\n";
 
+#include <petscoptions.h>
 #include <petscdmda.h>
 
 int main(int argc, char **argv)

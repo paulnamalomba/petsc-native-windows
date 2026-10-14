@@ -4,6 +4,8 @@
   Include "petsctao.h" so we can use TAO solvers.
   petscdmda.h for distributed array
 */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscdmda.h>
 

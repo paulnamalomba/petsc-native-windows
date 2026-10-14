@@ -2,6 +2,7 @@
         Provides an interface to the IBM RS6000 Essl sparse solver
 
 */
+#include <petscoptions.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 
 /* #include <essl.h> This doesn't work!  */

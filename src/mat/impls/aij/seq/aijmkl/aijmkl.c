@@ -6,6 +6,8 @@
   wherever possible.
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/mat/impls/aij/seq/aij.h>
 #include <../src/mat/impls/aij/seq/aijmkl/aijmkl.h>
 #if PetscDefined(HAVE_MKL_INTEL_ILP64)

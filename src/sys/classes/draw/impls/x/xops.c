@@ -3,6 +3,7 @@
 */
 
 #include <../src/sys/classes/draw/impls/x/ximpl.h> /*I  "petscsys.h" I*/
+#include <petscoptions.h>
 
 /*
      These macros transform from the users coordinates to the  X-window pixel coordinates.

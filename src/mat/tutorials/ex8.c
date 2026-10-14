@@ -1,6 +1,7 @@
 static char help[] = "Shows how to add a new MatOperation to AIJ MatType\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 #include <petscblaslapack.h>
 
 static PetscErrorCode MatScaleUserImpl_SeqAIJ(Mat inA, PetscScalar alpha)

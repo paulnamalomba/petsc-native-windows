@@ -1,5 +1,6 @@
 static char help[] = "Tests affine subspaces.\n\n";
 
+#include <petscoptions.h>
 #include <petscfe.h>
 #include <petscdmplex.h>
 #include <petscdmshell.h>

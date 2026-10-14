@@ -3,6 +3,7 @@ This also demonstrates use of  block\n\
 diagonal data structure.  Input arguments are:\n\
   -m : problem size\n\n";
 
+#include <petscoptions.h>
 #include <petscksp.h>
 
 /* This code is not intended as an efficient implementation, it is only

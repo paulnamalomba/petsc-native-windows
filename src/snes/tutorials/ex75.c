@@ -1,6 +1,7 @@
 static char help[] = "Variable-Viscosity Stokes Problem in 2d.\n\
 Exact solutions provided by Mirko Velic.\n\n\n";
 
+#include <petscoptions.h>
 #include <petsc.h>
 
 #include "ex75.h"

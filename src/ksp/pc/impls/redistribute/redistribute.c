@@ -2,6 +2,7 @@
   This file defines a "solve the problem redistributely on each subgroup of processor" preconditioner.
 */
 #include <petsc/private/pcimpl.h> /*I "petscksp.h" I*/
+#include <petscviewer.h>
 #include <petscksp.h>
 
 typedef struct _PC_FieldSplitLink *PC_FieldSplitLink;

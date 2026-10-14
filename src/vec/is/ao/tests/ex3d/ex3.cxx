@@ -6,6 +6,7 @@ static char help[] = "AO test contributed by Sebastian Steiger <steiger@purdue.e
     mpiexec -n 30 ./ex3 -ao_type basic
 */
 
+#include <petscoptions.h>
 #include <iostream>
 #include <fstream>
 #include <vector>

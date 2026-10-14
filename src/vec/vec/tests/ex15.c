@@ -1,6 +1,7 @@
 static char help[] = "Tests VecSetValuesBlocked() on sequential vectors.\n\n";
 
 #include <petscvec.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {

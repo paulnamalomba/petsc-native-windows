@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/dmimpl.h>
 #include <petscdm.h>      /*I "petscdm.h" I*/
 #include <petscdmda.h>    /*I "petscdmda.h" I*/
@@ -8,7 +9,6 @@
 
 #include <petsc/private/dmswarmimpl.h>         // For the citation and check
 #include "../src/dm/impls/swarm/data_bucket.h" // For DataBucket internals
-#include "petscmath.h"
 
 typedef struct _projectConstraintsCtx {
   DM  dm;

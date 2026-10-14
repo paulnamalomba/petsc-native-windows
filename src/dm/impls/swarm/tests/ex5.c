@@ -10,6 +10,7 @@ static char help[] = "Vlasov example of central orbits\n";
     -convest_num_refine 0 -ts_time_step 0.01 -ts_max_steps 100 -ts_max_time 100 -output_step 10
 */
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscdmplex.h>
 #include <petscdmswarm.h>

@@ -10,6 +10,7 @@ static char help[] = "Loads a previously saved TS.";
     PETSc include files.
 */
 #include <petscts.h>
+#include <petscviewer.h>
 
 int main(int argc, char **argv)
 {
@@ -23,7 +24,6 @@ int main(int argc, char **argv)
   PetscCall(PetscViewerBinaryOpen(PETSC_COMM_WORLD, "advection-diffusion-reaction/binaryoutput", FILE_MODE_READ, &viewer));
   PetscCall(TSLoad(ts, viewer));
   PetscCall(PetscViewerDestroy(&viewer));
-  /* PetscCall(PetscFPTView(0)); */
   PetscCall(TSSetFromOptions(ts));
   PetscCall(TSSetUp(ts));
   PetscCall(TSView(ts, PETSC_VIEWER_STDOUT_WORLD));

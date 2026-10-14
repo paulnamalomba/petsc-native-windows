@@ -1,5 +1,7 @@
 static char help[] = "Tests for submesh creation\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petscsf.h>
 

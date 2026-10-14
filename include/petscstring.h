@@ -1,6 +1,7 @@
 #pragma once
 
-#include <petscsys.h>
+#include <petscmem.h>   // PetscMalloc1(), PetscFree()
+#include <petscerror.h> // PetscCall(), PetscAssertPointer()
 
 /* SUBMANSEC = Sys */
 

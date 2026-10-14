@@ -2,6 +2,7 @@ static char help[] = "Biot consolidation model discretized with finite elements,
 using a parallel unstructured mesh (DMPLEX) to represent the domain.\n\
 We follow https://arxiv.org/pdf/1507.03199.\n\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscsnes.h>
 #include <petscds.h>

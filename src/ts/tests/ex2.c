@@ -13,6 +13,7 @@
 
 static char help[] = "Solves a linear ODE. \n\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 #include <petscpc.h>
 

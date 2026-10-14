@@ -25,6 +25,7 @@ static char help[] = "Solves Laplacian with multigrid. Tests block API for PCMG\
            -mg_fine_ksp_max_it 10
 */
 
+#include <petscoptions.h>
 #include <petscksp.h>
 #include <petscdm.h>
 #include <petscdmda.h>

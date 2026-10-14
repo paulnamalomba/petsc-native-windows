@@ -34,6 +34,7 @@ static char help[] = "Reduced formulation of the mother problem of PDE-constrain
   TODO: broken for parallel runs
 F*/
 
+#include <petscoptions.h>
 #include <petsc.h>
 #include <petscfe.h>
 #include <petscviewerhdf5.h>

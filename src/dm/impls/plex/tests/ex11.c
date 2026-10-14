@@ -1,5 +1,7 @@
 static char help[] = "Tests for DMLabel\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdmplex.h>
 #include <petsc/private/dmimpl.h>
 

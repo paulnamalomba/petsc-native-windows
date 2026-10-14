@@ -1,4 +1,5 @@
 #include <petsc/private/drawimpl.h> /*I   "petscdraw.h"  I*/
+#include <petscoptions.h>
 
 #define PETSC_DRAW_AXIS_MAX_SEGMENTS 20
 PetscClassId PETSC_DRAWAXIS_CLASSID = 0;

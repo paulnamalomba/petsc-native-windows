@@ -1,5 +1,6 @@
 static char help[] = "Test LAPACK routine DSTEBZ() and DTEIN().  \n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 #include <petscblaslapack.h>
 

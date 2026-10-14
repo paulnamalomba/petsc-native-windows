@@ -1,6 +1,7 @@
 static char help[] = "Test MatMultHermitianTranspose() and MatMultHermitianTransposeAdd().\n\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 int main(int argc, char **args)
 {

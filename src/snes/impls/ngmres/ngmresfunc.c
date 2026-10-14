@@ -1,4 +1,5 @@
 #include <../src/snes/impls/ngmres/snesngmres.h> /*I "petscsnes.h" I*/
+#include <petscviewer.h>
 #include <petscblaslapack.h>
 
 PetscErrorCode SNESNGMRESGetAdditiveLineSearch_Private(SNES snes, SNESLineSearch *linesearch)

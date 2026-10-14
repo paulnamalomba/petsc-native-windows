@@ -1,5 +1,6 @@
 static char help[] = "Tests that SNESSetUp() propagates application context to the NPC only when the NPC has no existing context.\n\n";
 
+#include <petscoptions.h>
 #include <petscsnes.h>
 
 typedef struct {

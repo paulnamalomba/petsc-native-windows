@@ -7,6 +7,7 @@ Note that most users should employ the KSP interface to the\n\
 linear solvers instead of using the factorization routines\n\
 directly.\n\n";
 
+#include <petscoptions.h>
 #include <petscmat.h>
 
 int main(int argc, char **args)

@@ -1,6 +1,6 @@
 #include <../src/ts/characteristic/impls/da/slda.h> /*I  "petsccharacteristic.h"  I*/
-#include <petscdmda.h>
 #include <petscviewer.h>
+#include <petscdmda.h>
 
 static PetscErrorCode CharacteristicView_DA(Characteristic c, PetscViewer viewer)
 {

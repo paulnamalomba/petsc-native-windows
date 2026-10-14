@@ -7,6 +7,7 @@ static char help[] = "Solves the time dependent Allen-Cahn equation with IMEX me
  *      Author: Hong Zhang
  */
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 /*

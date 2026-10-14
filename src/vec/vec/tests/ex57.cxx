@@ -1,4 +1,5 @@
 #include <petsc.h>
+#include <petscviewer.h>
 #include <petscviennacl.h>
 #include <viennacl/vector.hpp>
 typedef viennacl::vector<PetscScalar> ViennaclVector;

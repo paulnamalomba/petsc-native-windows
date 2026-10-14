@@ -1,6 +1,7 @@
 static char help[] = "Tests deletion of mixed case options";
 
 #include <petscsys.h>
+#include <petscoptions.h>
 
 int main(int argc, char **argv)
 {

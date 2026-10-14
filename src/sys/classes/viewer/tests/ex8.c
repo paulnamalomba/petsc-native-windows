@@ -1,8 +1,7 @@
 static char help[] = "Tests CGNS viewers.\n\n";
 
-#include <petscsys.h>
-#include <petscviewer.h>
 #include <petscdm.h>
+#include <petscviewer.h>
 #include <petscfe.h>
 
 static PetscErrorCode TestOpen(PetscFileMode mode, PetscViewer *viewer)

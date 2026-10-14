@@ -1,3 +1,4 @@
+#include <petscoptions.h>
 #include <petsc/private/petscfeimpl.h> /*I "petscfe.h" I*/
 #include <petsc/private/loghandlerimpl.h>
 #include <../src/sys/logging/handler/impls/default/logdefault.h>

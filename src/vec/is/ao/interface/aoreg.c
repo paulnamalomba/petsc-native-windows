@@ -1,4 +1,5 @@
 #include <../src/vec/is/ao/aoimpl.h> /*I "petscao.h"  I*/
+#include <petscoptions.h>
 
 static PetscBool AOPackageInitialized = PETSC_FALSE;
 static PetscBool AORegisterAllCalled  = PETSC_FALSE;

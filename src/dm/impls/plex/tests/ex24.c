@@ -1,6 +1,7 @@
 static char help[]     = "Test that MatPartitioning and PetscPartitioner interfaces are equivalent when using PETSCPARTITIONERMATPARTITIONING\n\n";
 static char FILENAME[] = "ex24.c";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 #include <petscviewerhdf5.h>
 

@@ -8,6 +8,7 @@ static char help[] = "Solves a ODE-constrained optimization problem -- finding t
   The gradient is computed with the discrete adjoint of an implicit method or an explicit method, see ex20adj.c for details.
 */
 
+#include <petscoptions.h>
 #include <petsctao.h>
 #include <petscts.h>
 

@@ -1,4 +1,5 @@
 #include <petscmat.h>
+#include <petscviewer.h>
 #include <petsc/private/partitionerimpl.h> /*I      "petscpartitioner.h"   I*/
 
 typedef struct {

@@ -19,6 +19,8 @@ static char help[] = "Time-dependent PDE in 2d. Modified from ex13.c for illustr
 
 */
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 #include <petscts.h>

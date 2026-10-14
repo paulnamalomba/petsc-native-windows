@@ -1,5 +1,6 @@
 #pragma once
 
+#include <petscoptions.h>
 #include <petscds.h>
 #include <petscfe.h>
 #include <petsc/private/dmimpl.h>

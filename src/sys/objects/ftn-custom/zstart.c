@@ -12,6 +12,7 @@
 #define T3EMPI_FORTRAN
 
 #include <petsc/private/ftnimpl.h>
+#include <petscoptions.h>
 
 #if PetscDefined(HAVE_FORTRAN_CAPS)
   #define petscinitializef_          PETSCINITIALIZEF

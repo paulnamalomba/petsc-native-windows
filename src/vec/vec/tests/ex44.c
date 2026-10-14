@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscvec.h>
 
 static char help[] = "Tests vecScatter Sequential to Sequential for (CUDA) vectors\n\

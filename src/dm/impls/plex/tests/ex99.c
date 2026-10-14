@@ -1,5 +1,6 @@
 static char help[] = "Tests DMPlex Gmsh reader.\n\n";
 
+#include <petscoptions.h>
 #include <petscdmplex.h>
 
 #if !defined(PETSC_GMSH_EXE)

@@ -6,6 +6,7 @@ static char help[] = "Plots a simple line graph.\n";
 #else
 
   #include <petscsys.h>
+  #include <petscoptions.h>
   #include <petscdraw.h>
 #endif
 

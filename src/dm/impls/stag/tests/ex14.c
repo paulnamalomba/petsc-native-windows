@@ -1,5 +1,7 @@
 static char help[] = "Test DMClone_Stag()\n\n";
 
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petscdm.h>
 #include <petscdmstag.h>
 

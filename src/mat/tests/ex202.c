@@ -1,6 +1,7 @@
 static char help[] = "Tests the use of MatTranspose_Nest and MatMatMult_Nest_Dense\n";
 
 #include <petscmat.h>
+#include <petscviewer.h>
 
 PetscErrorCode TestInitialMatrix(void)
 {

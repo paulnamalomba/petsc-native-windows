@@ -1,3 +1,5 @@
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsc/private/pcbddcimpl.h>
 #include <petsc/private/pcbddcprivateimpl.h>
 #include <../src/mat/impls/dense/seq/dense.h>

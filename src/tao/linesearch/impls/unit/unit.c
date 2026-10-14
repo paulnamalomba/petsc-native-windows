@@ -1,4 +1,5 @@
 #include <petsc/private/taolinesearchimpl.h>
+#include <petscviewer.h>
 
 static PetscErrorCode TaoLineSearchView_Unit(TaoLineSearch ls, PetscViewer viewer)
 {

@@ -1,5 +1,6 @@
 static char help[] = "Single-DOF oscillator formulated as a second-order system.\n";
 
+#include <petscoptions.h>
 #include <petscts.h>
 
 typedef struct {

@@ -1,4 +1,5 @@
-#include <petscdevice.h>
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <../src/ksp/ksp/utils/lmvm/lmvm.h> /*I "petscksp.h" I*/
 #include <petsc/private/deviceimpl.h>
 #include "blas_cyclic/blas_cyclic.h"

@@ -11,6 +11,7 @@ Input parameters include:\n\
 /* ------------------------------------------------------------------------
   See ex16opt_ic for a description of the problem being solved.
   ------------------------------------------------------------------------- */
+#include <petscoptions.h>
 #include <petsctao.h>
 #include <petscts.h>
 #include <petscmat.h>

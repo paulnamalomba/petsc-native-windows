@@ -1,4 +1,5 @@
 #include <petsc/private/dmpatchimpl.h> /*I      "petscdmpatch.h"   I*/
+#include <petscviewer.h>
 #include <petscdmda.h>
 #include <petscsf.h>
 

@@ -1,6 +1,7 @@
 const char help[] = "Test PETSCFEVECTOR";
 
 #include <petscfe.h>
+#include <petscviewer.h>
 
 static PetscErrorCode PetscFEVectorTest(PetscFE orig_fe, PetscInt n_copies, PetscBool interleave_basis, PetscBool interleave_components)
 {

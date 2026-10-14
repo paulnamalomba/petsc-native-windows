@@ -9,6 +9,8 @@ Input parameters include:\n";
   The objective is to minimize the difference between observation and model prediction by finding an optimal value for parameter \mu.
   The gradient is computed with the discrete adjoint of an implicit theta method, see ex20adj.c for details.
   ------------------------------------------------------------------------- */
+#include <petscoptions.h>
+#include <petscviewer.h>
 #include <petsctao.h>
 #include <petscts.h>
 
