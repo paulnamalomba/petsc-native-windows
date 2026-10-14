@@ -97,9 +97,10 @@ For example,
 
   Vec b
   type(tVec) x
-```
 
-PETSc types like `PetscInt` and `PetscReal` are simply aliases for basic Fortran types and cannot be written as `type(tPetscInt)`
+  PetscInt i
+  type(tPetscInt) j
+```
 
 PETSc objects are always automatically initialized when declared so you do not need to (and should not) do
 
