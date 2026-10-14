@@ -50,6 +50,8 @@ static PetscErrorCode DMPlexCGNSGetPermutation_Internal(DMPolytopeType cell_type
     0,  2,  3,  1,          // faces
   };
   static const int hexa_8[8]   = {0, 3, 2, 1, 4, 5, 6, 7};
+  static const int penta_6[6]  = {0, 2, 1, 3, 4, 5}; // PENTA_6 wedge: DMPlex->CGNS (positive volume)
+  static const int pyra_5[5]   = {0, 3, 2, 1, 4};    // PYRA_5 pyramid: DMPlex->CGNS (positive volume)
   static const int hexa_27[27] = {
     19, 22, 21, 20, 23, 24, 25, 26, // vertices
     10, 9,  8,  7,                  // bottom edges
@@ -170,6 +172,26 @@ static PetscErrorCode DMPlexCGNSGetPermutation_Internal(DMPolytopeType cell_type
     case 64:
       element_type_tmp = CGNS_ENUMV(HEXA_64);
       *perm            = hexa_64;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Cell type %s with closure size %" PetscInt_FMT, DMPolytopeTypes[cell_type], closure_size);
+    }
+    break;
+  case DM_POLYTOPE_TRI_PRISM:
+    switch (closure_size) {
+    case 6:
+      element_type_tmp = CGNS_ENUMV(PENTA_6);
+      *perm            = penta_6;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Cell type %s with closure size %" PetscInt_FMT, DMPolytopeTypes[cell_type], closure_size);
+    }
+    break;
+  case DM_POLYTOPE_PYRAMID:
+    switch (closure_size) {
+    case 5:
+      element_type_tmp = CGNS_ENUMV(PYRA_5);
+      *perm            = pyra_5;
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Cell type %s with closure size %" PetscInt_FMT, DMPolytopeTypes[cell_type], closure_size);
@@ -928,7 +950,7 @@ static PetscErrorCode PetscLayoutFindOwnerIndex_Internal(PetscLayout map, PetscI
   PetscAssert((map->n >= 0) && (map->N >= 0) && (map->range), PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "PetscLayoutSetUp() must be called first");
   if (owner) *owner = -1;
   if (lidx) *lidx = -1;
-  if (idx < map->range[0] && idx >= map->range[map->size + 1]) {
+  if (idx < map->range[0] || idx >= map->range[map->size]) {
     *found_owner = PETSC_FALSE;
     PetscFunctionReturn(PETSC_SUCCESS);
   }
@@ -1640,6 +1662,24 @@ PetscErrorCode DMPlexCreateCGNS_Internal_Parallel(MPI_Comm comm, PetscInt cgid, 
 
     // Build cell-vertex Plex
     PetscCall(DMPlexBuildFromCellListParallel(*dm, myownede, myownedv, NVertices, numCorners, elementsQ1, NULL, &uniq_verts));
+    // Force the intended (CGNS) cell polytope: DMPlexBuildFromCellListParallel
+    // defaults 6-vertex cells to the TENSOR prism, but CGNS PENTA_6 is the
+    // non-tensor DM_POLYTOPE_TRI_PRISM (matches gmsh + the downstream
+    // isoparametric coordinate setup, which has no FE for tensor prisms).
+    {
+      DMLabel ctLabel;
+
+      PetscCall(DMPlexGetCellTypeLabel(*dm, &ctLabel));
+      for (PetscInt cell = 0; cell < myownede; cell++) {
+        DMPolytopeType old;
+
+        PetscCall(DMPlexGetCellType(*dm, cell, &old));
+        if (old != dm_cell_type) {
+          PetscCall(DMLabelClearValue(ctLabel, cell, old));
+          PetscCall(DMPlexSetCellType(*dm, cell, dm_cell_type));
+        }
+      }
+    }
     PetscCall(DMViewFromOptions(*dm, NULL, "-corner_dm_view"));
     {
       PetscInt pStart, pEnd;
@@ -2226,7 +2266,7 @@ PetscErrorCode DMView_PlexCGNS(DM dm, PetscViewer viewer)
     int             section;
     const int      *perm;
     cgsize_t        f_owned = 0, f_global, f_start;
-    cgsize_t       *parents, *conn = NULL;
+    cgsize_t       *parents, *conn = NULL, *face_gid = NULL;
     PetscInt        fStart, fEnd;
 
     PetscInt num_fs_local;
@@ -2258,6 +2298,37 @@ PetscErrorCode DMView_PlexCGNS(DM dm, PetscViewer viewer)
     PetscCall(ISRestoreIndices(fsValuesLocalIS, &fsValuesLocal));
     PetscCall(ISDestroy(&fsValuesLocalIS));
 
+    // Group boundary faces by polytope: each distinct face type becomes its own
+    // CGNS Elements_t section (e.g. TRI_3 + QUAD_4 for a triangular prism's mixed
+    // boundary), with consecutive global element-ID ranges.  The set and order of
+    // topologies is taken GLOBALLY (a rank may own only a subset under parallel
+    // distribution) so the collective section writes below agree across ranks;
+    // fcounts[] holds the LOCAL count of each global type.
+    DMPolytopeType ftypes[DM_NUM_POLYTOPES];
+    PetscInt       fcounts[DM_NUM_POLYTOPES] = {0}, nftypes = 0;
+    {
+      const PetscInt *bfaces;
+      PetscInt        nbf, loc_count[DM_NUM_POLYTOPES] = {0}, glob_count[DM_NUM_POLYTOPES];
+
+      PetscCall(ISGetLocalSize(fsFacesAll, &nbf));
+      PetscCall(ISGetIndices(fsFacesAll, &bfaces));
+      for (PetscInt i = 0; i < nbf; i++) {
+        DMPolytopeType bct;
+
+        PetscCall(DMPlexGetCellType(dm, bfaces[i], &bct));
+        loc_count[(PetscInt)bct]++;
+      }
+      PetscCall(ISRestoreIndices(fsFacesAll, &bfaces));
+      PetscCallMPI(MPIU_Allreduce(loc_count, glob_count, DM_NUM_POLYTOPES, MPIU_INT, MPI_SUM, comm));
+      for (PetscInt ct = 0; ct < DM_NUM_POLYTOPES; ct++) {
+        if (glob_count[ct] > 0) {
+          ftypes[nftypes]    = (DMPolytopeType)ct;
+          fcounts[nftypes++] = loc_count[ct];
+        }
+      }
+    }
+    PetscCall(PetscMalloc1(f_owned, &face_gid)); // global element ID of each local face, in final fsFacesAll order
+    if (nftypes <= 1) {  // single face topology: existing (parallel-correct) one-section path
     {
       const PetscInt *faces;
       DMPolytopeType  cell_type, cell_type_f;
@@ -2302,11 +2373,84 @@ PetscErrorCode DMView_PlexCGNS(DM dm, PetscViewer viewer)
       f_start = 0;
       PetscCallMPI(MPI_Exscan(&f_owned, &f_start, 1, MPIU_CGSIZE, MPI_SUM, comm));
       f_start += elem_offset;
+      for (PetscInt i = 0; i < f_owned; i++) face_gid[i] = f_start + i + 1;
       PetscCallCGNSWrite(cgp_section_write(cgv->file_num, base, zone, "Faces", element_type, elem_offset + 1, elem_offset + f_global, 0, &section), dm, viewer);
       PetscCallCGNSWriteData(cgp_elements_write_data(cgv->file_num, base, zone, section, f_start + 1, f_start + f_owned, conn), dm, viewer);
 
       PetscCall(PetscFree(conn));
       PetscCall(PetscFree(parents));
+    }
+    } else {  // mixed-topology boundary: one Elements_t section per face polytope
+      const PetscInt *faces;
+      PetscInt       *ordered, offs[DM_NUM_POLYTOPES + 1] = {0}, cur[DM_NUM_POLYTOPES], es_local[DM_NUM_POLYTOPES] = {0}, es_global[DM_NUM_POLYTOPES];
+      cgsize_t        t_global[DM_NUM_POLYTOPES], base_global[DM_NUM_POLYTOPES], cum = 0;
+
+      for (PetscInt t = 0; t < nftypes; t++) offs[t + 1] = offs[t] + fcounts[t];
+      for (PetscInt t = 0; t < nftypes; t++) cur[t] = offs[t];
+      // Topology-ordered local face list so faces of one polytope are contiguous;
+      // becomes the new fsFacesAll so the BC PointList lookups below are consistent.
+      PetscCall(PetscMalloc1(f_owned, &ordered));
+      PetscCall(ISGetIndices(fsFacesAll, &faces));
+      for (PetscInt f = 0; f < f_owned; f++) {
+        DMPolytopeType bct;
+        PetscInt       t;
+
+        PetscCall(DMPlexGetCellType(dm, faces[f], &bct));
+        for (t = 0; t < nftypes; t++)
+          if (ftypes[t] == bct) break;
+        ordered[cur[t]++] = faces[f];
+      }
+      PetscCall(ISRestoreIndices(fsFacesAll, &faces));
+      PetscCall(ISDestroy(&fsFacesAll));
+      PetscCall(ISCreateGeneral(PETSC_COMM_SELF, f_owned, ordered, PETSC_COPY_VALUES, &fsFacesAll));
+
+      // Per-topology element size (collective, so ranks owning none still know it)
+      // and global counts -> consecutive global section ID ranges.
+      for (PetscInt t = 0; t < nftypes; t++) {
+        if (fcounts[t] > 0) {
+          PetscInt *ci, dof;
+
+          PetscCall(DMPlexGetClosureIndices(cdm, cdm->localSection, cdm->localSection, ordered[offs[t]], PETSC_FALSE, &dof, &ci, NULL, NULL));
+          es_local[t] = dof / coord_dim;
+          PetscCall(DMPlexRestoreClosureIndices(cdm, cdm->localSection, cdm->localSection, ordered[offs[t]], PETSC_FALSE, &dof, &ci, NULL, NULL));
+        }
+      }
+      PetscCallMPI(MPIU_Allreduce(es_local, es_global, nftypes, MPIU_INT, MPI_MAX, comm));
+      for (PetscInt t = 0; t < nftypes; t++) {
+        cgsize_t to = fcounts[t];
+
+        PetscCallMPI(MPIU_Allreduce(&to, &t_global[t], 1, MPIU_CGSIZE, MPI_SUM, comm));
+        base_global[t] = elem_offset + cum;
+        cum += t_global[t];
+      }
+      f_global = cum;
+
+      for (PetscInt t = 0; t < nftypes; t++) {
+        cgsize_t   *conn_t = NULL;
+        const int  *perm;
+        CGNS_ENUMT(ElementType_t) etype;
+        PetscInt    es = es_global[t], nt = fcounts[t];
+        cgsize_t    nt_cg = nt, t_start = 0;
+        char        sname[64];
+        int         sec;
+
+        PetscCall(DMPlexCGNSGetPermutation_Internal(ftypes[t], es, &etype, &perm));
+        PetscCallMPI(MPI_Exscan(&nt_cg, &t_start, 1, MPIU_CGSIZE, MPI_SUM, comm));
+        if (nt > 0) PetscCall(PetscMalloc1(nt * es, &conn_t));
+        for (PetscInt k = 0, c = 0; k < nt; k++) {
+          PetscInt *ci, dof;
+
+          PetscCall(DMPlexGetClosureIndices(cdm, cdm->localSection, cdm->localSection, ordered[offs[t] + k], PETSC_FALSE, &dof, &ci, NULL, NULL));
+          for (PetscInt j = 0; j < es; j++) conn_t[c++] = node_l2g[ci[perm[j] * coord_dim] / coord_dim] + 1;
+          face_gid[offs[t] + k] = base_global[t] + t_start + k + 1;
+          PetscCall(DMPlexRestoreClosureIndices(cdm, cdm->localSection, cdm->localSection, ordered[offs[t] + k], PETSC_FALSE, &dof, &ci, NULL, NULL));
+        }
+        PetscCall(PetscSNPrintf(sname, sizeof sname, "Faces_%s", cg_ElementTypeName(etype)));
+        PetscCallCGNSWrite(cgp_section_write(cgv->file_num, base, zone, sname, etype, base_global[t] + 1, base_global[t] + t_global[t], 0, &sec), dm, viewer);
+        PetscCallCGNSWriteData(cgp_elements_write_data(cgv->file_num, base, zone, sec, base_global[t] + t_start + 1, base_global[t] + t_start + nt, conn_t), dm, viewer);
+        PetscCall(PetscFree(conn_t));
+      }
+      PetscCall(PetscFree(ordered));
     }
 
     const PetscInt *fsValuesGlobal = NULL;
@@ -2358,7 +2502,7 @@ PetscErrorCode DMView_PlexCGNS(DM dm, PetscViewer viewer)
 
         PetscCall(ISLocate(fsFacesAll, fs_pnts[i], &is_idx));
         PetscCheck(is_idx >= 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Could not find face %" PetscInt_FMT " in list of all local face points", fs_pnts[i]);
-        fs_pnts_cg[i] = is_idx + f_start + 1;
+        fs_pnts_cg[i] = face_gid[is_idx];
       }
 
       const char *labels[] = {"Zone_t", "ZoneBC_t", "BC_t", "PointList"};
@@ -2374,6 +2518,7 @@ PetscErrorCode DMView_PlexCGNS(DM dm, PetscViewer viewer)
       PetscCall(PetscFree(fs_pnts_cg));
       PetscCall(PetscFree(fs_pnts));
     }
+    PetscCall(PetscFree(face_gid));
     PetscCall(ISDestroy(&fsFacesAll));
     PetscCall(ISRestoreIndices(fsValuesGlobalIS, &fsValuesGlobal));
     elem_offset += f_global;

@@ -30,7 +30,7 @@ PetscErrorCode DMGetPoints_Internal(DM dm, DMLabel domainLabel, PetscInt labelVa
 /*@
   DMPlexGetLocalOffsets - Allocate and populate array of local offsets for each cell closure.
 
-  Not collective
+    Collective on the communicator of dm 
 
   Input Parameters:
 + dm           - The `DMPLEX` object
@@ -100,19 +100,32 @@ PetscErrorCode DMPlexGetLocalOffsets(DM dm, DMLabel domain_label, PetscInt label
     iter_indices = NULL;
   }
 
-  {
-    PetscDualSpace dual_space;
-    PetscInt       num_dual_basis_vectors;
+  PetscCall(PetscDSGetDiscretization(ds, ds_field, (PetscObject *)&fe));
+  PetscCall(PetscFEGetNumComponents(fe, num_comp));
+  /* Derive cell_size (nodes per point) from the actual closure of an iterated
+     point rather than from PetscFEGetHeightSubspace(), which only supports a
+     uniform tensor cell.  Each call iterates a single height/label stratum, so
+     every iterated point has the same polytope and hence a uniform cell_size.
+     Using the closure lets the offsets be built for heterogeneous-face cells
+     (triangular prisms, pyramids), whose faces have no single height subspace. */
+  if (*num_cells > 0) {
+    PetscInt num_indices, *indices, field_offsets[17];
 
-    PetscCall(PetscDSGetDiscretization(ds, ds_field, (PetscObject *)&fe));
-    PetscCall(PetscFEGetHeightSubspace(fe, height, &fe));
-    PetscCheck(fe, PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_OUTOFRANGE, "Height %" PetscInt_FMT " is invalid for DG discretizations", height);
-    PetscCall(PetscFEGetDualSpace(fe, &dual_space));
-    PetscCall(PetscDualSpaceGetDimension(dual_space, &num_dual_basis_vectors));
-    PetscCall(PetscDualSpaceGetNumComponents(dual_space, num_comp));
-    PetscCheck(num_dual_basis_vectors % *num_comp == 0, PETSC_COMM_SELF, PETSC_ERR_SUP, "No support for number of dual basis vectors %" PetscInt_FMT " not divisible by %" PetscInt_FMT " components", num_dual_basis_vectors, *num_comp);
-    *cell_size = num_dual_basis_vectors / *num_comp;
-  }
+    PetscCall(DMPlexGetClosureIndices(dm, section, section, iter_indices[0], PETSC_TRUE, &num_indices, &indices, field_offsets, NULL));
+   PetscInt numrtr = field_offsets[dm_field + 1] - field_offsets[dm_field];
+   PetscCheck(numrtr % *num_comp == 0, PETSC_COMM_SELF, PETSC_ERR_SUP, "cell_size from DMPlexGetClosureIndices in plexceed.c failed");
+   *cell_size = numrtr / *num_comp;
+    PetscCall(DMPlexRestoreClosureIndices(dm, section, section, iter_indices[0], PETSC_TRUE, &num_indices, &indices, field_offsets, NULL));
+  } else *cell_size = 0;
+
+  /* cell_size is derived from a local sample point, so a rank that owns no
+     iterated points (e.g. a boundary face set absent on this rank after
+     parallel distribution) cannot determine it locally -- recover the
+     rank-uniform value from the ranks that do.  Each call iterates a single
+     mono-topology stratum, so the nonzero cell_size agrees across ranks.
+     NOTE: this makes the routine collective on the communicator of dm. */
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, cell_size, 1, MPIU_INT, MPI_MAX, PetscObjectComm((PetscObject)dm)));
+
   PetscInt restr_size = (*num_cells) * (*cell_size);
   PetscCall(PetscMalloc1(restr_size, &restr_indices));
   PetscInt cell_offset = 0;
