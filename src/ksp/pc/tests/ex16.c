@@ -71,7 +71,7 @@ static PetscScalar LocalShift(void)
   return TestScalar(0.35, 0.2);
 }
 
-static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], void *ctx)
+static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], PetscCtx ctx)
 {
   PetscFunctionBeginUser;
   for (PetscInt i = 0; i < n; ++i) PetscCall(MatShift(sub[i], LocalShift()));
@@ -289,11 +289,9 @@ static PetscErrorCode CheckVector(Vec actual, Vec expected)
 
 /*
   Compares the PC with the reference operator T: PCApply() on every unit vector, and PCMatApply() on a block of three
-  vectors. With check_transpose, also compares PCApplyTranspose() and PCMatApplyTranspose() with T^T. Complex builds only
-  check them without a deflation space: with a coarse correction, the complex transpose of PCHPDDM applies Q^H instead of
-  Q^T, whether or not a scaling is supplied.
+  vectors. Also compares PCApplyTranspose() and PCMatApplyTranspose() with T^T, including with complex scalars.
 */
-static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
+static PetscErrorCode CheckApplications(PC pc, Mat T)
 {
   Vec      x, y, expected;
   PetscInt N, m, start, end;
@@ -312,11 +310,9 @@ static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
     PetscCall(PCApply(pc, x, y));
     PetscCall(MatMult(T, x, expected));
     PetscCall(CheckVector(y, expected));
-    if (check_transpose) {
-      PetscCall(PCApplyTranspose(pc, x, y));
-      PetscCall(MatMultTranspose(T, x, expected));
-      PetscCall(CheckVector(y, expected));
-    }
+    PetscCall(PCApplyTranspose(pc, x, y));
+    PetscCall(MatMultTranspose(T, x, expected));
+    PetscCall(CheckVector(y, expected));
   }
   {
     Mat X, Y;
@@ -324,7 +320,7 @@ static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
     PetscCall(MatCreateDense(PETSC_COMM_WORLD, m, PETSC_DECIDE, N, 3, NULL, &X));
     PetscCall(MatDuplicate(X, MAT_DO_NOT_COPY_VALUES, &Y));
     PetscCall(MatSetRandom(X, NULL));
-    for (PetscInt transpose = 0; transpose < (check_transpose ? 2 : 1); ++transpose) {
+    for (PetscInt transpose = 0; transpose < 2; ++transpose) {
       if (transpose) PetscCall(PCMatApplyTranspose(pc, X, Y));
       else PetscCall(PCMatApply(pc, X, Y));
       for (PetscInt j = 0; j < 3; ++j) {
@@ -413,8 +409,14 @@ int main(int argc, char **argv)
           PetscCall(PCHPDDMSetScaling(pc, is, D));
           PetscCall(PCHPDDMSetDeflationMat(pc, NULL, U));
         } else {
+          IS copy;
+
           PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-          PetscCall(PCHPDDMSetScaling(pc, is, D));
+          PetscCall(ISDuplicate(is, &copy)); // replace the stored IS while keeping the deflation matrix
+          PetscCall(PCHPDDMSetScaling(pc, copy, D));
+          PetscCall(CheckReferences(is, PETSC_FALSE));
+          PetscCall(CheckReferences(copy, PETSC_TRUE));
+          PetscCall(ISDestroy(&copy));
         }
       }
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
@@ -430,7 +432,7 @@ int main(int argc, char **argv)
       PetscCall(PCHPDDMGetCoarseCorrectionType(pc, &correction));
       PetscCall(CreateReference(A, empty_rank0, fine, correction, &T));
     }
-    PetscCall(CheckApplications(pc, T, (PetscBool)(!PetscDefined(USE_COMPLEX) || scaling_only)));
+    PetscCall(CheckApplications(pc, T));
     PetscCall(MatDestroy(&T));
   }
   PetscCall(PCDestroy(&pc));
