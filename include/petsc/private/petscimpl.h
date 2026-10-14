@@ -6,6 +6,11 @@
 
 /* SUBMANSEC = Sys */
 
+static inline int PetscStackGetSize_Private(const PetscStack *stack)
+{
+  return PetscMin(stack->currentsize, PETSCSTACKSIZE);
+}
+
 #if PetscDefined(CLANG_STATIC_ANALYZER)
   #define PetscDisableStaticAnalyzerForExpressionUnderstandingThatThisIsDangerousAndBugprone(...)
 #else
