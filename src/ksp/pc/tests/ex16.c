@@ -196,18 +196,18 @@ int main(int argc, char **argv)
       PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD, &rank));
       PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
       PetscCall(PetscMalloc1(n, &indices));
-      if (custom == 1) {
+      if (custom != 2) {
         for (PetscInt i = 0; i < n; ++i) indices[outercount++] = n - 1 - i;
       } else {
         for (PetscInt i = end - 1; i >= start; i -= 2) indices[outercount++] = i;
       }
       PetscCall(ISCreateGeneral(PETSC_COMM_SELF, outercount, indices, PETSC_COPY_VALUES, &outer));
       for (PetscInt i = 0; i < outercount; ++i)
-        if ((custom == 1 && indices[i] % size == rank) || (custom == 2 && i % 2 == 0)) indices[count++] = indices[i];
+        if ((custom != 2 && indices[i] % size == rank) || (custom == 2 && i % 2 == 0)) indices[count++] = indices[i];
       PetscCall(ISCreateGeneral(PETSC_COMM_SELF, count, indices, PETSC_OWN_POINTER, &inner));
       PetscCall(PCASMSetOverlap(pc, 0));
       PetscCall(PCASMSetSortIndices(pc, PETSC_FALSE));
-      PetscCall(PCASMSetLocalSubdomains(pc, 1, &outer, &inner));
+      PetscCall(PCASMSetLocalSubdomains(pc, 1, &outer, custom == 3 && rank % 2 ? NULL : &inner));
       PetscCall(ISDestroy(&outer));
       PetscCall(ISDestroy(&inner));
     }
@@ -238,12 +238,12 @@ int main(int argc, char **argv)
 
     test:
       suffix: cpu_custom
-      args: -custom_subdomains {{1 2}shared output} -sub_ksp_matsolve_batch_size 4
+      args: -custom_subdomains {{1 2 3}shared output} -sub_ksp_matsolve_batch_size 4
 
     test:
       suffix: cuda_custom
       requires: cuda
-      args: -cuda -custom_subdomains {{1 2}shared output} -sub_ksp_matsolve_batch_size 4
+      args: -cuda -custom_subdomains {{1 2 3}shared output} -sub_ksp_matsolve_batch_size 4
 
     test:
       suffix: cuda_hostoutput
