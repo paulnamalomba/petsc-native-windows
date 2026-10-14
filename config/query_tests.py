@@ -147,6 +147,11 @@ def get_inverse_dictionary(dataDict,fields,srcdir):
     the tests as the results.
     """
     invDict={}
+    # Canonicalize srcdir so that a symlinked PETSC_DIR (e.g. /home/user/petsc ->
+    # /scratch/user/petsc) reconciles with the possibly-realpath roots stored in
+    # datatest.pkl. os.path.relpath is purely lexical, so without this a pkl
+    # generated under one spelling of PETSC_DIR cannot be queried under another.
+    srcdir=os.path.realpath(srcdir)
     # Comma-delimited lists denote union
     for field in fields.replace('|',',').split(','):
         if field not in invDict:
@@ -159,7 +164,7 @@ def get_inverse_dictionary(dataDict,fields,srcdir):
             for test in dataDict[root][exfile]:
               if test in testparse.buildkeys: continue
               defroot = testparse.getDefaultOutputFileRoot(test)
-              fname=nameSpace(defroot,os.path.relpath(root,srcdir))
+              fname=nameSpace(defroot,os.path.relpath(os.path.realpath(root),srcdir))
               if field == 'name':
                   invDict['name'].append(fname)
                   continue
