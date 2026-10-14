@@ -505,6 +505,28 @@ class Configure(config.package.Package):
     yield ('Default compiler locations (all contained in libblas)', None, 'libblas.a','unknown','unknown')
     yield ('Default NVHPC', None, ['liblapack.a','libblas.a','libnvf.a','librt.a'],'unknown','unknown')
     yield ('Default OpenBLAS', None, 'libopenblas.a','unknown','unknown')
+    # Cray LibSci (cray-libsci module); the Cray PE compiler wrappers link it automatically,
+    # but if users don't use the compilers set by Cray wrappers, try it by name as well, and honor CRAY_LIBSCI_BASE_DIR set by the module.
+    # Note CRAY_LIBSCI_PREFIX_DIR (e.g., /opt/cray/pe/libsci/25.09.0/CRAY/20.0/x86_64) points to a directory specific
+    # to the compiler loaded by Cray PE. Since we may use a different compiler, we can't use it.
+    # CRAY_LIBSCI_BASE_DIR points at the version base, e.g. /opt/cray/pe/libsci/24.11.0, under which the
+    # libraries live in <VENDOR>/<compiler-version>/<arch>/lib, e.g. .../GNU/12.3/x86_64/lib. The library
+    # filename itself carries no compiler version, so the <compiler-version> directory is the only place the
+    # ABI is pinned; match it to the configured compiler's major.minor so we do not link a libsci built for a
+    # different compiler version (which would be an ABI mismatch).
+    cray_libsci_dir = os.getenv('CRAY_LIBSCI_BASE_DIR')
+    vendor          = self.crayLibSciVendor()
+    if cray_libsci_dir and vendor:
+      import glob, re
+      m           = re.search(r'(\d+)\.(\d+)', self.compilerFlags.version.get('C',''))
+      cmajorminor = m.group(1)+'.'+m.group(2) if m else None
+      # only glob the subtree matching the compiler family (subdirectory is the uppercased vendor)
+      for libdir in sorted(glob.glob(os.path.join(cray_libsci_dir,vendor.upper(),'*','*','lib'))):
+        # the <compiler-version> directory component, e.g. 12.3 in .../GNU/12.3/x86_64/lib
+        verdir = os.path.basename(os.path.dirname(os.path.dirname(libdir)))
+        if cmajorminor and verdir != cmajorminor: continue
+        for g in self.CrayLibSciGuesses(vendor, libdir):
+          yield g
     # Intel on Mac
     for ITHREAD in ITHREADS:
       yield ('User specified MKL Mac-64', None, [os.path.join('/opt','intel','mkl','lib','libmkl_intel'+ILP64+'.a'),'mkl_'+ITHREAD,'mkl_core','pthread'],known,ompthread)
@@ -565,6 +587,43 @@ class Configure(config.package.Package):
           self.log.write('Files and directories in that directory:\n'+str(os.listdir(mkldir))+'\n')
           yield ('Microsoft Windows, ia64 Intel MKL library', None, os.path.join(mkldir,'mkl_dll.lib'),'32','no')
     return
+
+  def crayLibSciVendor(self):
+    '''Return the Cray LibSci vendor name matching the configured compiler family, or None if unrecognized'''
+    if self.setCompilers.isCray(self.setCompilers.CC, self.log):
+      return 'cray'
+    elif self.setCompilers.isGNU(self.setCompilers.CC, self.log):
+      return 'gnu'
+    elif self.setCompilers.isIntel(self.setCompilers.CC, self.log):
+      return 'intel'
+    elif self.setCompilers.isNVC(self.setCompilers.CC, self.log):
+      return 'nvidia'
+    # On a machine with Cray PE, I saw this. We could extend the vendor list with AMD, AOCC.
+    # $ ls /opt/cray/pe/libsci/25.09.0/
+    # amd  aocc  ATTRIBUTIONS  CRAY       CRAYCLANG  GNU    INTEL         nvidia  README        set_default_libsci_25.09.0    share
+    # AMD  AOCC  cray          crayclang  gnu        intel  lib_contents  NVIDIA  release_info  set_pkgconfig_default_libsci
+    return None
+
+  def CrayLibSciGuesses(self, vendor, dir = None):
+    '''Yield guesses for Cray LibSci, the BLAS/LAPACK provided by the cray-libsci module'''
+    # Cray LibSci provides BLAS and LAPACK in a single library named libsci_<vendor>[_mp]
+    # where <vendor> matches the compiler family and _mp denotes the OpenMP (multithreaded) variant.
+    # The name carries no compiler-version suffix, so match it exactly; in particular do not glob with a
+    # trailing '*', which would also match the libsci_<vendor>_mpi[_mp] BLACS/ScaLAPACK libraries.
+    if self.openmp.found:
+      ompsuffixes = ['_mp', '']
+      ompthread   = 'yes'
+    else:
+      ompsuffixes = ['']
+      ompthread   = 'no'
+    for ompsuffix in ompsuffixes:
+      libname = 'libsci_' + vendor + ompsuffix
+      if dir:
+        for ext in ['.a', '.so']:
+          lib = os.path.join(dir, libname + ext)
+          if os.path.isfile(lib): yield ('Cray LibSci', None, lib, 'unknown', ompthread)
+      else:
+        yield ('Cray LibSci', None, libname + '.a', 'unknown', ompthread)
 
   def configureLibrary(self):
     if hasattr(self.compilers, 'FC'):
