@@ -5,7 +5,7 @@ mx:8, my:6, bmx:3, bmy:3, height:0.2
   0 TAO,  Function value: 1.57687,  Residual: 0.447462 
   1 TAO,  Function value: 1.52082,  Residual: 0.221251 
   2 TAO,  Function value: 1.50587,  Residual: 0.0266265 
-  3 TAO,  Function value: 1.50566,  Residual: 0.000666716 
+  3 TAO,  Function value: 1.50566,  Residual: 0.000666715 
   4 TAO,  Function value: 1.50566,  Residual: 7.77429e-07 
 Tao Object: 1 MPI process
   type: bntl
