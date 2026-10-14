@@ -1,10 +1,12 @@
 #include <petsc/private/petscimpl.h> /*I  "petscsys.h"   I*/
 
-#if PetscDefined(USE_DEBUG) && !PetscDefined(HAVE_THREADSAFETY)
-PetscStack petscstack;
+#if PetscDefined(USE_DEBUG)
+PETSC_TLS PetscStack petscstack = {{NULL}, {NULL}, {0}, {0}, 0, 0, PETSC_BOOL3_UNKNOWN};
+/* Set during initialization, before worker threads enter PETSc. */
+PetscBool petscstackcheck = PETSC_FALSE;
 #endif
 
-#if PetscDefined(HAVE_SAWS)
+#if PetscDefined(HAVE_SAWS) && !PetscDefined(HAVE_THREADSAFETY)
   #include <petscviewersaws.h>
 
 static PetscBool amsmemstack = PETSC_FALSE;
@@ -60,6 +62,7 @@ void PetscStackSAWsTakeAccess(void)
 
   Note:
   Only MPI rank 0 publishes; other MPI processes immediately return success. In non-debug builds the stack contents are not published but the call still succeeds.
+  With thread safety enabled, this function is a no-op that returns `PETSC_SUCCESS`.
 
 .seealso: `PetscStackView()`, `PetscStackSAWsViewOff()`, `PetscObjectSAWsViewOff()`
 @*/
@@ -85,7 +88,7 @@ PetscErrorCode PetscStackViewSAWs(void)
   Level: developer
 
   Note:
-  No-op when `PetscStackViewSAWs()` was never called. Compiled to a no-op when PETSc is not configured `--with-saws`.
+  No-op when `PetscStackViewSAWs()` was never called. Compiled to a no-op when PETSc is not configured `--with-saws` or has thread safety enabled.
 
 .seealso: `PetscStackViewSAWs()`, `PetscStackView()`, `PetscObjectSAWsViewOff()`
 @*/
@@ -99,22 +102,23 @@ PetscErrorCode PetscStackSAWsViewOff(void)
 }
 #endif /* PETSC_HAVE_SAWS */
 
-#if PetscDefined(USE_DEBUG) && !PetscDefined(HAVE_THREADSAFETY)
+#if PetscDefined(USE_DEBUG)
 PetscErrorCode PetscStackSetCheck(PetscBool check)
 {
-  petscstack.check = check;
+  petscstack.check = PetscBoolToBool3(check);
   return PETSC_SUCCESS;
 }
 
 PetscErrorCode PetscStackReset(void)
 {
   memset(&petscstack, 0, sizeof(petscstack));
+  petscstack.check = PETSC_BOOL3_UNKNOWN;
   return PETSC_SUCCESS;
 }
 
 // PetscClangLinter pragma disable: -fdoc-sowing-chars
 /*@
-  PetscStackView - Print the current (default) PETSc stack to an ASCII file
+  PetscStackView - Print the calling thread's default PETSc stack to an ASCII file
 
   Not Collective, No Fortran Support
 
@@ -130,10 +134,11 @@ PetscErrorCode PetscStackReset(void)
 
   If `file` is `PETSC_STDERR` (or `NULL`) then `PetscErrorPrintf()` is used to print the stack, otherwise `fprintf()` is used.
 
-  The stack is maintained only when PETSc is configured `--with-debugging` and without thread safety; in other configurations this becomes a no-op that returns `PETSC_SUCCESS`.
+  The stack is maintained only when PETSc is configured `--with-debugging`; otherwise this becomes a no-op that returns `PETSC_SUCCESS`.
 
   Developer Note:
   The default stack is a global variable called `petscstack`.
+  With thread safety enabled, this variable has a separate instance for each thread.
 
 .seealso: `PetscAttachDebugger()`, `PetscStackCopy()`, `PetscStackPrint()`, `PetscStackSAWsGrantAccess()`, `PetscStackSAWsTakeAccess()`
 @*/
@@ -235,6 +240,7 @@ PetscErrorCode PetscStackCopy(PetscStack *sint, PetscStack *sout)
   recommended to use the debugger if extensive information is needed to help debug the problem.
 
   The default stack is a global variable called `petscstack`.
+  With thread safety enabled, this variable has a separate instance for each thread.
 
   Developer Note:
   `PetscStackPrint()` and `PetscStackView()` should be merged into a single API.
