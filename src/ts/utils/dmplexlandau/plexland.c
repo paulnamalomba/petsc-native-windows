@@ -521,14 +521,6 @@ static PetscErrorCode LandauFormJacobian_Internal(Vec a_X, Mat JacP, const Petsc
             }
           }
         }
-        if (loc_elem == -1) {
-          PetscCall(PetscPrintf(ctx->comm, "CPU Element matrix\n"));
-          for (PetscInt d = 0; d < totDim; ++d) {
-            for (PetscInt f = 0; f < totDim; ++f) PetscCall(PetscPrintf(ctx->comm, " %12.5e", (double)PetscRealPart(elemMat[d * totDim + f])));
-            PetscCall(PetscPrintf(ctx->comm, "\n"));
-          }
-          exit(12);
-        }
         PetscCall(PetscFree(elemMat));
       } /* grid */
     } /* outer element & batch loop */
@@ -581,7 +573,7 @@ static PetscErrorCode LandauDMCreateVMeshes(MPI_Comm comm_self, const PetscInt d
     PetscReal par_radius = ctx->radius_par[grid], perp_radius = ctx->radius_perp[grid];
     if (!ctx->sphere && !ctx->simplex) { // 2 or 3D (only 3D option)
       PetscReal      lo[] = {-perp_radius, -par_radius, -par_radius}, hi[] = {perp_radius, par_radius, par_radius};
-      DMBoundaryType periodicity[3] = {DM_BOUNDARY_NONE, dim == 2 ? DM_BOUNDARY_NONE : DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+      DMBoundaryType periodicity[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
       if (dim == 2) lo[0] = 0;
       else {
         lo[1] = -perp_radius;
@@ -794,8 +786,11 @@ static PetscErrorCode maxwellian(PetscInt dim, PetscReal time, const PetscReal x
   /* compute the exponents, v^2 */
   for (PetscInt i = 0; i < dim; ++i) v2 += x[i] * x[i];
   /* evaluate the Maxwellian */
-  if (mctx->shift < 0) shift = -mctx->shift;
-  else {
+  if (mctx->shift < 0) {
+    /* only the shifted Maxwellian is wanted; u[0] is accumulated into below */
+    u[0]  = 0;
+    shift = -mctx->shift;
+  } else {
     u[0]  = mctx->n * PetscPowReal(PETSC_PI * theta, -1.5) * (PetscExpReal(-v2 / theta));
     shift = mctx->shift;
   }
@@ -901,13 +896,11 @@ static PetscErrorCode adaptToleranceFEM(PetscFE fem, Vec sol, PetscInt type, Pet
   if (type == 4) {
     for (c = cStart; c < cEnd; c++) PetscCall(DMLabelSetValue(adaptLabel, c, DM_ADAPT_REFINE));
   } else if (type == 2) {
-    PetscInt  rCellIdx[8], nr = 0, nrmax = (dim == 3) ? 8 : 2;
+    PetscInt  rCellIdx[8] = {-1, -1}, nr = 0, nrmax = (dim == 3) ? 8 : 2;
     PetscReal minRad = PETSC_INFINITY, r;
     for (c = cStart; c < cEnd; c++) {
       PetscReal tt, v0[LANDAU_MAX_NQND * 3], J[LANDAU_MAX_NQND * 9], invJ[LANDAU_MAX_NQND * 9], detJ[LANDAU_MAX_NQND];
       PetscCall(DMPlexComputeCellGeometryFEM(plex, c, quad, v0, J, invJ, detJ));
-      (void)J;
-      (void)invJ;
       for (qj = 0; qj < Nq; ++qj) {
         tt = PetscSqr(v0[dim * qj + 0]) + PetscSqr(v0[dim * qj + 1]) + PetscSqr((dim == 3) ? v0[dim * qj + 2] : 0);
         r  = PetscSqrtReal(tt);
@@ -938,7 +931,7 @@ static PetscErrorCode adaptToleranceFEM(PetscFE fem, Vec sol, PetscInt type, Pet
     PetscCall(DMGetCoordinateDM(forest, &cdm));
     PetscCall(DMGetLocalSection(cdm, &cs));
     for (c = cStart; c < cEnd; c++) {
-      PetscInt doit = 0, outside = 0;
+      PetscInt outside = 0;
       PetscCall(DMPlexVecGetClosure(cdm, cs, coords, c, &csize, &coef));
       Nv = csize / dim;
       for (nz = d = 0; d < Nv; d++) {
@@ -956,7 +949,7 @@ static PetscErrorCode adaptToleranceFEM(PetscFE fem, Vec sol, PetscInt type, Pet
         if (x < PETSC_MACHINE_EPSILON * 10. && (type != 0 || ctx->re_radius > PETSC_SQRT_MACHINE_EPSILON)) nz++;
       }
       PetscCall(DMPlexVecRestoreClosure(cdm, cs, coords, c, &csize, &coef));
-      if (doit || (outside < Nv && nz)) {
+      if (outside < Nv && nz) {
         PetscCall(DMLabelSetValue(adaptLabel, c, DM_ADAPT_REFINE));
         nrefined++;
       }
@@ -1202,7 +1195,7 @@ static PetscErrorCode ProcessOptions(LandauCtx *ctx, const char prefix[])
   non_dim_grid = 0;
   PetscCall(PetscOptionsInt("-dm_landau_normalization_grid", "Index of grid to use for setting v_0, m_0, t_0. (Not recommended)", "plexland.c", non_dim_grid, &non_dim_grid, &flg));
   if (non_dim_grid != 0) PetscCall(PetscInfo(dummy, "Normalization grid set to %" PetscInt_FMT ", but non-default not well verified\n", non_dim_grid));
-  PetscCheck(non_dim_grid >= 0 && non_dim_grid < ctx->num_species, ctx->comm, PETSC_ERR_ARG_WRONG, "Normalization grid wrong: %" PetscInt_FMT, non_dim_grid);
+  PetscCheck(non_dim_grid >= 0 && non_dim_grid < ctx->num_grids, ctx->comm, PETSC_ERR_ARG_WRONG, "Normalization grid wrong: %" PetscInt_FMT, non_dim_grid);
   ctx->v_0 = ctx->thermal_speed[non_dim_grid]; /* arbitrary units for non dimensionalization: global mean velocity in 1D of electrons */
   ctx->m_0 = ctx->masses[non_dim_grid];        /* arbitrary reference mass, electrons */
   ctx->t_0 = 8 * PETSC_PI * PetscSqr(ctx->epsilon0 * ctx->m_0 / PetscSqr(ctx->charges[non_dim_grid])) / ctx->lambdas[non_dim_grid][non_dim_grid] / ctx->n_0 * PetscPowReal(ctx->v_0, 3); /* note, this t_0 makes nu[non_dim_grid,non_dim_grid]=1 */
@@ -1278,19 +1271,10 @@ static PetscErrorCode ProcessOptions(LandauCtx *ctx, const char prefix[])
         if (ctx->sphere) PetscCall(PetscInfo(ctx->plex[0], "sphere : , 45 degree scaling = %g; 90 degree scaling = %g\n", (double)ctx->sphere_inner_radius_45degree[0], (double)ctx->sphere_inner_radius_90degree[0]));
       } else {
         for (PetscInt grid = 0; grid < ctx->num_grids; grid++) {
-          switch (ctx->numAMRRefine[grid]) {
-          case 0:
-          case 1:
-          case 2:
-          case 3:
-          default:
-            if (LANDAU_DIM == 2) {
-              ctx->sphere_inner_radius_90degree[grid] = 0.40;
-              ctx->sphere_inner_radius_45degree[grid] = 0.45;
-            } else {
-              ctx->sphere_inner_radius_45degree[grid] = 0.25;
-            }
-          }
+          if (LANDAU_DIM == 2) {
+            ctx->sphere_inner_radius_90degree[grid] = 0.40;
+            ctx->sphere_inner_radius_45degree[grid] = 0.45;
+          } else ctx->sphere_inner_radius_45degree[grid] = 0.25;
         }
       }
     } else {
@@ -2010,7 +1994,7 @@ static PetscErrorCode LandauCreateJacobianMatrix(MPI_Comm comm, Vec X, IS grid_b
         PetscCall(MatGetRow(B, i, &nzl, NULL, NULL));
         if (nzl > COL_BF_SIZE) {
           PetscCall(PetscFree(colbuf));
-          PetscCall(PetscInfo(ctx->plex[grid], "Realloc buffer %" PetscInt_FMT " to %" PetscInt_FMT " (row size %" PetscInt_FMT ") \n", COL_BF_SIZE, 2 * COL_BF_SIZE, nzl));
+          PetscCall(PetscInfo(ctx->plex[grid], "Realloc buffer %" PetscInt_FMT " to %" PetscInt_FMT "\n", COL_BF_SIZE, nzl));
           COL_BF_SIZE = nzl;
           PetscCall(PetscMalloc(sizeof(*colbuf) * COL_BF_SIZE, &colbuf));
         }
@@ -2250,7 +2234,7 @@ PetscErrorCode DMPlexLandauCreateVelocitySpace(MPI_Comm comm, PetscInt dim, cons
     PetscContainer container;
     PetscInt      *pNf;
     PetscCall(PetscContainerCreate(PETSC_COMM_SELF, &container));
-    PetscCall(PetscMalloc1(sizeof(*pNf), &pNf));
+    PetscCall(PetscMalloc1(1, &pNf));
     *pNf = ctx->batch_sz;
     PetscCall(PetscContainerSetPointer(container, (void *)pNf));
     PetscCall(PetscContainerSetCtxDestroy(container, PetscCtxDestroyDefault));
@@ -2618,7 +2602,7 @@ PetscErrorCode DMPlexLandauCreateMassMatrix(DM pack, Mat *Amat)
 {
   DM         mass_pack, massDM[LANDAU_MAX_GRIDS];
   PetscDS    prob;
-  PetscInt   ii, dim, N1 = 1, N2;
+  PetscInt   ii, ix, dim, N1, N2;
   LandauCtx *ctx;
   Mat        packM, subM[LANDAU_MAX_GRIDS];
 
@@ -2631,7 +2615,7 @@ PetscErrorCode DMPlexLandauCreateMassMatrix(DM pack, Mat *Amat)
   PetscCall(DMGetDimension(pack, &dim));
   PetscCall(DMCompositeCreate(PetscObjectComm((PetscObject)pack), &mass_pack));
   /* create pack mass matrix */
-  for (PetscInt grid = 0, ix = 0; grid < ctx->num_grids; grid++) {
+  for (PetscInt grid = 0; grid < ctx->num_grids; grid++) {
     PetscCall(DMClone(ctx->plex[grid], &massDM[grid]));
     PetscCall(DMCopyFields(ctx->plex[grid], PETSC_DETERMINE, PETSC_DETERMINE, massDM[grid]));
     PetscCall(DMCreateDS(massDM[grid]));
@@ -2688,7 +2672,7 @@ PetscErrorCode DMPlexLandauCreateMassMatrix(DM pack, Mat *Amat)
         PetscCall(MatGetRow(B, i, &nzl, NULL, NULL));
         if (nzl > COL_BF_SIZE) {
           PetscCall(PetscFree(colbuf));
-          PetscCall(PetscInfo(pack, "Realloc buffer %" PetscInt_FMT " to %" PetscInt_FMT " (row size %" PetscInt_FMT ") \n", COL_BF_SIZE, 2 * COL_BF_SIZE, nzl));
+          PetscCall(PetscInfo(pack, "Realloc buffer %" PetscInt_FMT " to %" PetscInt_FMT "\n", COL_BF_SIZE, nzl));
           COL_BF_SIZE = nzl;
           PetscCall(PetscMalloc(sizeof(*colbuf) * COL_BF_SIZE, &colbuf));
         }
@@ -2734,7 +2718,7 @@ PetscErrorCode DMPlexLandauCreateMassMatrix(DM pack, Mat *Amat)
  @*/
 PetscErrorCode DMPlexLandauIFunction(TS ts, PetscReal time_dummy, Vec X, Vec X_t, Vec F, void *actx)
 {
-  LandauCtx *ctx = (LandauCtx *)actx;
+  LandauCtx *ctx = NULL;
   PetscInt   dim;
   DM         pack;
 #if PetscDefined(HAVE_THREADSAFETY)
