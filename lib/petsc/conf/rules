@@ -244,6 +244,21 @@ ifneq (,$(findstring emcc,$(CC)))
 	-@chmod u+x $@
 endif
 
+ifdef PETSC_RDC
+% : %.c
+	$(subst $@, $@.o, ${PETSC_COMPILE_SINGLE}) $<
+	$(CUDAC) $@.o $(CUDAC_FLAGS:--device-c=--device-link) $(subst -Wl,-L,$(LOADLIBES)) $(subst -Wl,-L,$(LDLIBS)) -o $@-rdc.o
+	$(LINK.c) $@.o $@-rdc.o $(LOADLIBES) $(LDLIBS) -o $@
+% : %.cxx
+	$(subst $@, $@.o, ${PETSC_CXXCOMPILE_SINGLE}) $<
+	$(CUDAC) $@.o $(CUDAC_FLAGS:--device-c=--device-link) $(subst -Wl,-L,$(LOADLIBES)) $(subst -Wl,-L,$(LDLIBS)) -o $@-rdc.o
+	$(LINK.cc) $@.o $@-rdc.o $(LOADLIBES) $(LDLIBS) -o $@
+% : %.F90
+	$(subst $@, $@.o, ${PETSC_FCOMPILE_SINGLE}) $<
+	$(CUDAC) $@.o $(CUDAC_FLAGS:--device-c=--device-link) $(subst -Wl,-L,$(LOADLIBES)) $(subst -Wl,-L,$(LDLIBS)) -o $@-rdc.o
+	$(LINK.F) $@.o $@-rdc.o $(LOADLIBES) $(LDLIBS) -o $@
+endif
+
 help-applications:
 	-@echo ""
 	-@echo "make applicationname - compiles applicationname.[c,cxx,F,F90] file into an executable"

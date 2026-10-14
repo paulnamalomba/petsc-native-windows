@@ -197,6 +197,7 @@ class Configure(config.base.Configure):
     help.addArgument('Compilers', '-with-hip-dialect=<dialect>',nargs.Arg(None, 'auto', 'Dialect under which to compile HIP sources. If set should probably be equivalent to c++ dialect (see --with-cxx-dialect)'))
     help.addArgument('Compilers', '-with-cuda-dialect=<dialect>',nargs.Arg(None, 'auto', 'Dialect under which to compile CUDA sources. If set should probably be equivalent to c++ dialect (see --with-cxx-dialect)'))
     help.addArgument('Compilers', '-with-sycl-dialect=<dialect>',nargs.Arg(None, 'auto', 'Dialect under which to compile SYCL sources. If set should probably be equivalent to c++ dialect (see --with-cxx-dialect)'))
+    help.addArgument('Compilers', '-with-cuda-rdc',nargs.ArgBool(None, 0, 'Build with CUDA RDC'))
     return
 
   def setupDependencies(self, framework):
@@ -688,6 +689,13 @@ class Configure(config.base.Configure):
       if flagsArg in self.argDB: setattr(self, flagsArg, self.argDB[flagsArg])
       else: setattr(self, flagsArg, '')
       self.logPrint('Initialized '+flagsArg+' to '+str(getattr(self, flagsArg)))
+    if self.argDB['with-cuda-rdc']:
+      if self.argDB['with-shared-libraries']:
+        raise RuntimeError('cuda-rdc requires --with-shared-libraries=0 [along with --with-cuda=1]')
+      if not self.argDB['with-cuda']:
+        raise RuntimeError('cuda-rdc requires --with-cuda=1 [along with --with-shared-libraries=0]')
+      self.CUDAPPFLAGS += ' --device-c'
+      self.framework.addMakeMacro('PETSC_RDC',1)
     # SYCLC_LINKER_FLAGS is init'ed above in the "for language" loop.
     # FIXME: these linker flags are init'ed as a list, while others are init'ed as a string. Need to make them consistent.
     for flagsArg in ['CC_LINKER_FLAGS', 'CXX_LINKER_FLAGS', 'FC_LINKER_FLAGS', 'CUDAC_LINKER_FLAGS', 'HIPC_LINKER_FLAGS', 'sharedLibraryFlags', 'dynamicLibraryFlags']:

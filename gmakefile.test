@@ -265,9 +265,21 @@ endif
 macos-firewall-register-mpiexec:
 	-$(call macos-firewall-register, $(MPIEXEC))
 
+ifdef PETSC_RDC
+CUDA_RDC_OBJ = $@-rdc.o
+define RECIPE_CUDA_RDC_OBJ
+ $(call quiet,CUDAC) $^ $(CUDAC_FLAGS:--device-c=--device-link) $(subst -Wl,-L,$(LOADLIBES)) $(subst -Wl,-L,$(PETSC_TEST_LIB)) -o $(CUDA_RDC_OBJ)
+endef
+else
+CUDA_RDC_OBJ =
+define RECIPE_CUDA_RDC_OBJ
+endef
+endif
+
 # Test executables
 $(testexe.F) $(testexe.F90) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
-	$(call quiet,FLINKER) -o $@ $^ $(PETSC_TEST_LIB)
+	$(RECIPE_CUDA_RDC_OBJ)
+	$(call quiet,FLINKER) -o $@ $(CUDA_RDC_OBJ) $^ $(PETSC_TEST_LIB)
 	-$(call macos-firewall-register,$@)
 
 ifneq (,$(findstring emcc,$(CC)))
@@ -277,9 +289,9 @@ $(testexe.c) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
 	-@chmod u+x $@
 else
 $(testexe.c) $(testexe.cu) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
-	$(call quiet,CLINKER) $(EXEFLAGS) -o $@ $^ $(PETSC_TEST_LIB)
+	$(RECIPE_CUDA_RDC_OBJ)
+	$(call quiet,CLINKER) $(EXEFLAGS) -o $@ $(CUDA_RDC_OBJ) $^ $(PETSC_TEST_LIB)
 	-$(call macos-firewall-register,$@)
-
 endif
 
 $(testexe.hip.cxx) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
@@ -295,7 +307,8 @@ $(testexe.raja.cxx) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
 	-$(call macos-firewall-register,$@)
 
 $(testexe.cxx) : $(TESTDIR)/% : $(TESTDIR)/%.o $$^ $(libpetscall)
-	$(call quiet,CXXLINKER) -o $@ $^ $(PETSC_TEST_LIB)
+	$(RECIPE_CUDA_RDC_OBJ)
+	$(call quiet,CXXLINKER) -o $@ $(CUDA_RDC_OBJ) $^ $(PETSC_TEST_LIB)
 	-$(call macos-firewall-register,$@)
 
 # Fortran source files need petsc*.mod, which isn't explicitly managed in the makefile.
