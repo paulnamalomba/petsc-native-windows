@@ -174,11 +174,12 @@ typedef struct {
 } Mat_SeqAIJ;
 
 typedef struct {
-  PetscInt    nz;   /* nz of the matrix after assembly */
-  PetscCount  n;    /* Number of entries in MatSetPreallocationCOO() */
-  PetscCount  Atot; /* Total number of valid (i.e., w/ non-negative indices) entries in the COO array */
-  PetscCount *jmap; /* perm[jmap[i]..jmap[i+1]) give indices of entries in v[] associated with i-th nonzero of the matrix */
-  PetscCount *perm; /* The permutation array in sorting (i,j) by row and then by col */
+  PetscInt         nz;           /* nz of the matrix after assembly */
+  PetscCount       n;            /* Number of entries in MatSetPreallocationCOO() */
+  PetscCount       Atot;         /* Total number of valid (i.e., w/ non-negative indices) entries in the COO array */
+  PetscCount      *jmap;         /* perm[jmap[i]..jmap[i+1]) give indices of entries in v[] associated with i-th nonzero of the matrix */
+  PetscCount      *perm;         /* The permutation array in sorting (i,j) by row and then by col */
+  PetscObjectState nonzerostate; /* nonzero state of the matrix that jmap[] indexes into */
 } MatCOOStruct_SeqAIJ;
 
 #define MatSeqXAIJGetOptions_Private(A) \
@@ -334,6 +335,7 @@ static inline PetscErrorCode MatSeqXAIJFreeAIJ(Mat AA, MatScalar **a, PetscInt *
 
 PETSC_INTERN PetscErrorCode MatSeqAIJSetPreallocation_SeqAIJ(Mat, PetscInt, const PetscInt *);
 PETSC_INTERN PetscErrorCode MatSetPreallocationCOO_SeqAIJ(Mat, PetscCount, PetscInt[], PetscInt[]);
+PETSC_INTERN PetscErrorCode MatSeqAIJCheckCOONonzeroState(Mat);
 
 PETSC_INTERN PetscErrorCode MatILUFactorSymbolic_SeqAIJ(Mat, Mat, IS, IS, const MatFactorInfo *);
 PETSC_INTERN PetscErrorCode MatILUFactorSymbolic_SeqAIJ_ilu0(Mat, Mat, IS, IS, const MatFactorInfo *);
@@ -447,6 +449,7 @@ PETSC_INTERN PetscErrorCode MatRestoreRow_SeqAIJ(Mat, PetscInt, PetscInt *, Pets
 PETSC_INTERN PetscErrorCode MatScale_SeqAIJ(Mat, PetscScalar);
 PETSC_INTERN PetscErrorCode MatDiagonalScale_SeqAIJ(Mat, Vec, Vec);
 PETSC_INTERN PetscErrorCode MatDiagonalSet_SeqAIJ(Mat, Vec, InsertMode);
+PETSC_INTERN PetscErrorCode MatGetRowSumAbs_SeqAIJ(Mat, Vec);
 PETSC_INTERN PetscErrorCode MatAXPY_SeqAIJ(Mat, PetscScalar, Mat, MatStructure);
 PETSC_INTERN PetscErrorCode MatGetRowIJ_SeqAIJ(Mat, PetscInt, PetscBool, PetscBool, PetscInt *, const PetscInt *[], const PetscInt *[], PetscBool *);
 PETSC_INTERN PetscErrorCode MatRestoreRowIJ_SeqAIJ(Mat, PetscInt, PetscBool, PetscBool, PetscInt *, const PetscInt *[], const PetscInt *[], PetscBool *);

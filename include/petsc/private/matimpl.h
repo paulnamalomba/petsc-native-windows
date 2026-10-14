@@ -481,6 +481,9 @@ typedef struct { /* used by MatProduct() */
   /* Some products may display the information on the algorithm used */
   PetscErrorCode (*view)(Mat, PetscViewer);
 
+  /* nonzero state of A at the last symbolic phase, used by MatProductComputeWithMat_Private() to run that phase again when the nonzero pattern of A changes */
+  PetscObjectState Anonzerostate;
+
   /* many products have intermediate data structures, each specific to Mat types and product type */
   PetscBool          clear;   /* whether or not to clear the data structures after MatProductNumeric has been called */
   void              *data;    /* where to stash those structures */
@@ -589,6 +592,9 @@ struct _p_MatPartitioning {
 
 /* needed for parallel nested dissection by ParMETIS */
 PETSC_INTERN PetscErrorCode MatPartitioningSizesToSep_Private(PetscInt, PetscInt[], PetscInt[], PetscInt[]);
+
+/* shared by the MatPartitioning and PetscPartitioner bindings to PT-SCOTCH */
+PETSC_SINGLE_LIBRARY_INTERN PetscErrorCode PetscPTSCOTCHPartitionGraph_Private(MPI_Comm, const PetscInt[], PetscInt[], PetscInt[], PetscInt[], PetscInt[], PetscBool, PetscInt, PetscInt[], PetscInt, double, PetscInt[]);
 
 /*
     Object for coarsen graphs
@@ -809,6 +815,7 @@ PETSC_EXTERN PetscErrorCode MatFactorDumpMatrix(Mat);
 PETSC_INTERN PetscErrorCode MatSetBlockSizes_Default(Mat, PetscInt, PetscInt);
 
 PETSC_SINGLE_LIBRARY_INTERN PetscErrorCode MatShift_Basic(Mat, PetscScalar);
+PETSC_SINGLE_LIBRARY_INTERN PetscErrorCode MatProductComputeWithMat_Private(Mat, Mat, MatProductType, Mat);
 
 static inline PetscErrorCode MatPivotCheck_nz(PETSC_UNUSED Mat mat, const MatFactorInfo *info, FactorShiftCtx *sctx, PETSC_UNUSED PetscInt row)
 {

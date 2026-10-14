@@ -24,6 +24,7 @@
 ```
 
 - Add topology-aware GPU binding using `hwloc`; Requires `hwloc` version 2.0 or later
+- Add `PetscCommCreateNonempty()` and `PetscCommDestroyNonempty()` for external libraries, such as ParMETIS and PT-SCOTCH, that require every process of their communicator to own data
 
 ```{rubric} Event Logging:
 ```
@@ -65,12 +66,18 @@
 - Add device implementations of `MatNorm()` with `NORM_1`, `NORM_FROBENIUS`, and `NORM_INFINITY` for `MATAIJKOKKOS`; previously all norms copied the matrix values to the host
 - Add `-mat_spd` to set `MAT_SPD` from the options database in `MatSetFromOptions()`
 - Change `MatSetOption()` to error when a symmetry-related option contradicts an already known property
+- Add support for `MatZeroRows()` and `MatZeroRowsColumns()` with a nonzero diagonal value on a `MATIS` whose local matrix does not implement `MatSetValues()`, such as `MATSHELL`
+- Change `MatSetValuesCOO()` for `MATAIJ` and its device subtypes to generate an error when the nonzero pattern has changed since `MatSetPreallocationCOO()`, for example because `MatSetValues()` inserted a new nonzero; values were previously written into wrong locations in such a sequence of events
+- Change `MatAXPY()` with `DIFFERENT_NONZERO_PATTERN` for `MATSEQAIJ` and `MATMPIAIJ` to add in place when the nonzeros of `X` are a subset of those of `Y`, keeping the nonzero pattern and nonzero state of `Y`, as well as the options that survive assembly, such as `MAT_SYMMETRY_ETERNAL`
+- Add `MatGetRowSumAbs()` for `MATHYPRE`, on the host and the device, and device implementations of `MatGetRowSumAbs()` for `MATAIJCUSPARSE`, `MATAIJHIPSPARSE`, and `MATAIJKOKKOS`; previously the AIJ device types copied the matrix values to the host
 
 ```{rubric} MatCoarsen:
 ```
 
 ```{rubric} PC:
 ```
+
+- Add `PCHPDDMSetScaling()` to supply a diagonal scaling `Vec` for the deflation space set with `PCHPDDMSetDeflationMat()`. If the fine level is a `PCASM`, its default `PCASMType` is set to `PC_ASM_WEIGHTED`, in which case the scaling is forwarded accordingly
 
 ```{rubric} KSP:
 ```

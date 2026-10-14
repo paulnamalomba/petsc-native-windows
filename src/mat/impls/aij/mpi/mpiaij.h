@@ -74,18 +74,19 @@ typedef struct {
 } Mat_MPIAIJ;
 
 typedef struct {
-  PetscCount   n;                          /* Number of COOs passed to MatSetPreallocationCOO)() */
-  PetscSF      sf;                         /* SF to send/recv remote values in MatSetValuesCOO() */
-  PetscCount   Annz, Bnnz;                 /* Number of entries in diagonal A and off-diagonal B */
-  PetscCount   Annz2, Bnnz2;               /* Number of unique remote entries belonging to A and B */
-  PetscCount   Atot1, Atot2, Btot1, Btot2; /* Total local (tot1) and remote (tot2) entries (which might contain repeats) belonging to A and B */
-  PetscCount  *Ajmap1, *Aperm1;            /* Lengths: [Annz+1], [Atot1]. Local entries to diag */
-  PetscCount  *Bjmap1, *Bperm1;            /* Lengths: [Bnnz+1], [Btot1]. Local entries to offdiag */
-  PetscCount  *Aimap2, *Ajmap2, *Aperm2;   /* Lengths: [Annz2], [Annz2+1], [Atot2]. Remote entries to diag */
-  PetscCount  *Bimap2, *Bjmap2, *Bperm2;   /* Lengths: [Bnnz2], [Bnnz2+1], [Btot2]. Remote entries to offdiag */
-  PetscCount  *Cperm1;                     /* [sendlen] Permutation to fill MPI send buffer. 'C' for communication */
-  PetscScalar *sendbuf, *recvbuf;          /* Buffers for remote values in MatSetValuesCOO() */
-  PetscInt     sendlen, recvlen;           /* Lengths (in unit of PetscScalar) of send/recvbuf */
+  PetscCount       n;                            /* Number of COOs passed to MatSetPreallocationCOO)() */
+  PetscSF          sf;                           /* SF to send/recv remote values in MatSetValuesCOO() */
+  PetscCount       Annz, Bnnz;                   /* Number of entries in diagonal A and off-diagonal B */
+  PetscCount       Annz2, Bnnz2;                 /* Number of unique remote entries belonging to A and B */
+  PetscCount       Atot1, Atot2, Btot1, Btot2;   /* Total local (tot1) and remote (tot2) entries (which might contain repeats) belonging to A and B */
+  PetscCount      *Ajmap1, *Aperm1;              /* Lengths: [Annz+1], [Atot1]. Local entries to diag */
+  PetscCount      *Bjmap1, *Bperm1;              /* Lengths: [Bnnz+1], [Btot1]. Local entries to offdiag */
+  PetscCount      *Aimap2, *Ajmap2, *Aperm2;     /* Lengths: [Annz2], [Annz2+1], [Atot2]. Remote entries to diag */
+  PetscCount      *Bimap2, *Bjmap2, *Bperm2;     /* Lengths: [Bnnz2], [Bnnz2+1], [Btot2]. Remote entries to offdiag */
+  PetscCount      *Cperm1;                       /* [sendlen] Permutation to fill MPI send buffer. 'C' for communication */
+  PetscScalar     *sendbuf, *recvbuf;            /* Buffers for remote values in MatSetValuesCOO() */
+  PetscInt         sendlen, recvlen;             /* Lengths (in unit of PetscScalar) of send/recvbuf */
+  PetscObjectState Anonzerostate, Bnonzerostate; /* nonzero states of A and B that the maps above index into */
 } MatCOOStruct_MPIAIJ;
 
 PETSC_EXTERN PetscErrorCode MatCreate_MPIAIJ(Mat);
@@ -183,6 +184,7 @@ PETSC_INTERN PetscErrorCode MatGetSeqMats_MPIAIJ(Mat, Mat *, Mat *);
 PETSC_INTERN PetscErrorCode MatSetSeqMats_MPIAIJ(Mat, IS, IS, IS, MatStructure, Mat, Mat);
 
 PETSC_INTERN PetscErrorCode MatSetPreallocationCOO_MPIAIJ(Mat, PetscCount, PetscInt[], PetscInt[]);
+PETSC_INTERN PetscErrorCode MatMPIAIJCheckCOONonzeroState(Mat);
 
 PETSC_INTERN PetscErrorCode MatGetCurrentMemType_MPIAIJ(Mat, PetscMemType *);
 
@@ -192,6 +194,7 @@ typedef struct {
   PetscInt      nsends, nrecvs;
   MPI_Datatype *stype, *rtype;
   PetscInt      blda;
+  PetscObjectId bid;   /* identity of the last dense input checked to have the leading dimension blda */
   PetscSF       sf[2]; /* strided scatters for ncols[0] = workB->cmap->n columns and ncols[1] = remainder columns of the batched path, NULL if unused */
   PetscInt      ncols[2];
   PetscBool     ondevice; /* workB has a device type, use sf[] instead of the MPI derived datatypes */
@@ -203,6 +206,7 @@ typedef struct {
 
 PETSC_INTERN PetscErrorCode MatMPIDenseScatterSetUp_Private(VecScatter, PetscInt, PetscInt, PetscInt, Mat, Mat, MPIAIJ_MPIDense *, PetscInt *, PetscInt *);
 PETSC_INTERN PetscErrorCode MatMPIDenseScatterDestroy_Private(MPIAIJ_MPIDense *);
+PETSC_INTERN PetscErrorCode MatMPIDenseScatterUpdateLDA_Private(VecScatter, PetscInt, Mat, Mat, MPIAIJ_MPIDense *);
 PETSC_INTERN PetscErrorCode MatMPIDenseScatter_Private(VecScatter, PetscInt, PetscInt, Mat, MPIAIJ_MPIDense *, Mat, Mat);
 
 /* compute apa = A[i,:]*P = Ad[i,:]*P_loc + Ao*[i,:]*P_oth using sparse axpy */

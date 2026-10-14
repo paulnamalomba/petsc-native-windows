@@ -1070,8 +1070,9 @@ PetscErrorCode MatResetHash(Mat A)
   Level: advanced
 
   Notes:
-  If the user has not set preallocation for this matrix then an efficient algorithm will be used for the first round of
-  setting values in the matrix.
+  If no preallocation has been provided for a `MATAIJ`, `MATBAIJ`, or `MATSBAIJ` matrix, `MatSetUp()` makes it record the
+  values given to `MatSetValues()` in a hash table, and the first assembly determines the nonzero pattern from it. Providing
+  preallocation instead, for example with `MatXAIJSetPreallocation()` or `MatSetPreallocationCOO()`, disables hash-table mode.
 
   This routine is called internally by other `Mat` functions when needed so rarely needs to be called by users
 
@@ -10683,6 +10684,61 @@ PetscErrorCode MatRARt(Mat A, Mat R, MatReuse scall, PetscReal fill, Mat *C)
 
   PetscCall(MatProductNumeric(*C));
   if (A->symmetric == PETSC_BOOL3_TRUE) PetscCall(MatSetOption(*C, MAT_SYMMETRIC, PETSC_TRUE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* MatProductComputeWithMat_Private - Computes D = A * B or D = A^T * B into an existing matrix D, keeping the product on a dense D
+
+   Collective
+
+   Input Parameters:
++  A     - the left matrix
+.  B     - the right matrix
+.  ptype - MATPRODUCT_AB or MATPRODUCT_AtB
+-  D     - the result, of the size of the product
+
+   Level: developer
+
+   Notes:
+   For a dense D, this routine keeps the product on D between calls, so only the first call runs the symbolic phase. The product is created
+   again only when ptype, A, or the nonzero pattern of A changes; a different B of the same size and type reuses it. The kept product holds
+   references to A and B until MatProductClear() is called on D or D is destroyed. In contrast, MatMatMult() with MAT_REUSE_MATRIX creates the
+   product and destroys it again on every call into a dense D that does not already have a product.
+
+   For any other D, which must already have a product, this calls MatMatMult() or MatTransposeMatMult() with MAT_REUSE_MATRIX.
+
+   Developer Note:
+   The nonzero state of A is compared without a reduction, since the parallel AIJ and BAIJ types make it the same on all processes during
+   assembly.
+
+.seealso: `MatMatMult()`, `MatTransposeMatMult()`, `MatProductReplaceMats()`, `PCMGMatResidualDefault()`
+*/
+PetscErrorCode MatProductComputeWithMat_Private(Mat A, Mat B, MatProductType ptype, Mat D)
+{
+  Mat_Product     *product = D->product;
+  PetscObjectState state;
+  PetscBool        flg;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectBaseTypeCompareAny((PetscObject)D, &flg, MATSEQDENSE, MATMPIDENSE, ""));
+  if (!flg) { /* only a dense result can be given without a product, MatMatMult() and MatTransposeMatMult() reuse the product of any other */
+    if (ptype == MATPRODUCT_AB) PetscCall(MatMatMult(A, B, MAT_REUSE_MATRIX, PETSC_CURRENT, &D));
+    else PetscCall(MatTransposeMatMult(A, B, MAT_REUSE_MATRIX, PETSC_CURRENT, &D));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(MatGetNonzeroState(A, &state));
+  if (product == NULL || product->type != ptype || product->A != A || product->Anonzerostate != state) {
+    PetscCall(PetscInfo(D, "Setting up the %s product into the supplied dense matrix\n", MatProductTypes[ptype]));
+    PetscCall(MatProductCreateWithMat(A, B, NULL, D));
+    D->product->api_user = PETSC_TRUE;
+    PetscCall(MatProductSetType(D, ptype));
+    PetscCall(MatProductSetFromOptions(D));
+    PetscCall(MatProductSymbolic(D));
+  } else {
+    PetscCall(PetscInfo(D, "Reusing the %s product attached to the supplied dense matrix\n", MatProductTypes[ptype]));
+    if (product->B != B) PetscCall(MatProductReplaceMats(NULL, B, NULL, D));
+  }
+  PetscCall(MatProductNumeric(D));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
