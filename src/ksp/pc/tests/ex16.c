@@ -71,7 +71,7 @@ static PetscScalar LocalShift(void)
   return TestScalar(0.35, 0.2);
 }
 
-static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], void *ctx)
+static PetscErrorCode ModifySubmatrices(PC pc, PetscInt n, const IS rows[], const IS cols[], Mat sub[], PetscCtx ctx)
 {
   PetscFunctionBeginUser;
   for (PetscInt i = 0; i < n; ++i) PetscCall(MatShift(sub[i], LocalShift()));
@@ -226,13 +226,15 @@ static PetscErrorCode CreateCoarseReference(Mat A, PetscBool empty_rank0, Mat *Q
 
 /*
   Reference two-level operator T = first + second (I - A first), see the description at the top of this file: the
-  deflated correction applies the coarse level first, the reversed one applies the fine level first.
+  deflated correction applies the coarse level first, the reversed one applies the fine level first. The balanced
+  correction also multiplies second (I - A first) on the left by (I - A first)^H.
 */
 static PetscErrorCode CreateReference(Mat A, PetscBool empty_rank0, FineLevelType fine, PCHPDDMCoarseCorrectionType correction, Mat *T)
 {
   Mat B, Q, first, second, IA;
 
   PetscFunctionBeginUser;
+  PetscCheck(correction == PC_HPDDM_COARSE_CORRECTION_DEFLATED || correction == PC_HPDDM_COARSE_CORRECTION_DEFLATED_REVERSED || correction == PC_HPDDM_COARSE_CORRECTION_BALANCED, PETSC_COMM_WORLD, PETSC_ERR_SUP, "No reference for PCHPDDMCoarseCorrectionType %s, use %s, %s, or %s", PCHPDDMCoarseCorrectionTypes[correction], PCHPDDMCoarseCorrectionTypes[PC_HPDDM_COARSE_CORRECTION_DEFLATED], PCHPDDMCoarseCorrectionTypes[PC_HPDDM_COARSE_CORRECTION_DEFLATED_REVERSED], PCHPDDMCoarseCorrectionTypes[PC_HPDDM_COARSE_CORRECTION_BALANCED]);
   PetscCall(CreateFineReference(A, fine, &B));
   PetscCall(CreateCoarseReference(A, empty_rank0, &Q));
   if (correction == PC_HPDDM_COARSE_CORRECTION_DEFLATED_REVERSED) {
@@ -246,6 +248,14 @@ static PetscErrorCode CreateReference(Mat A, PetscBool empty_rank0, FineLevelTyp
   PetscCall(MatScale(IA, -1.0));
   PetscCall(MatShift(IA, 1.0)); // I - A first
   PetscCall(MatMatMult(second, IA, MAT_INITIAL_MATRIX, PETSC_DETERMINE, T));
+  if (correction == PC_HPDDM_COARSE_CORRECTION_BALANCED) {
+    Mat product;
+
+    PetscCall(MatHermitianTranspose(IA, MAT_INPLACE_MATRIX, &IA));
+    PetscCall(MatMatMult(IA, *T, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &product));
+    PetscCall(MatDestroy(T));
+    *T = product;
+  }
   PetscCall(MatConvert(B, MATDENSE, MAT_INPLACE_MATRIX, &B)); // T is dense, and MatAXPY() needs B in the same format; in place, so first still refers to B
   PetscCall(MatAXPY(*T, 1.0, first, SAME_NONZERO_PATTERN));
   PetscCall(MatDestroy(&B));
@@ -289,11 +299,9 @@ static PetscErrorCode CheckVector(Vec actual, Vec expected)
 
 /*
   Compares the PC with the reference operator T: PCApply() on every unit vector, and PCMatApply() on a block of three
-  vectors. With check_transpose, also compares PCApplyTranspose() and PCMatApplyTranspose() with T^T. Complex builds only
-  check them without a deflation space: with a coarse correction, the complex transpose of PCHPDDM applies Q^H instead of
-  Q^T, whether or not a scaling is supplied.
+  vectors. Also compares PCApplyTranspose() and PCMatApplyTranspose() with T^T, including with complex scalars.
 */
-static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
+static PetscErrorCode CheckApplications(PC pc, Mat T)
 {
   Vec      x, y, expected;
   PetscInt N, m, start, end;
@@ -312,11 +320,9 @@ static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
     PetscCall(PCApply(pc, x, y));
     PetscCall(MatMult(T, x, expected));
     PetscCall(CheckVector(y, expected));
-    if (check_transpose) {
-      PetscCall(PCApplyTranspose(pc, x, y));
-      PetscCall(MatMultTranspose(T, x, expected));
-      PetscCall(CheckVector(y, expected));
-    }
+    PetscCall(PCApplyTranspose(pc, x, y));
+    PetscCall(MatMultTranspose(T, x, expected));
+    PetscCall(CheckVector(y, expected));
   }
   {
     Mat X, Y;
@@ -324,7 +330,7 @@ static PetscErrorCode CheckApplications(PC pc, Mat T, PetscBool check_transpose)
     PetscCall(MatCreateDense(PETSC_COMM_WORLD, m, PETSC_DECIDE, N, 3, NULL, &X));
     PetscCall(MatDuplicate(X, MAT_DO_NOT_COPY_VALUES, &Y));
     PetscCall(MatSetRandom(X, NULL));
-    for (PetscInt transpose = 0; transpose < (check_transpose ? 2 : 1); ++transpose) {
+    for (PetscInt transpose = 0; transpose < 2; ++transpose) {
       if (transpose) PetscCall(PCMatApplyTranspose(pc, X, Y));
       else PetscCall(PCMatApply(pc, X, Y));
       for (PetscInt j = 0; j < 3; ++j) {
@@ -413,8 +419,14 @@ int main(int argc, char **argv)
           PetscCall(PCHPDDMSetScaling(pc, is, D));
           PetscCall(PCHPDDMSetDeflationMat(pc, NULL, U));
         } else {
+          IS copy;
+
           PetscCall(PCHPDDMSetDeflationMat(pc, is, U));
-          PetscCall(PCHPDDMSetScaling(pc, is, D));
+          PetscCall(ISDuplicate(is, &copy)); // replace the stored IS while keeping the deflation matrix
+          PetscCall(PCHPDDMSetScaling(pc, copy, D));
+          PetscCall(CheckReferences(is, PETSC_FALSE));
+          PetscCall(CheckReferences(copy, PETSC_TRUE));
+          PetscCall(ISDestroy(&copy));
         }
       }
       PetscCall(VecDestroy(&D)); // the PC keeps its own reference
@@ -430,7 +442,7 @@ int main(int argc, char **argv)
       PetscCall(PCHPDDMGetCoarseCorrectionType(pc, &correction));
       PetscCall(CreateReference(A, empty_rank0, fine, correction, &T));
     }
-    PetscCall(CheckApplications(pc, T, (PetscBool)(!PetscDefined(USE_COMPLEX) || scaling_only)));
+    PetscCall(CheckApplications(pc, T));
     PetscCall(MatDestroy(&T));
   }
   PetscCall(PCDestroy(&pc));
@@ -456,7 +468,10 @@ int main(int argc, char **argv)
       suffix: weighted_reversed
       args: -pc_hpddm_levels_1_sub_pc_type lu -pc_hpddm_coarse_correction deflated_reversed
     test:
-      # PCASM of type basic: the scaling only applies to the coarse space
+      suffix: balanced
+      args: -pc_hpddm_levels_1_sub_pc_type lu -pc_hpddm_coarse_correction balanced
+    test:
+      # PCASM of type PC_ASM_BASIC: the scaling only applies to the coarse space
       # with one subdomain per process, multiplicative composition gives the same operator as additive, but it checks
       # that the second setup keeps the selected PCASMType instead of reverting to PC_ASM_WEIGHTED
       suffix: basic
