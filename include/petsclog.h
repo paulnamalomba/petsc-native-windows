@@ -195,18 +195,6 @@ typedef struct _n_PetscLogHandlerHot {
   PetscErrorCode (*objectDestroy)(PetscLogHandler, PetscObject);
 } PetscLogHandlerHot;
 
-/* Handle multithreading */
-#if PetscDefined(HAVE_THREADSAFETY)
-  #if defined(__cplusplus)
-    #define PETSC_TLS thread_local
-  #else
-    #define PETSC_TLS _Thread_local
-  #endif
-  #define PETSC_EXTERN_TLS extern PETSC_TLS PETSC_VISIBILITY_PUBLIC
-#else
-  #define PETSC_EXTERN_TLS PETSC_EXTERN
-  #define PETSC_TLS
-#endif
 #if PetscDefined(HAVE_THREADSAFETY) && PetscDefined(USE_LOG)
 PETSC_EXTERN PetscErrorCode PetscAddLogDouble(PetscLogDouble *, PetscLogDouble *, PetscLogDouble);
 PETSC_EXTERN PetscErrorCode PetscAddLogDoubleCnt(PetscLogDouble *, PetscLogDouble *, PetscLogDouble *, PetscLogDouble *, PetscLogDouble);
@@ -1131,9 +1119,5 @@ static inline PetscErrorCode PetscLogGpuToCpuScalar(PetscLogDouble size)
   #define PetscLogGpuEnergyMeterEnd()   PETSC_SUCCESS
 
 #endif /* PETSC_USE_LOG && PETSC_HAVE_DEVICE */
-
-/* remove TLS defines */
-#undef PETSC_EXTERN_TLS
-#undef PETSC_TLS
 
 #include <petsclogdeprecated.h>

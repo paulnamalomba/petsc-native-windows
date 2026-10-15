@@ -6,13 +6,18 @@
 
 /* SUBMANSEC = Sys */
 
+static inline int PetscStackGetSize_Private(const PetscStack *stack)
+{
+  return PetscMin(stack->currentsize, PETSCSTACKSIZE);
+}
+
 #if PetscDefined(CLANG_STATIC_ANALYZER)
   #define PetscDisableStaticAnalyzerForExpressionUnderstandingThatThisIsDangerousAndBugprone(...)
 #else
   #define PetscDisableStaticAnalyzerForExpressionUnderstandingThatThisIsDangerousAndBugprone(...) __VA_ARGS__
 #endif
 
-#if PetscDefined(USE_DEBUG) && !PetscDefined(HAVE_THREADSAFETY)
+#if PetscDefined(USE_DEBUG)
 PETSC_INTERN PetscErrorCode PetscStackSetCheck(PetscBool);
 PETSC_INTERN PetscErrorCode PetscStackReset(void);
 PETSC_EXTERN PetscErrorCode PetscStackCopy(PetscStack *, PetscStack *);

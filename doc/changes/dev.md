@@ -23,6 +23,7 @@
 ```{rubric} Sys:
 ```
 
+- Maintain a separate `PetscStack` for each thread in debug builds configured with thread safety
 - Add `PetscCommCreateNonempty()` and `PetscCommDestroyNonempty()` for external libraries, such as ParMETIS and PT-SCOTCH, that require every process of their communicator to own data
 
 ```{rubric} Event Logging:

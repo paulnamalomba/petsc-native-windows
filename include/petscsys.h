@@ -1670,11 +1670,6 @@ PETSC_EXTERN PetscErrorCode PetscObjectSAWsSetBlock(PetscObject, PetscBool);
 PETSC_EXTERN PetscErrorCode PetscObjectSAWsBlock(PetscObject);
 PETSC_EXTERN PetscErrorCode PetscObjectSAWsGrantAccess(PetscObject);
 PETSC_EXTERN PetscErrorCode PetscObjectSAWsTakeAccess(PetscObject);
-PETSC_EXTERN void           PetscStackSAWsGrantAccess(void);
-PETSC_EXTERN void           PetscStackSAWsTakeAccess(void);
-PETSC_EXTERN PetscErrorCode PetscStackViewSAWs(void);
-PETSC_EXTERN PetscErrorCode PetscStackSAWsViewOff(void);
-
 #else
   #define PetscSAWsBlock()                  PETSC_SUCCESS
   #define PetscObjectSAWsViewOff(obj)       PETSC_SUCCESS
@@ -1682,8 +1677,16 @@ PETSC_EXTERN PetscErrorCode PetscStackSAWsViewOff(void);
   #define PetscObjectSAWsBlock(obj)         PETSC_SUCCESS
   #define PetscObjectSAWsGrantAccess(obj)   PETSC_SUCCESS
   #define PetscObjectSAWsTakeAccess(obj)    PETSC_SUCCESS
-  #define PetscStackViewSAWs()              PETSC_SUCCESS
-  #define PetscStackSAWsViewOff()           PETSC_SUCCESS
+#endif
+
+#if PetscDefined(HAVE_SAWS) && !PetscDefined(HAVE_THREADSAFETY)
+PETSC_EXTERN void           PetscStackSAWsGrantAccess(void);
+PETSC_EXTERN void           PetscStackSAWsTakeAccess(void);
+PETSC_EXTERN PetscErrorCode PetscStackViewSAWs(void);
+PETSC_EXTERN PetscErrorCode PetscStackSAWsViewOff(void);
+#else
+  #define PetscStackViewSAWs()    PETSC_SUCCESS
+  #define PetscStackSAWsViewOff() PETSC_SUCCESS
   #define PetscStackSAWsTakeAccess()
   #define PetscStackSAWsGrantAccess()
 
@@ -3127,7 +3130,7 @@ M*/
 /* this is required to force PetscDevice to be visible at the system level for the Fortran interface */
 #include <petscdevicetypes.h>
 
-#if PetscDefined(USE_DEBUG) && !PetscDefined(HAVE_THREADSAFETY)
+#if PetscDefined(USE_DEBUG)
 PETSC_EXTERN PetscErrorCode PetscStackView(FILE *);
 #else
   #define PetscStackView(file) PETSC_SUCCESS
