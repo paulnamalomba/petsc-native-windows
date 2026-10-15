@@ -9,11 +9,10 @@ class Configure(config.package.Package):
   def __init__(self, framework):
     config.package.Package.__init__(self, framework)
     # disable version check
-    self.version          = '2.7.1'
+    self.version          = '2.10.0'
     #self.minversion       = '2.6.0'
-    #self.versionname      = ???
     self.gitcommit        = 'v'+self.version
-    self.download         = ['git://https://bitbucket.org/icl/magma']
+    self.download         = ['git://https://github.com/icl-utk-edu/magma']
     self.functions        = ['magma_init']
     self.includes         = ['magma_config.h']
     self.liblist          = [['libmagma_sparse.a','libmagma.a'],
