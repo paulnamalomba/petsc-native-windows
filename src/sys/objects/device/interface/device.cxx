@@ -98,23 +98,26 @@ sypm::Device SYCLDevice{PetscDeviceContextCreate_SYCL};
 
   Available device selection strategies\:
 
-  | Value | Behavior                                      |
-  |-------|-----------------------------------------------|
-  | -1    |  Round-robin allocation across available GPUs |
-  | -3    |  Topology-aware allocation (requires hwloc)   |
-  | >=0   |  Select a specific GPU device by index        |
+  | Value | Behavior                                                      |
+  |-------|---------------------------------------------------------------|
+  | -1    |  Use the configured default device (`PETSC_DECIDE`)           |
+  | -2    |  Topology-aware allocation (CUDA/HIP with hwloc 2.0 or later) |
+  | >=0   |  Select a specific GPU device by index                        |
 
-  When the "Topology-aware allocation" strategy is selected, PETSc uses `hwloc` to inspect
-  the hardware layout of the current system and determine which GPU is closest to the CPU
-  core(s) the current process has been bound to. Note that this strategy assumes that
-  PETSc has been launched by a process manager capable of binding processes to CPU cores
-  (e.g. `mpiexec`, `srun`). For example, the LUMI, Frontier and Setonix HPC systems all
-  have nodes comprised of 64-core AMD EPYC "Trento" CPUs connected to 4 AMD MI250X GPUs,
-  each of which is comprised of two Graphics Compute Die (GCD) that appears to the operating
-  system as a distinct GPU device. The CPU is divided into four NUMA nodes, each of which is
-  divided into two chiplets with a direct connection to each GCD. Each GCD is assigned an
-  index from 0 to 7 by the GPU runtime. The diagram below shows how `hwloc` sees one of these
-  nodes.
+  When `PETSC_DECIDE` (-1) is passed to `-device_select` and to this function, either
+  a round-robin allocation across all available GPUs is used, or if `torchrun` was used to
+  launch the application, the value of the `LOCAL_RANK` environment variable set by
+  `torchrun` is selected. When the "Topology-aware allocation" strategy is selected, PETSc
+  uses `hwloc` to inspect the hardware layout of the current system and determine which GPU
+  is closest to the CPU core(s) the current process has been bound to. Note that this
+  strategy assumes that PETSc has been launched by a process manager capable of binding
+  processes to CPU cores (e.g. `mpiexec`, `srun`). For example, the LUMI, Frontier and
+  Setonix HPC systems all have nodes comprised of 64-core AMD EPYC "Trento" CPUs connected
+  to 4 AMD MI250X GPUs, each of which is comprised of two Graphics Compute Die (GCD) that
+  appears to the operating system as a distinct GPU device. The CPU is divided into four NUMA
+  nodes, each of which is divided into two chiplets with a direct connection to each GCD. Each
+  GCD is assigned an index from 0 to 7 by the GPU runtime. The diagram below shows how `hwloc`
+  sees one of these nodes.
 
   ![Node diagram](/images/manual/gpu_topo.svg)
 
