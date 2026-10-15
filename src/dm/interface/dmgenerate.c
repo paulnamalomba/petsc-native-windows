@@ -158,6 +158,12 @@ PetscErrorCode DMGenerateRegisterDestroy(void)
 
   Level: intermediate
 
+  Note:
+  The adaptor can return an existing `DM` with a new reference. For example, `DMPLEX` returns an ancestor of `dm` when the
+  coarsening undoes all the refinement after it, see `DMPlexTransformAdaptLabel()`. Its vector type, matrix type and
+  application context are then set from `dm`, and it must not be linked to `dm` with `DMSetCoarseDM()`, since its chain of
+  coarse `DM`s would then be a cycle.
+
 .seealso: `DM`, `DMAdaptMetric()`, `DMCoarsen()`, `DMRefine()`
 @*/
 PetscErrorCode DMAdaptLabel(DM dm, DMLabel label, DM *dmAdapt)

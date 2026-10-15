@@ -2812,6 +2812,384 @@ PetscErrorCode DMPlexTransformApply(DMPlexTransform tr, DM dm, DM *trdm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Coarsening state of a cell in a chain of saved transforms */
+enum {
+  ADAPT_VOTE = 0x1, /* a leaf cell below it asks to undo its requested refinement */
+  ADAPT_VETO = 0x2, /* a leaf cell below it does not ask to undo its requested refinement */
+  ADAPT_UNDO = 0x4, /* its requested refinement is undone */
+  ADAPT_PIN  = 0x8  /* it must be subdivided as before, since a cell below it survives */
+};
+
+static PetscErrorCode DMPlexTransformIsRequested_Private(DMPlexTransform tr, PetscInt p, PetscBool *requested)
+{
+  PetscFunctionBegin;
+  PetscCall(DMLabelStratumHasPoint(tr->active, DM_ADAPT_REFINE, p, requested));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMPlexCreateGhostBT_Private(DM dm, PetscBT *ghost)
+{
+  PetscSF         sf;
+  const PetscInt *leaves;
+  PetscInt        pEnd, Nleaves;
+
+  PetscFunctionBegin;
+  PetscCall(DMPlexGetChart(dm, NULL, &pEnd));
+  PetscCall(PetscBTCreate(pEnd, ghost));
+  PetscCall(DMGetPointSF(dm, &sf));
+  PetscCall(PetscSFGetGraph(sf, NULL, &Nleaves, &leaves, NULL));
+  for (PetscInt l = 0; l < Nleaves; ++l) PetscCall(PetscBTSet(*ghost, leaves ? leaves[l] : l));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Apply tr to dm, and give the result the discretization of dm */
+static PetscErrorCode DMPlexTransformApplyAdapt_Private(DMPlexTransform tr, DM dm, DM *rdm)
+{
+  DM cdm, rcdm;
+
+  PetscFunctionBegin;
+  PetscCall(DMPlexTransformApply(tr, dm, rdm));
+  PetscCall(DMCopyDisc(dm, *rdm));
+  PetscCall(DMGetCoordinateDM(dm, &cdm));
+  PetscCall(DMGetCoordinateDM(*rdm, &rcdm));
+  PetscCall(DMCopyDisc(cdm, rcdm));
+  PetscCall(DMPlexTransformCreateDiscLabels(tr, *rdm));
+  PetscCall(DMCopyDisc(dm, *rdm));
+  ((DM_Plex *)(*rdm)->data)->useHashLocation = ((DM_Plex *)dm->data)->useHashLocation;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Copy the coordinates of the vertices of odm to the vertices of dm that they correspond to by corr */
+static PetscErrorCode DMPlexCopyVertexCoordinates_Private(DM odm, DM dm, const PetscInt corr[])
+{
+  PetscSection       osec, sec;
+  Vec                ocoords, coords;
+  const PetscScalar *oa;
+  PetscScalar       *a;
+  PetscInt           vStart, vEnd;
+
+  PetscFunctionBegin;
+  PetscCall(DMGetCoordinateSection(odm, &osec));
+  PetscCall(DMGetCoordinateSection(dm, &sec));
+  PetscCall(DMGetCoordinatesLocal(odm, &ocoords));
+  PetscCall(DMGetCoordinatesLocal(dm, &coords));
+  PetscCall(DMPlexGetDepthStratum(dm, 0, &vStart, &vEnd));
+  PetscCall(VecGetArrayRead(ocoords, &oa));
+  PetscCall(VecGetArray(coords, &a));
+  for (PetscInt v = vStart; v < vEnd; ++v) {
+    PetscInt dof, off, odof, ooff;
+
+    if (corr[v] < 0) continue;
+    PetscCall(PetscSectionGetDof(sec, v, &dof));
+    PetscCall(PetscSectionGetOffset(sec, v, &off));
+    PetscCall(PetscSectionGetDof(osec, corr[v], &odof));
+    PetscCall(PetscSectionGetOffset(osec, corr[v], &ooff));
+    PetscCheck(dof == odof, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Vertex %" PetscInt_FMT " has %" PetscInt_FMT " coordinates, but vertex %" PetscInt_FMT " has %" PetscInt_FMT, v, dof, corr[v], odof);
+    for (PetscInt d = 0; d < dof; ++d) a[off + d] = oa[ooff + d];
+  }
+  PetscCall(VecRestoreArrayRead(ocoords, &oa));
+  PetscCall(VecRestoreArray(coords, &a));
+  PetscCall(DMSetCoordinatesLocal(dm, coords));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Apply again the transform otr, which produced odm, to the mesh dm, keeping the requests that are not undone and the
+  subdivisions of the pinned cells. On input, corr maps the points of dm to the points of the source of otr, or to -1 if
+  there is no corresponding point. On output, dm is the new mesh, and corr maps its points to the points of odm.
+*/
+static PetscErrorCode DMPlexTransformReplay_Private(DMPlexTransform otr, DM odm, const PetscInt flags[], DM *dm, PetscInt *corr[])
+{
+  MPI_Comm            comm = PetscObjectComm((PetscObject)*dm);
+  DMPlexTransform     tr;
+  DMPlexTransformType type;
+  DMLabel             active;
+  DM                  rdm;
+  const char         *name, *prefix;
+  PetscInt           *rcorr;
+  PetscInt            cStart, cEnd, pEnd, Nmark;
+  PetscBool           save;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectGetName((PetscObject)otr->active, &name));
+  PetscCall(DMLabelCreate(PETSC_COMM_SELF, name, &active));
+  PetscCall(DMPlexGetHeightStratum(*dm, 0, &cStart, &cEnd));
+  for (PetscInt c = cStart; c < cEnd; ++c) {
+    const PetscInt oc = (*corr)[c];
+    PetscBool      requested;
+
+    if (oc < 0) continue;
+    PetscCall(DMPlexTransformIsRequested_Private(otr, oc, &requested));
+    if (requested && !(flags[oc] & ADAPT_UNDO)) PetscCall(DMLabelSetValue(active, c, DM_ADAPT_REFINE));
+    if (flags[oc] & ADAPT_PIN) {
+      PetscInt *closure = NULL, Ncl;
+
+      PetscCall(DMPlexGetTransitiveClosure(*dm, c, PETSC_TRUE, &Ncl, &closure));
+      for (PetscInt cl = 0; cl < 2 * Ncl; cl += 2) {
+        const PetscInt e = closure[cl], oe = (*corr)[e];
+        DMPolytopeType ct, *rct;
+        PetscInt      *rsize, *rcone, *rornt;
+        PetscInt       Nct;
+
+        PetscCall(DMPlexGetCellType(*dm, e, &ct));
+        if (ct != DM_POLYTOPE_SEGMENT) continue;
+        PetscCheck(oe >= 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Edge %" PetscInt_FMT " of the reproduced cell %" PetscInt_FMT " has no counterpart", e, c);
+        PetscCall(DMPlexTransformCellTransform(otr, ct, oe, NULL, &Nct, &rct, &rsize, &rcone, &rornt));
+        for (PetscInt n = 0; n < Nct; ++n)
+          if (rct[n] == DM_POLYTOPE_POINT) PetscCall(DMLabelSetValue(active, e, DM_ADAPT_REFINE));
+      }
+      PetscCall(DMPlexRestoreTransitiveClosure(*dm, c, PETSC_TRUE, &Ncl, &closure));
+    }
+  }
+  PetscCall(DMLabelGetStratumSize(active, DM_ADAPT_REFINE, &Nmark));
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &Nmark, 1, MPIU_INT, MPI_SUM, comm));
+  PetscCall(DMPlexGetChart(*dm, NULL, &pEnd));
+  if (!Nmark) {
+    // Nothing is refined, so dm stays as it is, and its points correspond to the points that otr did not refine
+    for (PetscInt p = 0; p < pEnd; ++p) {
+      const PetscInt op = (*corr)[p];
+      DMPolytopeType ct, *rct;
+      PetscInt      *rsize, *rcone, *rornt;
+      PetscInt       Nct;
+
+      if (op < 0) continue;
+      PetscCall(DMPlexGetCellType(*dm, p, &ct));
+      PetscCall(DMPlexTransformCellTransform(otr, ct, op, NULL, &Nct, &rct, &rsize, &rcone, &rornt));
+      if (Nct == 1 && rct[0] == ct && rsize[0] == 1) PetscCall(DMPlexTransformGetTargetPoint(otr, ct, ct, op, 0, &(*corr)[p]));
+      else (*corr)[p] = -1;
+    }
+    PetscCall(DMLabelDestroy(&active));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(DMPlexTransformCreate(comm, &tr));
+  PetscCall(PetscObjectGetName((PetscObject)otr, &name));
+  PetscCall(PetscObjectSetName((PetscObject)tr, name));
+  PetscCall(PetscObjectGetOptionsPrefix((PetscObject)otr, &prefix));
+  PetscCall(PetscObjectSetOptionsPrefix((PetscObject)tr, prefix));
+  PetscCall(DMPlexTransformGetType(otr, &type));
+  PetscCall(DMPlexTransformSetType(tr, type));
+  PetscCall(DMPlexTransformSetDM(tr, *dm));
+  PetscCall(DMPlexTransformSetActive(tr, active));
+  PetscCall(DMLabelDestroy(&active));
+  PetscCall(DMPlexTransformSetUp(tr));
+  PetscCall(DMPlexTransformApplyAdapt_Private(tr, *dm, &rdm));
+  PetscCall(DMPlexGetSaveTransform(odm, &save));
+  PetscCall(DMPlexSetSaveTransform(rdm, save));
+  PetscCall(PetscObjectGetName((PetscObject)odm, &name));
+  PetscCall(PetscObjectSetName((PetscObject)rdm, name));
+  // A point of rdm corresponds to a point of odm if both are the same replica of corresponding points, refined the same way
+  PetscCall(DMPlexGetChart(rdm, NULL, &pEnd));
+  PetscCall(PetscMalloc1(pEnd, &rcorr));
+  for (PetscInt p = 0; p < pEnd; ++p) {
+    DMPolytopeType ct, ctNew, *rct;
+    PetscInt      *rsize, *rcone, *rornt;
+    PetscInt       sp, r, osp, rt, ort, Nct;
+
+    rcorr[p] = -1;
+    PetscCall(DMPlexTransformGetSourcePoint(tr, p, &ct, &ctNew, &sp, &r));
+    osp = (*corr)[sp];
+    if (osp < 0) continue;
+    PetscCall(DMPlexTransformCellTransform(tr, ct, sp, &rt, &Nct, &rct, &rsize, &rcone, &rornt));
+    PetscCall(DMPlexTransformCellTransform(otr, ct, osp, &ort, &Nct, &rct, &rsize, &rcone, &rornt));
+    if (rt == ort) PetscCall(DMPlexTransformGetTargetPoint(otr, ct, ctNew, osp, r, &rcorr[p]));
+  }
+  PetscCall(DMPlexSetTransform(rdm, tr));
+  PetscCall(DMPlexTransformDestroy(&tr));
+  PetscCall(DMSetCoarseDM(rdm, *dm));
+  // Keep the coordinates of odm, which may have been moved after the refinement, for instance to a boundary
+  PetscCall(DMPlexCopyVertexCoordinates_Private(odm, rdm, rcorr));
+  PetscCall(PetscFree(*corr));
+  *corr = rcorr;
+  PetscCall(DMDestroy(dm));
+  *dm = rdm;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Undo one round of requested refinement for the cells of dm marked DM_ADAPT_COARSEN in adaptLabel.
+
+  The coarse DMs of dm form a chain of meshes, each produced from the next by its saved transform, and the
+  DM_ADAPT_REFINE stratum of the active label of each transform holds the cells whose refinement was requested. A leaf
+  cell marked DM_ADAPT_COARSEN asks to undo the last requested refinement among its ancestors, which is undone if all the
+  leaf cells below that ancestor ask the same. Then the transforms are applied again from the earliest undone refinement
+  on. An ancestor of a leaf cell marked
+  DM_ADAPT_REFINE or DM_ADAPT_KEEP, or of a cell whose requested refinement is kept, is pinned: the edges that it had split
+  are marked again, so that it is subdivided as before.
+
+  If anything is coarsened, cdm is the coarsened mesh, either an ancestor of dm or a new mesh linked to the chain by its
+  coarse DM, and refineLabel marks its cells that correspond to the leaf cells marked DM_ADAPT_REFINE, or is NULL if there
+  are none. Otherwise, cdm is NULL.
+*/
+static PetscErrorCode DMPlexTransformCoarsen_Private(DM dm, DMLabel adaptLabel, DM *cdm, DMLabel *refineLabel)
+{
+  MPI_Comm        comm = PetscObjectComm((PetscObject)dm);
+  DMPlexTransform tr, *trs;
+  DM              cur, *dms;
+  PetscBT        *ghost;
+  PetscInt      **parent, **flags, *corr, *found;
+  const char     *name;
+  PetscInt        Nl = 0, l0, cStart, cEnd, pEnd, Ncoarsen = 0, Nrefine = 0, Nlost = 0;
+
+  PetscFunctionBegin;
+  *cdm         = NULL;
+  *refineLabel = NULL;
+  PetscCall(DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd));
+  for (PetscInt c = cStart; c < cEnd; ++c) {
+    PetscInt val;
+
+    PetscCall(DMLabelGetValue(adaptLabel, c, &val));
+    if (val == DM_ADAPT_COARSEN) ++Ncoarsen;
+  }
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &Ncoarsen, 1, MPIU_INT, MPI_SUM, comm));
+  if (!Ncoarsen) PetscFunctionReturn(PETSC_SUCCESS);
+  for (cur = dm;; ++Nl) {
+    DMLabel active;
+    DM      prev = dm;
+
+    PetscCall(DMPlexGetTransform(cur, &tr));
+    if (!tr) break;
+    PetscCall(DMPlexTransformGetActive(tr, &active));
+    PetscCall(DMGetCoarseDM(cur, &cur));
+    if (!active || !cur) break;
+    // Linking an ancestor that DMAdaptLabel() returned to a finer mesh as its coarse DM closes a cycle
+    for (PetscInt l = 0; l <= Nl; ++l) {
+      PetscCheck(cur != prev, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "The chain of coarse DMs of the mesh is a cycle");
+      PetscCall(DMGetCoarseDM(prev, &prev));
+    }
+  }
+  if (!Nl) PetscFunctionReturn(PETSC_SUCCESS);
+  // dms[l + 1] was produced from dms[l] by trs[l]
+  PetscCall(PetscMalloc5(Nl + 1, &dms, Nl, &trs, Nl + 1, &ghost, Nl, &parent, Nl, &flags));
+  dms[Nl] = dm;
+  for (PetscInt l = Nl - 1; l >= 0; --l) {
+    PetscCall(DMPlexGetTransform(dms[l + 1], &trs[l]));
+    PetscCall(DMGetCoarseDM(dms[l + 1], &dms[l]));
+  }
+  for (PetscInt l = 0; l <= Nl; ++l) PetscCall(DMPlexCreateGhostBT_Private(dms[l], &ghost[l]));
+  for (PetscInt l = 0; l < Nl; ++l) {
+    PetscInt cS, cE, trEnd;
+
+    // The parents and the flags below are indexed by the points of the transform, so its charts must match the linked DMs
+    PetscCall(DMPlexGetChart(dms[l], NULL, &pEnd));
+    PetscCheck(trs[l]->ctStart[trs[l]->ctOrderOld[DM_NUM_POLYTOPES]] == pEnd, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "The coarse DM of a mesh in the chain is not the mesh its saved transform was applied to");
+    PetscCall(PetscCalloc1(pEnd, &flags[l]));
+    PetscCall(DMPlexGetChart(dms[l + 1], NULL, &pEnd));
+    PetscCall(DMPlexTransformGetChart(trs[l], NULL, &trEnd));
+    PetscCheck(trEnd == pEnd, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "A mesh in the chain is not the mesh that its saved transform produced");
+    PetscCall(PetscMalloc1(pEnd, &parent[l]));
+    PetscCall(DMPlexGetHeightStratum(dms[l + 1], 0, &cS, &cE));
+    for (PetscInt c = cS; c < cE; ++c) {
+      DMPolytopeType ct, ctNew, sct;
+      PetscInt       r;
+
+      PetscCall(DMPlexTransformGetSourcePoint(trs[l], c, &ct, &ctNew, &parent[l][c], &r));
+      PetscCall(DMPlexGetCellType(dms[l], parent[l][c], &sct));
+      PetscCheck(sct == ct, PETSC_COMM_SELF, PETSC_ERR_ARG_INCOMP, "The coarse DM of a mesh in the chain is not the mesh its saved transform was applied to");
+    }
+  }
+  // Each owned leaf cell votes for the ancestor whose requested refinement it asks to undo, and against all the others
+  for (PetscInt c = cStart; c < cEnd; ++c) {
+    PetscInt val, x = c, tl = -1, tx = -1;
+
+    if (PetscBTLookup(ghost[Nl], c)) continue;
+    PetscCall(DMLabelGetValue(adaptLabel, c, &val));
+    for (PetscInt l = Nl - 1; val == DM_ADAPT_COARSEN && l >= 0 && tl < 0; --l) {
+      PetscBool requested;
+
+      x = parent[l][x];
+      PetscCall(DMPlexTransformIsRequested_Private(trs[l], x, &requested));
+      if (requested) {
+        tl = l;
+        tx = x;
+      }
+    }
+    x = c;
+    for (PetscInt l = Nl - 1; l >= 0; --l) {
+      x = parent[l][x];
+      flags[l][x] |= l == tl && x == tx ? ADAPT_VOTE : ADAPT_VETO;
+    }
+    if (val == DM_ADAPT_REFINE || val == DM_ADAPT_KEEP) flags[Nl - 1][parent[Nl - 1][c]] |= ADAPT_PIN;
+  }
+  // From the leaves down, undo the unanimous requests, and pin the ancestors of the cells that must be reproduced
+  l0 = Nl;
+  for (PetscInt l = Nl - 1; l >= 0; --l) {
+    PetscInt cS, cE;
+
+    PetscCall(DMPlexGetHeightStratum(dms[l], 0, &cS, &cE));
+    for (PetscInt x = cS; x < cE; ++x) {
+      PetscBool requested;
+
+      if (PetscBTLookup(ghost[l], x)) continue;
+      PetscCall(DMPlexTransformIsRequested_Private(trs[l], x, &requested));
+      if (requested && (flags[l][x] & ADAPT_VOTE) && !(flags[l][x] & ADAPT_VETO)) {
+        flags[l][x] |= ADAPT_UNDO;
+        l0 = l;
+      }
+      if (l > 0 && ((flags[l][x] & ADAPT_PIN) || (requested && !(flags[l][x] & ADAPT_UNDO)))) flags[l - 1][parent[l - 1][x]] |= ADAPT_PIN;
+    }
+  }
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &l0, 1, MPIU_INT, MPI_MIN, comm));
+  if (l0 < Nl) {
+    // The owners decide for the ghost cells
+    for (PetscInt l = l0; l < Nl; ++l) {
+      PetscInt nroots;
+      PetscSF  sf;
+
+      PetscCall(DMGetPointSF(dms[l], &sf));
+      PetscCall(PetscSFGetGraph(sf, &nroots, NULL, NULL, NULL));
+      if (nroots >= 0) {
+        PetscCall(PetscSFBcastBegin(sf, MPIU_INT, flags[l], flags[l], MPI_REPLACE));
+        PetscCall(PetscSFBcastEnd(sf, MPIU_INT, flags[l], flags[l], MPI_REPLACE));
+      }
+    }
+    cur = dms[l0];
+    PetscCall(PetscObjectReference((PetscObject)cur));
+    PetscCall(DMPlexGetChart(cur, NULL, &pEnd));
+    PetscCall(PetscMalloc1(pEnd, &corr));
+    for (PetscInt p = 0; p < pEnd; ++p) corr[p] = p;
+    for (PetscInt l = l0; l < Nl; ++l) PetscCall(DMPlexTransformReplay_Private(trs[l], dms[l + 1], flags[l], &cur, &corr));
+    // Carry the refinement marks over to the coarsened mesh
+    PetscCall(PetscObjectGetName((PetscObject)adaptLabel, &name));
+    PetscCall(DMLabelCreate(PETSC_COMM_SELF, name, refineLabel));
+    PetscCall(DMPlexGetChart(dm, NULL, &pEnd));
+    PetscCall(PetscCalloc1(pEnd, &found));
+    PetscCall(DMPlexGetHeightStratum(cur, 0, &cStart, &cEnd));
+    for (PetscInt c = cStart; c < cEnd; ++c) {
+      PetscInt val;
+
+      if (corr[c] < 0) continue;
+      found[corr[c]] = 1;
+      PetscCall(DMLabelGetValue(adaptLabel, corr[c], &val));
+      if (val == DM_ADAPT_REFINE) PetscCall(DMLabelSetValue(*refineLabel, c, DM_ADAPT_REFINE));
+    }
+    PetscCall(DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd));
+    for (PetscInt c = cStart; c < cEnd; ++c) {
+      PetscInt val;
+
+      if (found[c] || PetscBTLookup(ghost[Nl], c)) continue;
+      PetscCall(DMLabelGetValue(adaptLabel, c, &val));
+      if (val == DM_ADAPT_REFINE || val == DM_ADAPT_KEEP) ++Nlost;
+    }
+    PetscCall(PetscFree(found));
+    PetscCall(PetscFree(corr));
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &Nlost, 1, MPIU_INT, MPI_SUM, comm));
+    PetscCall(PetscInfo(dm, "Coarsening from level %" PetscInt_FMT " of %" PetscInt_FMT " lost %" PetscInt_FMT " cells marked to refine or keep\n", l0, Nl, Nlost));
+    PetscCall(DMLabelGetStratumSize(*refineLabel, DM_ADAPT_REFINE, &Nrefine));
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &Nrefine, 1, MPIU_INT, MPI_SUM, comm));
+    if (!Nrefine) PetscCall(DMLabelDestroy(refineLabel));
+    // If every round after the undone requests is empty, the coarsened mesh is the ancestor dms[l0], which keeps its discretization
+    if (cur != dms[l0]) PetscCall(DMCopyDisc(dm, cur));
+    *cdm = cur;
+  }
+  for (PetscInt l = 0; l <= Nl; ++l) PetscCall(PetscBTDestroy(&ghost[l]));
+  for (PetscInt l = 0; l < Nl; ++l) {
+    PetscCall(PetscFree(flags[l]));
+    PetscCall(PetscFree(parent[l]));
+  }
+  PetscCall(PetscFree5(dms, trs, ghost, parent, flags));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /*@
   DMPlexTransformAdaptLabel - Adapt a `DMPLEX` using a `DMPlexTransform` driven by a `DMLabel` marking cells to be refined or coarsened.
 
@@ -2828,38 +3206,54 @@ PetscErrorCode DMPlexTransformApply(DMPlexTransform tr, DM dm, DM *trdm)
 
   Level: developer
 
-  Note:
+  Notes:
   This routine is registered as the "cellrefiner" adaptor by `DMGenerateRegisterAll()` and is invoked through `DMAdaptLabel()`.
 
-.seealso: `DMPLEX`, `DMPlexTransform`, `DMAdaptLabel()`, `DMPlexTransformApply()`, `DMPlexTransformCreate()`, `DMLabel`
+  Cells marked `DM_ADAPT_COARSEN` are coarsened only along a chain of meshes linked by `DMSetCoarseDM()`, each produced from
+  its coarse `DM` by a label-driven transform saved with `DMPlexSetSaveTransform()`; otherwise the mark is ignored. The caller
+  links the chain, and decides how long its meshes live. Each call undoes at most one round of requested refinement,
+  the `DM_ADAPT_REFINE` cells of the label of an earlier call. A cell marked `DM_ADAPT_COARSEN` asks to undo the last requested
+  refinement among its ancestors, and that refinement is undone only if all the cells it produced in `dm` ask the same.
+  The saved transforms are then applied again from the earliest undone refinement on, and the cells that are kept, still
+  refined, or marked `DM_ADAPT_REFINE` or `DM_ADAPT_KEEP` are reproduced together with their vertex coordinates.
+  Cells refined only to keep the mesh conforming are coarsened when the refinement that caused them is undone.
+  Afterwards, the cells marked `DM_ADAPT_REFINE` are refined. If the coarsening undoes all the refinement after an ancestor
+  of `dm`, and nothing is refined, `rdm` is that ancestor. Otherwise, when anything is coarsened, the coarse `DM` of `rdm`,
+  and of each mesh rebuilt in between, is set to the mesh that its saved transform was applied to.
+
+.seealso: `DMPLEX`, `DMPlexTransform`, `DMAdaptLabel()`, `DMPlexTransformApply()`, `DMPlexTransformCreate()`, `DMLabel`, `DMPlexSetSaveTransform()`, `DMSetCoarseDM()`
 @*/
 PetscErrorCode DMPlexTransformAdaptLabel(DM dm, PETSC_UNUSED Vec metric, DMLabel adaptLabel, PETSC_UNUSED DMLabel rgLabel, DM *rdm)
 {
   DMPlexTransform tr;
-  DM              cdm, rcdm;
+  DM              cdm         = NULL, sdm;
+  DMLabel         refineLabel = NULL;
   const char     *prefix;
   PetscBool       save;
 
   PetscFunctionBegin;
+  if (adaptLabel) PetscCall(DMPlexTransformCoarsen_Private(dm, adaptLabel, &cdm, &refineLabel));
+  if (cdm && !refineLabel) {
+    *rdm = cdm;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  sdm = cdm ? cdm : dm;
   PetscCall(DMPlexTransformCreate(PetscObjectComm((PetscObject)dm), &tr));
   PetscCall(PetscObjectSetName((PetscObject)tr, "Adapt Label Transform"));
   PetscCall(PetscObjectGetOptionsPrefix((PetscObject)dm, &prefix));
   PetscCall(PetscObjectSetOptionsPrefix((PetscObject)tr, prefix));
-  PetscCall(DMPlexTransformSetDM(tr, dm));
+  PetscCall(DMPlexTransformSetDM(tr, sdm));
   PetscCall(DMPlexTransformSetFromOptions(tr));
-  if (adaptLabel) PetscCall(DMPlexTransformSetActive(tr, adaptLabel));
+  if (cdm) PetscCall(DMPlexTransformSetActive(tr, refineLabel));
+  else if (adaptLabel) PetscCall(DMPlexTransformSetActive(tr, adaptLabel));
   PetscCall(DMPlexTransformSetUp(tr));
   PetscCall(PetscObjectViewFromOptions((PetscObject)tr, NULL, "-dm_plex_transform_view"));
-  PetscCall(DMPlexTransformApply(tr, dm, rdm));
-  PetscCall(DMCopyDisc(dm, *rdm));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
-  PetscCall(DMGetCoordinateDM(*rdm, &rcdm));
-  PetscCall(DMCopyDisc(cdm, rcdm));
-  PetscCall(DMPlexTransformCreateDiscLabels(tr, *rdm));
-  PetscCall(DMCopyDisc(dm, *rdm));
-  PetscCall(DMPlexGetSaveTransform(dm, &save));
+  PetscCall(DMPlexTransformApplyAdapt_Private(tr, sdm, rdm));
+  PetscCall(DMPlexGetSaveTransform(sdm, &save));
   if (save) PetscCall(DMPlexSetTransform(*rdm, tr));
+  if (cdm) PetscCall(DMSetCoarseDM(*rdm, cdm));
   PetscCall(DMPlexTransformDestroy(&tr));
-  ((DM_Plex *)(*rdm)->data)->useHashLocation = ((DM_Plex *)dm->data)->useHashLocation;
+  PetscCall(DMLabelDestroy(&refineLabel));
+  PetscCall(DMDestroy(&cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
