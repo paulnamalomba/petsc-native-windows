@@ -104,6 +104,19 @@ void assert_never_put_petsc_headers_inside_an_extern_c(double);
   #define PETSC_INTERN extern PETSC_VISIBILITY_INTERNAL
 #endif
 
+#if defined(PETSC_HAVE_THREADSAFETY)
+  /* Clang's C++ thread_local can require initialization wrappers absent from C definitions. */
+  #if defined(__cplusplus) && !defined(__clang__)
+    #define PETSC_TLS thread_local
+  #else
+    #define PETSC_TLS _Thread_local
+  #endif
+#else
+  #define PETSC_TLS
+#endif
+#define PETSC_EXTERN_TLS PETSC_EXTERN PETSC_TLS
+#define PETSC_INTERN_TLS PETSC_INTERN PETSC_TLS
+
 #if defined(PETSC_USE_SINGLE_LIBRARY)
   #define PETSC_SINGLE_LIBRARY_VISIBILITY_INTERNAL PETSC_VISIBILITY_INTERNAL
   #define PETSC_SINGLE_LIBRARY_INTERN              PETSC_INTERN
